@@ -57,7 +57,7 @@ Aster/
 ├─ Controls/                  自绘控件（不依赖第三方库）
 │  ├─ Icon.cs / Icons.cs      24×24 线性图标，颜色继承 Foreground
 │  ├─ Charts.cs               迷你折线、趋势图、环形图
-│  ├─ Visuals.cs              六瓣 Logo、音频柱、旋转唱片、进度条、跳动指示器
+│  ├─ Visuals.cs              五瓣 Logo、音频柱、旋转唱片、进度条、跳动指示器
 │  └─ MarkdownPreview.cs      Markdown → 控件树（标题/引用/列表/表格/代码块）
 ├─ ViewModels/                纯 C# MVVM（ObservableObject + RelayCommand）
 └─ Views/                     Shell / 工作台 / 文档 / 音乐 / 管理 / 设置 / 登录 / 启动屏

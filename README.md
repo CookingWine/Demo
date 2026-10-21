@@ -97,7 +97,7 @@ dotnet publish -c Release -r osx-arm64 --self-contained false
         │   ├── Icon.cs          24×24 线性图标，颜色继承 Foreground
         │   ├── Icons.cs         图标 path 数据
         │   ├── Charts.cs        迷你折线、趋势图、环形图（DrawingContext 绘制）
-        │   ├── Visuals.cs       六瓣 Logo、音频柱、旋转唱片、进度条、跳动指示器
+        │   ├── Visuals.cs       五瓣 Logo、音频柱、旋转唱片、进度条、跳动指示器
         │   └── MarkdownPreview.cs  Markdown → 控件树渲染
         ├── ViewModels/          纯手写 MVVM（ObservableObject + RelayCommand）
         └── Views/               Shell / 工作台 / 文档 / 音乐 / 管理 / 设置 / 登录 / 启动屏

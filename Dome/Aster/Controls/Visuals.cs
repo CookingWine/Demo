@@ -8,7 +8,7 @@ using Avalonia.Threading;
 
 namespace Aster.Controls;
 
-/// <summary>Aster 六瓣花标识。</summary>
+/// <summary>Aster 五瓣花标识（设计稿 rotate 0/72/144/216/288）。</summary>
 public class LogoMark : Control
 {
     public static readonly StyledProperty<IBrush?> PetalBrushProperty =
