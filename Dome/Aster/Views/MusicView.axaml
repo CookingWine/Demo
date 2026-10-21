@@ -121,7 +121,7 @@
     <Grid Grid.Column="1" RowDefinitions="46,*,Auto" ClipToBounds="True">
       <Panel Grid.RowSpan="3">
         <Panel.Background>
-          <RadialGradientBrush Center="50%,20%" GradientOrigin="50%,20%" Radius="0.75">
+          <RadialGradientBrush Center="50%,20%" GradientOrigin="50%,20%" RadiusX="75%" RadiusY="75%">
             <GradientStop Offset="0" Color="#38A78BFA" />
             <GradientStop Offset="0.55" Color="#146C8BFF" />
             <GradientStop Offset="1" Color="#00000000" />
@@ -232,7 +232,7 @@
           <ctrl:AudioBars IsPlaying="{Binding IsPlaying}" />
         </Border>
 
-        <Grid Grid.Row="2" ColumnDefinitions="*,*" Margin="18,6,18,14">
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" Margin="18,6,18,14">
           <StackPanel>
             <TextBlock Text="1411" FontSize="13" FontWeight="SemiBold" />
             <TextBlock Text="kbps 码率" FontSize="10.5" Foreground="{StaticResource Text2}" />

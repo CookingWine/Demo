@@ -201,7 +201,8 @@ public class SpinningDisc : Control
             {
                 Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
                 GradientOrigin = new RelativePoint(0.38, 0.32, RelativeUnit.Relative),
-                Radius = 0.55,
+                RadiusX = new RelativeScalar(0.55, RelativeUnit.Relative),
+                RadiusY = new RelativeScalar(0.55, RelativeUnit.Relative),
                 GradientStops =
                 {
                     new GradientStop(Color.Parse("#1A1B28"), 0),

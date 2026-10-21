@@ -248,12 +248,12 @@
                  FontFamily="{StaticResource MonoFont}"
                  FontSize="12.2"
                  LineHeight="21"
-                 Background="Transparent"
+                 Background="#0C0E12"
                  BorderThickness="0"
                  Padding="0,10,24,40"
                  VerticalContentAlignment="Top"
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
-                 ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                 ScrollViewer.HorizontalScrollBarVisibility="Hidden" />
       </Grid>
     </Grid>
 

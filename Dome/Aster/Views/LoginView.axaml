@@ -45,7 +45,7 @@
 
         <Panel>
           <Panel.Background>
-            <RadialGradientBrush Center="30%,65%" GradientOrigin="30%,65%" Radius="0.9">
+            <RadialGradientBrush Center="30%,65%" GradientOrigin="30%,65%" RadiusX="90%" RadiusY="90%">
               <GradientStop Offset="0" Color="#408060D8" />
               <GradientStop Offset="1" Color="#00000000" />
             </RadialGradientBrush>

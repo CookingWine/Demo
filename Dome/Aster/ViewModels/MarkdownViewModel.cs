@@ -104,12 +104,9 @@ public sealed class MarkdownViewModel : ObservableObject
         });
 
         BuildDocs();
-        Tabs = new ObservableCollection<EditorTab>
-        {
-            new() { Name = "架构设计.md", Command = SelectTabCommand, CloseCommand = CloseTabCommand, IsSelected = true },
-            new() { Name = "技术选型.md", Command = SelectTabCommand, CloseCommand = CloseTabCommand },
-            new() { Name = "2026-10-20.md", Command = SelectTabCommand, CloseCommand = CloseTabCommand }
-        };
+        Tabs.Add(new EditorTab { Name = "架构设计.md", Command = SelectTabCommand, CloseCommand = CloseTabCommand, IsSelected = true });
+        Tabs.Add(new EditorTab { Name = "技术选型.md", Command = SelectTabCommand, CloseCommand = CloseTabCommand });
+        Tabs.Add(new EditorTab { Name = "2026-10-20.md", Command = SelectTabCommand, CloseCommand = CloseTabCommand });
         Modes = new ObservableCollection<SegmentItem>
         {
             new("编辑", ModeCommand),
@@ -124,7 +121,7 @@ public sealed class MarkdownViewModel : ObservableObject
 
     public List<DocItem> AllDocs { get; } = new();
     public ObservableCollection<DocGroup> Groups { get; } = new();
-    public ObservableCollection<EditorTab> Tabs { get; }
+    public ObservableCollection<EditorTab> Tabs { get; } = new();
     public ObservableCollection<SegmentItem> Modes { get; }
 
     public ICommand FilterCommand { get; }
