@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Aster.ViewModels"
+             xmlns:ctrl="using:Aster.Controls"
+             x:Class="Aster.Views.SettingsOverlay"
+             x:DataType="vm:MainWindowViewModel">
+
+  <UserControl.Styles>
+    <Style Selector="Button.setitem">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Foreground" Value="{DynamicResource Text1}" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+    </Style>
+    <Style Selector="Button.setitem:pointerover">
+      <Setter Property="Background" Value="{DynamicResource W04}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text0}" />
+    </Style>
+    <Style Selector="Button.setitem.selected">
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+      <Setter Property="BorderBrush" Value="#336C8BFF" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+    </Style>
+
+    <Style Selector="Button.swatch">
+      <Setter Property="Width" Value="20" />
+      <Setter Property="Height" Value="20" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="Button.swatch.selected">
+      <Setter Property="BorderBrush" Value="White" />
+    </Style>
+
+    <Style Selector="Border.groupCard">
+      <Setter Property="Background" Value="{DynamicResource Bg2}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="16,2" />
+    </Style>
+    <Style Selector="Border.setrow">
+      <Setter Property="BorderBrush" Value="#0AFFFFFF" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="0,10" />
+    </Style>
+  </UserControl.Styles>
+
+  <UserControl.DataTemplates>
+
+    <!-- 账号资料卡 -->
+    <DataTemplate DataType="{x:Type vm:AccountCard}">
+      <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+              CornerRadius="10" Padding="16,15" Margin="0,0,0,14">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <Border Width="54" Height="54" CornerRadius="27" Background="{StaticResource AvatarGrad}"
+                  BorderBrush="#33FFFFFF" BorderThickness="1">
+            <TextBlock Text="{Binding Initial}" FontSize="19" FontWeight="SemiBold" Foreground="#0A0B10"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" />
+              <Border Classes="roleTag" Background="#266C8BFF" BorderBrush="#3D6C8BFF" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Role}" FontSize="9.5" Foreground="#A9BAFF" />
+              </Border>
+            </StackPanel>
+            <TextBlock Text="{Binding Email}" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,3,0,0" />
+            <TextBlock Text="{Binding Joined}" FontSize="10.5" Foreground="{StaticResource Text2}" Margin="0,4,0,0" />
+          </StackPanel>
+          <Button Grid.Column="2" Content="更换头像" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <!-- 关于头部 -->
+    <DataTemplate DataType="{x:Type vm:AboutCard}">
+      <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+              CornerRadius="10" Padding="16,18" Margin="0,0,0,20">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <Border Width="52" Height="52" CornerRadius="14" Background="{StaticResource LogoGrad}">
+            <ctrl:LogoMark Margin="7" PetalBrush="#0A0B12" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="15,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" />
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,5,0,0">
+              <TextBlock Text="{Binding Version}" FontSize="11.5" Foreground="{StaticResource Text2}" />
+              <Border Classes="pill" Background="#1F3DDC97" BorderBrush="#333DDC97" BorderThickness="1" Padding="7,2">
+                <TextBlock Text="已是最新" FontSize="10" Foreground="{StaticResource Green}" />
+              </Border>
+              <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+            </StackPanel>
+          </StackPanel>
+          <Button Grid.Column="2" Content="检查更新" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <!-- 行取值：文本 -->
+    <DataTemplate DataType="{x:Type vm:TextValue}">
+      <TextBox Text="{Binding Text, Mode=TwoWay}" Watermark="{Binding Placeholder}" Width="196" />
+    </DataTemplate>
+
+    <!-- 行取值：下拉 -->
+    <DataTemplate DataType="{x:Type vm:SelectValue}">
+      <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected, Mode=TwoWay}"
+                Width="{Binding Width}" MinHeight="30" />
+    </DataTemplate>
+
+    <!-- 行取值：开关 -->
+    <DataTemplate DataType="{x:Type vm:ToggleValue}">
+      <ToggleButton Theme="{StaticResource SwitchToggle}" IsChecked="{Binding IsOn, Mode=TwoWay}" />
+    </DataTemplate>
+
+    <!-- 行取值：滑块 -->
+    <DataTemplate DataType="{x:Type vm:RangeValue}">
+      <StackPanel Orientation="Horizontal" Spacing="10" Width="186">
+        <ctrl:TrackBar Width="126" Height="14" MinHeight="14"
+                       Minimum="{Binding Min}" Maximum="{Binding Max}"
+                       Value="{Binding Value, Mode=TwoWay}" />
+        <TextBlock Text="{Binding DisplayText}" FontSize="11" Foreground="{StaticResource Text1}"
+                   Width="44" TextAlignment="Right" VerticalAlignment="Center" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- 行取值：多选标签 -->
+    <DataTemplate DataType="{x:Type vm:ChipsValue}">
+      <ItemsControl ItemsSource="{Binding Items}" MaxWidth="300">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Right" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="{x:Type vm:ChipItem}">
+            <ToggleButton Theme="{StaticResource ChipToggle}" Content="{Binding Label}"
+                          IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </DataTemplate>
+
+    <!-- 行取值：按钮 -->
+    <DataTemplate DataType="{x:Type vm:ButtonValue}">
+      <Button Content="{Binding Text}" Command="{Binding Command}" />
+    </DataTemplate>
+
+    <!-- 行取值：只读值 -->
+    <DataTemplate DataType="{x:Type vm:InfoValue}">
+      <TextBlock Text="{Binding Text}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                 Foreground="{StaticResource Text1}" VerticalAlignment="Center" />
+    </DataTemplate>
+
+    <!-- 行取值：路径 -->
+    <DataTemplate DataType="{x:Type vm:PathValue}">
+      <Grid ColumnDefinitions="Auto,Auto" Width="300">
+        <TextBox Text="{Binding Text}" IsReadOnly="True" FontFamily="{StaticResource MonoFont}"
+                 FontSize="11" Padding="10,5" />
+        <Button Grid.Column="1" Content="打开" Margin="6,0,0,0" />
+      </Grid>
+    </DataTemplate>
+
+    <!-- 行取值：色板 -->
+    <DataTemplate DataType="{x:Type vm:PaletteValue}">
+      <ItemsControl ItemsSource="{Binding Swatches}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Orientation="Horizontal" Spacing="8" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="{x:Type vm:SwatchItem}">
+            <Button Classes="swatch" Classes.selected="{Binding IsSelected}"
+                    Background="{Binding Brush}" Command="{Binding Command}" CommandParameter="{Binding}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </DataTemplate>
+
+    <!-- 行 -->
+    <DataTemplate DataType="{x:Type vm:SettingRow}">
+      <Border Classes="setrow">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{StaticResource Text0}" />
+            <TextBlock Text="{Binding Desc}" FontSize="11.5" Foreground="{StaticResource Text2}"
+                       Margin="0,2,0,0" MaxWidth="420" TextWrapping="Wrap" IsVisible="{Binding HasDesc}" />
+          </StackPanel>
+          <ContentControl Grid.Column="1" Content="{Binding Value}" Margin="24,0,0,0"
+                          VerticalAlignment="Center" HorizontalAlignment="Right"
+                          IsVisible="{Binding HasValue}" />
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <!-- 分组 -->
+    <DataTemplate DataType="{x:Type vm:SettingGroup}">
+      <StackPanel Margin="0,0,0,12">
+        <TextBlock Text="{Binding Title}" FontSize="10.5" FontWeight="SemiBold"
+                   Foreground="{StaticResource Text2}" Margin="2,0,0,8" />
+        <Border Classes="groupCard">
+          <ItemsControl ItemsSource="{Binding Rows}" />
+        </Border>
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- 链接行 -->
+    <DataTemplate DataType="{x:Type vm:LinkItem}">
+      <Grid ColumnDefinitions="Auto,*,Auto" Height="40">
+        <ctrl:Icon Data="{Binding Icon}" Width="14" Height="14" Foreground="{StaticResource Text2}"
+                   VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="10,0,0,0" VerticalAlignment="Center">
+          <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{StaticResource Text1}" />
+          <TextBlock Text="{Binding Sub}" FontSize="10.5" Foreground="{StaticResource Text2}" />
+        </StackPanel>
+        <TextBlock Grid.Column="2" Text="›" FontSize="13" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+      </Grid>
+    </DataTemplate>
+
+    <!-- 设置分区 -->
+    <DataTemplate DataType="{x:Type vm:SettingSection}">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24,14,24,18">
+          <StackPanel Margin="0,0,0,12">
+            <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Text2}" Margin="0,5,0,0" />
+          </StackPanel>
+
+          <ContentControl Content="{Binding TopCard}" IsVisible="{Binding HasTopCard}" />
+
+          <ItemsControl ItemsSource="{Binding Groups}" />
+
+          <StackPanel IsVisible="{Binding HasLinks}">
+            <TextBlock Text="资源" FontSize="10.5" FontWeight="SemiBold"
+                       Foreground="{StaticResource Text2}" Margin="2,0,0,8" />
+            <Border Classes="groupCard" Padding="16,2">
+              <ItemsControl ItemsSource="{Binding Links}" />
+            </Border>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </DataTemplate>
+
+  </UserControl.DataTemplates>
+
+  <Panel>
+    <!-- 遮罩 -->
+    <Border Background="#BD030407" PointerPressed="OnMaskPressed" />
+
+    <!-- 设置窗口 -->
+    <Border Width="940" Height="680" MaxWidth="940" MaxHeight="680"
+            HorizontalAlignment="Center" VerticalAlignment="Center"
+            Background="{StaticResource Bg1}"
+            BorderBrush="{StaticResource Line2}" BorderThickness="1"
+            CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
+      <Grid RowDefinitions="50,*,56">
+
+        <!-- 头部 -->
+        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,0,12,0">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="设置" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="chrome" Command="{Binding CloseSettingsCommand}" ToolTip.Tip="关闭">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.Close}" Width="14" Height="14" Thickness="1.8" />
+            </Button>
+          </Grid>
+        </Border>
+
+        <!-- 主体 -->
+        <Grid Grid.Row="1" ColumnDefinitions="176,*">
+
+          <Border Background="#24000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="*,Auto" Margin="10,12">
+              <ItemsControl ItemsSource="{Binding Settings.Sections}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:SettingSection}">
+                    <Button Classes="setitem" Classes.selected="{Binding IsSelected}"
+                            Command="{Binding Command}" CommandParameter="{Binding}">
+                      <StackPanel Orientation="Horizontal" Spacing="9">
+                        <ctrl:Icon Data="{Binding Icon}" Width="15" Height="15" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <TextBlock Grid.Row="1" Text="{Binding Settings.Footer}"
+                         FontSize="10.5" Foreground="{StaticResource Text2}"
+                         LineHeight="17" Margin="8,10,8,2" TextWrapping="Wrap" />
+            </Grid>
+          </Border>
+
+          <ContentControl Grid.Column="1" Content="{Binding Settings.Current}"
+                          HorizontalContentAlignment="Stretch"
+                          VerticalContentAlignment="Stretch" ClipToBounds="True" />
+        </Grid>
+
+        <!-- 底部 -->
+        <Border Grid.Row="2" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
+                Background="#29000000" Padding="20,0">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="所有更改即时生效并自动保存" FontSize="11" Foreground="{StaticResource Text2}"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="pri" Content="完成" Height="34" Padding="20,0"
+                    Command="{Binding CloseSettingsCommand}" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+      </Grid>
+    </Border>
+  </Panel>
+
+</UserControl>

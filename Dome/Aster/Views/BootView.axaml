@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ctrl="using:Aster.Controls"
+             x:Class="Aster.Views.BootView">
+
+  <UserControl.Styles>
+    <Style Selector="Border.bootfill">
+      <Style.Animations>
+        <Animation Duration="0:0:1.85" FillMode="Forward">
+          <KeyFrame Cue="0%">
+            <Setter Property="Width" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="55%">
+            <Setter Property="Width" Value="108" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="Width" Value="168" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+  </UserControl.Styles>
+
+  <Panel Background="#08090D">
+    <Panel.Background>
+      <RadialGradientBrush Center="50%,42%" GradientOrigin="50%,42%" Radius="0.8">
+        <GradientStop Offset="0" Color="#2E6C8BFF" />
+        <GradientStop Offset="0.45" Color="#12A78BFA" />
+        <GradientStop Offset="1" Color="#00000000" />
+      </RadialGradientBrush>
+    </Panel.Background>
+
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+      <Border Width="74" Height="74" CornerRadius="20" Background="{StaticResource LogoGrad}">
+        <ctrl:LogoMark Margin="10" PetalBrush="#0A0B12" />
+      </Border>
+
+      <TextBlock Text="Aster" FontSize="21" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,22,0,0" />
+      <TextBlock Text="管理系统工作台" FontSize="11.5" Foreground="{StaticResource Text2}"
+                 HorizontalAlignment="Center" Margin="0,7,0,0" />
+
+      <Border Width="168" Height="3" CornerRadius="3" Background="#17FFFFFF" Margin="0,34,0,0"
+              HorizontalAlignment="Center" ClipToBounds="True">
+        <Border Classes="bootfill" Width="0" Height="3" CornerRadius="3" HorizontalAlignment="Left"
+                Background="{StaticResource AccentViolet}" />
+      </Border>
+
+      <TextBlock Text="正在初始化工作区…" FontSize="10.5" Foreground="{StaticResource Text2}"
+                 HorizontalAlignment="Center" Margin="0,13,0,0" />
+    </StackPanel>
+
+    <TextBlock Text="v1.4.2 · Avalonia 11" FontSize="10.5" Foreground="#3F4657"
+               HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,22" />
+  </Panel>
+</UserControl>

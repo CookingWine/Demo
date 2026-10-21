@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Aster.ViewModels"
+             xmlns:views="using:Aster.Views"
+             xmlns:ctrl="using:Aster.Controls"
+             x:Class="Aster.Views.ShellView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <UserControl.Resources>
+
+    <!-- 一级导航 -->
+    <DataTemplate x:Key="RailTemplate" DataType="{x:Type vm:RailItem}">
+      <Button Classes="nav"
+              Classes.selected="{Binding IsSelected}"
+              Command="{Binding Command}"
+              CommandParameter="{Binding}"
+              ToolTip.Tip="{Binding Title}"
+              HorizontalAlignment="Center">
+        <StackPanel Spacing="4" HorizontalAlignment="Center">
+          <ctrl:Icon Data="{Binding Icon}" Width="19" Height="19" HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding Title}" FontSize="10.5" HorizontalAlignment="Center" />
+        </StackPanel>
+      </Button>
+    </DataTemplate>
+
+  </UserControl.Resources>
+
+  <UserControl.DataTemplates>
+    <!-- 二级导航：分组标题 -->
+    <DataTemplate DataType="{x:Type vm:SubNavGroupEntry}">
+      <TextBlock Text="{Binding Title}"
+                 FontSize="9.5"
+                 Foreground="#4B5264"
+                 Margin="9,14,9,6" />
+    </DataTemplate>
+
+    <!-- 二级导航：条目 -->
+    <DataTemplate DataType="{x:Type vm:SubNavLinkEntry}">
+      <Button Classes="subnav"
+              Classes.selected="{Binding IsSelected}"
+              Command="{Binding Command}"
+              CommandParameter="{Binding}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <ctrl:Icon Data="{Binding Icon}" Width="15" Height="15" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1"
+                     Text="{Binding Title}"
+                     FontSize="12.5"
+                     Margin="9,0,0,0"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis" />
+          <Border Grid.Column="2"
+                  IsVisible="{Binding HasBadge}"
+                  CornerRadius="4"
+                  Padding="6,1"
+                  Background="#24F5B942"
+                  VerticalAlignment="Center">
+            <TextBlock Text="{Binding Badge}" FontSize="9.5" Foreground="{DynamicResource Amber}" />
+          </Border>
+        </Grid>
+      </Button>
+    </DataTemplate>
+
+    <!-- 主视图 -->
+    <DataTemplate DataType="{x:Type vm:HomeViewModel}">
+      <views:HomeView />
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:MarkdownViewModel}">
+      <views:MarkdownView />
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:MusicViewModel}">
+      <views:MusicView />
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:AdminViewModel}">
+      <views:AdminView />
+    </DataTemplate>
+
+  </UserControl.DataTemplates>
+
+  <Grid RowDefinitions="44,*">
+
+    <!-- ================= 标题栏 ================= -->
+    <Border Grid.Row="0"
+            x:Name="TitleBar"
+            Background="{StaticResource Bg1}"
+            BorderBrush="{StaticResource Line}"
+            BorderThickness="0,0,0,1"
+            PointerPressed="OnTitleBarPressed">
+      <Border.Background>
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Offset="0" Color="#0AFFFFFF" />
+          <GradientStop Offset="1" Color="#00FFFFFF" />
+        </LinearGradientBrush>
+      </Border.Background>
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0,8,0">
+        <Button Classes="ghost" Padding="4,0" Height="30" Background="Transparent" BorderThickness="0"
+                Command="{Binding ShowHomeCommand}" ToolTip.Tip="返回工作台">
+          <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+            <Border Width="22" Height="22" CornerRadius="6" Background="{StaticResource LogoGrad}">
+              <ctrl:LogoMark Margin="3" PetalBrush="#0A0B12" />
+            </Border>
+            <TextBlock Text="Aster" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource Text0}" />
+          </StackPanel>
+        </Button>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+          <Button Classes="chrome" Click="OnMinimize" ToolTip.Tip="最小化">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Minus}" Width="12" Height="12" Thickness="1.4" />
+          </Button>
+          <Button Classes="chrome" Click="OnMaximize" ToolTip.Tip="最大化">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Square}" Width="12" Height="12" Thickness="1.4" />
+          </Button>
+          <Button Classes="chrome close" Click="OnClose" ToolTip.Tip="关闭">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Close}" Width="12" Height="12" Thickness="1.4" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- ================= 主体 ================= -->
+    <Grid Grid.Row="1" ColumnDefinitions="74,Auto,*">
+
+      <!-- 一级导航 -->
+      <Border Grid.Column="0" Background="#2E000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="0,14,0,12">
+          <ItemsControl ItemsSource="{Binding RailTop}"
+                        ItemTemplate="{StaticResource RailTemplate}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+
+          <ContentControl Grid.Row="2"
+                          Content="{Binding RailSettings}"
+                          ContentTemplate="{StaticResource RailTemplate}"
+                          HorizontalAlignment="Center" />
+
+          <Border Grid.Row="3" Width="32" Height="32" CornerRadius="16"
+                  Background="{StaticResource AvatarGrad}"
+                  BorderBrush="{StaticResource W10}" BorderThickness="2"
+                  Margin="0,14,0,0" HorizontalAlignment="Center">
+            <TextBlock Text="L" FontSize="11" FontWeight="Bold" Foreground="#080A0F"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+        </Grid>
+      </Border>
+
+      <!-- 二级导航 -->
+      <Border Grid.Column="1" Width="184" IsVisible="{Binding IsSubNavVisible}"
+              Background="#29000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Text="{Binding SubNavTitle}"
+                     FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Text2}"
+                     Margin="18,16,10,10" />
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding SubNavEntries}" Margin="10,0,10,12" />
+          </ScrollViewer>
+        </Grid>
+      </Border>
+
+      <!-- 内容 -->
+      <ContentControl Grid.Column="2"
+                      Content="{Binding ActiveView}"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch"
+                      ClipToBounds="True" />
+    </Grid>
+  </Grid>
+
+</UserControl>

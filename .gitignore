@@ -1,0 +1,39 @@
+# ---------- .NET / Avalonia ----------
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Ll]og/
+[Ll]ogs/
+*.dll
+*.exe
+*.pdb
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+*.nupkg
+*.snupkg
+TestResults/
+[Mm]onkeyCache/
+publish/
+artifacts/
+
+# ---------- IDE ----------
+.idea/
+.vs/
+.vscode/
+_ReSharper.Caches/
+riderModule.iml
+*.sln.docstates
+
+# ---------- 系统 ----------
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+
+# ---------- 工具 ----------
+.workbuddy/
+*.log

@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- ===================== 设计令牌 · 色彩 ===================== -->
+  <Color x:Key="Bg0Color">#06070A</Color>
+  <Color x:Key="Bg1Color">#0E1015</Color>
+  <Color x:Key="Bg2Color">#13161D</Color>
+  <Color x:Key="Bg3Color">#191D26</Color>
+  <Color x:Key="Bg4Color">#212633</Color>
+
+  <Color x:Key="Text0Color">#E9ECF4</Color>
+  <Color x:Key="Text1Color">#9BA3B7</Color>
+  <Color x:Key="Text2Color">#626A7D</Color>
+  <Color x:Key="Text3Color">#434A5C</Color>
+
+  <Color x:Key="AccentColor">#6C8BFF</Color>
+  <Color x:Key="VioletColor">#A78BFA</Color>
+  <Color x:Key="CyanColor">#3DD6E8</Color>
+  <Color x:Key="GreenColor">#3DDC97</Color>
+  <Color x:Key="AmberColor">#F5B942</Color>
+  <Color x:Key="RedColor">#F8716E</Color>
+
+  <!-- ===================== 画刷 ===================== -->
+  <SolidColorBrush x:Key="Bg0" Color="{StaticResource Bg0Color}" />
+  <SolidColorBrush x:Key="Bg1" Color="{StaticResource Bg1Color}" />
+  <SolidColorBrush x:Key="Bg2" Color="{StaticResource Bg2Color}" />
+  <SolidColorBrush x:Key="Bg3" Color="{StaticResource Bg3Color}" />
+  <SolidColorBrush x:Key="Bg4" Color="{StaticResource Bg4Color}" />
+
+  <SolidColorBrush x:Key="Text0" Color="{StaticResource Text0Color}" />
+  <SolidColorBrush x:Key="Text1" Color="{StaticResource Text1Color}" />
+  <SolidColorBrush x:Key="Text2" Color="{StaticResource Text2Color}" />
+  <SolidColorBrush x:Key="Text3" Color="{StaticResource Text3Color}" />
+
+  <SolidColorBrush x:Key="Line" Color="#FFFFFF" Opacity="0.065" />
+  <SolidColorBrush x:Key="Line2" Color="#FFFFFF" Opacity="0.12" />
+  <SolidColorBrush x:Key="LineSoft" Color="#FFFFFF" Opacity="0.035" />
+
+  <SolidColorBrush x:Key="Accent" Color="{StaticResource AccentColor}" />
+  <SolidColorBrush x:Key="AccentSoft" Color="{StaticResource AccentColor}" Opacity="0.15" />
+  <SolidColorBrush x:Key="AccentText" Color="#C7D3FF" />
+  <SolidColorBrush x:Key="Violet" Color="{StaticResource VioletColor}" />
+  <SolidColorBrush x:Key="Cyan" Color="{StaticResource CyanColor}" />
+  <SolidColorBrush x:Key="Green" Color="{StaticResource GreenColor}" />
+  <SolidColorBrush x:Key="Amber" Color="{StaticResource AmberColor}" />
+  <SolidColorBrush x:Key="Red" Color="{StaticResource RedColor}" />
+
+  <!-- 半透明白，替代 rgba(255,255,255,.xx) -->
+  <SolidColorBrush x:Key="W04" Color="#FFFFFF" Opacity="0.04" />
+  <SolidColorBrush x:Key="W03" Color="#FFFFFF" Opacity="0.03" />
+  <SolidColorBrush x:Key="W06" Color="#FFFFFF" Opacity="0.06" />
+  <SolidColorBrush x:Key="W08" Color="#FFFFFF" Opacity="0.08" />
+  <SolidColorBrush x:Key="W10" Color="#FFFFFF" Opacity="0.10" />
+  <SolidColorBrush x:Key="W14" Color="#FFFFFF" Opacity="0.14" />
+
+  <!-- ===================== 渐变 ===================== -->
+  <LinearGradientBrush x:Key="LogoGrad" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0" Color="#7E96FF" />
+    <GradientStop Offset="0.58" Color="#A78BFA" />
+    <GradientStop Offset="1" Color="#57CBE2" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="PrimaryGrad" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0" Color="#7A96FF" />
+    <GradientStop Offset="1" Color="#5C7BF7" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="AvatarGrad" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0" Color="#3DD6E8" />
+    <GradientStop Offset="1" Color="#6C8BFF" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="AccentViolet" StartPoint="0%,0%" EndPoint="100%,0%">
+    <GradientStop Offset="0" Color="#6C8BFF" />
+    <GradientStop Offset="1" Color="#A78BFA" />
+  </LinearGradientBrush>
+
+  <!-- ===================== 字体 ===================== -->
+  <FontFamily x:Key="UiFont">Inter, PingFang SC, Microsoft YaHei, Segoe UI</FontFamily>
+  <FontFamily x:Key="MonoFont">JetBrains Mono, SF Mono, Cascadia Code, Consolas, Menlo, monospace</FontFamily>
+
+  <!-- ===================== 控件主题 ===================== -->
+
+    <!-- ============ 窗口标题栏按钮 ============ -->
+    <ControlTheme x:Key="ChromeButton" TargetType="Button">
+      <Setter Property="Width" Value="40" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Text1}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bg" Background="{TemplateBinding Background}" CornerRadius="5">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+
+    <!-- ============ 一级导航（rail）============ -->
+    <ControlTheme x:Key="NavButton" TargetType="Button">
+      <Setter Property="Width" Value="56" />
+      <Setter Property="Height" Value="52" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Text2}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bg" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="9">
+            <Panel>
+              <Border Name="Bar" Width="3" Height="24" CornerRadius="0,3,3,0"
+                      HorizontalAlignment="Left" VerticalAlignment="Center"
+                      Margin="-10,0,0,0" Background="Transparent" />
+              <ContentPresenter Content="{TemplateBinding Content}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+            </Panel>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+
+    <!-- ============ 二级导航 ============ -->
+    <ControlTheme x:Key="SubNavButton" TargetType="Button">
+      <Setter Property="Padding" Value="9,7" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Text1}" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bg" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="7" Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalContentAlignment="Stretch"
+                              VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+
+    <!-- ============ 分段控件 ============ -->
+    <ControlTheme x:Key="SegButton" TargetType="Button">
+      <Setter Property="Padding" Value="10,3" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Text2}" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bg" Background="{TemplateBinding Background}" CornerRadius="4"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+
+    <!-- ============ 开关 ============ -->
+    <ControlTheme x:Key="SwitchToggle" TargetType="ToggleButton">
+      <Setter Property="Width" Value="38" />
+      <Setter Property="Height" Value="21" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Track" Width="38" Height="21" CornerRadius="99"
+                  Background="{DynamicResource W14}">
+            <Ellipse Name="Knob" Width="17" Height="17" Fill="White"
+                     HorizontalAlignment="Left" VerticalAlignment="Center"
+                     Margin="2,0,0,0" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:checked /template/ Border#Track">
+        <Setter Property="Background" Value="{DynamicResource Accent}" />
+      </Style>
+      <Style Selector="^:checked /template/ Ellipse#Knob">
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="Margin" Value="0,0,2,0" />
+      </Style>
+    </ControlTheme>
+
+    <!-- ============ 标签块（chips）============ -->
+    <ControlTheme x:Key="ChipToggle" TargetType="ToggleButton">
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="Margin" Value="0,0,6,6" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource Text2}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bg" CornerRadius="5" BorderThickness="1"
+                  BorderBrush="{DynamicResource Line2}"
+                  Background="{DynamicResource W04}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:checked /template/ Border#Bg">
+        <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+        <Setter Property="BorderBrush" Value="#596C8BFF" />
+      </Style>
+      <Style Selector="^:checked">
+        <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+      </Style>
+    </ControlTheme>
+
+
+  <!-- ===================== 窗口阴影 ===================== -->
+  <BoxShadows x:Key="WindowShadow">0 18 48 0 #CC000000</BoxShadows>
+  <BoxShadows x:Key="PopShadow">0 24 70 0 #E6000000</BoxShadows>
+
+</ResourceDictionary>

@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Aster.ViewModels"
+             xmlns:ctrl="using:Aster.Controls"
+             x:Class="Aster.Views.MusicView"
+             x:DataType="vm:MusicViewModel">
+
+  <UserControl.Styles>
+    <Style Selector="Button.song">
+      <Setter Property="Padding" Value="9,7" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bg" CornerRadius="7" Background="Transparent" Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalContentAlignment="Stretch"
+                              VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.song:pointerover /template/ Border#Bg">
+      <Setter Property="Background" Value="#0BFFFFFF" />
+    </Style>
+    <Style Selector="Button.song.selected /template/ Border#Bg">
+      <Setter Property="Background" Value="#216C8BFF" />
+    </Style>
+
+    <Style Selector="Button.tab">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource Text2}" />
+    </Style>
+    <Style Selector="Button.tab:pointerover">
+      <Setter Property="Background" Value="{DynamicResource W04}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text1}" />
+    </Style>
+    <Style Selector="Button.tab.selected">
+      <Setter Property="Background" Value="#296C8BFF" />
+      <Setter Property="Foreground" Value="#B9C8FF" />
+    </Style>
+
+    <Style Selector="Button.cbtn">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Text1}" />
+    </Style>
+    <Style Selector="Button.cbtn:pointerover">
+      <Setter Property="Background" Value="{DynamicResource W06}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text0}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid ColumnDefinitions="286,*,224">
+
+    <!-- ==================== 播放列表 ==================== -->
+    <Border Background="#24000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <StackPanel Margin="16,16,16,10">
+          <TextBlock Text="{Binding LibraryTitle}" FontSize="15" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding LibrarySubtitle}" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,3,0,0" />
+        </StackPanel>
+
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding Tabs}" Margin="12,0,12,8">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="4" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:SegmentItem}">
+              <Button Classes="tab" Classes.selected="{Binding IsSelected}" Content="{Binding Label}"
+                      Command="{Binding Command}" CommandParameter="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <ItemsControl ItemsSource="{Binding VisibleSongs}" Margin="8,2,8,12">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:SongItem}">
+                <Button Classes="song" Classes.selected="{Binding IsSelected}"
+                        Command="{Binding Command}" CommandParameter="{Binding}">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Border Width="34" Height="34" CornerRadius="6" Background="{Binding Cover}" />
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{StaticResource Text0}"
+                                 TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Artist}" FontSize="10.5" Foreground="{StaticResource Text2}"
+                                 Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Panel Grid.Column="2" VerticalAlignment="Center">
+                      <ctrl:EqIndicator Width="11" Height="11" IsVisible="{Binding IsPlaying}" />
+                      <TextBlock Text="{Binding Duration}" FontSize="10.5" Foreground="{StaticResource Text2}"
+                                 IsVisible="{Binding !IsPlaying}" />
+                    </Panel>
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+
+        <Grid Grid.Row="3" ColumnDefinitions="*,*" Margin="14,10" ColumnSpacing="6">
+          <Button Content="导入" FontSize="11" HorizontalAlignment="Stretch" Height="26" />
+          <Button Grid.Column="1" Content="新建歌单" FontSize="11" HorizontalAlignment="Stretch" Height="26" />
+        </Grid>
+      </Grid>
+    </Border>
+
+    <!-- ==================== 播放主舞台 ==================== -->
+    <Grid Grid.Column="1" RowDefinitions="46,*,Auto" ClipToBounds="True">
+      <Panel Grid.RowSpan="3">
+        <Panel.Background>
+          <RadialGradientBrush Center="50%,20%" GradientOrigin="50%,20%" Radius="0.75">
+            <GradientStop Offset="0" Color="#38A78BFA" />
+            <GradientStop Offset="0.55" Color="#146C8BFF" />
+            <GradientStop Offset="1" Color="#00000000" />
+          </RadialGradientBrush>
+        </Panel.Background>
+      </Panel>
+
+      <Border Grid.Row="0" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="24,0">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Text="正在播放" FontSize="11.5" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+            <Border CornerRadius="4" Padding="7,2" Background="#1F3DD6E8" BorderBrush="#333DD6E8" BorderThickness="1">
+              <TextBlock Text="LOSSLESS" FontSize="10" Foreground="{StaticResource Cyan}" />
+            </Border>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button Classes="cbtn" Width="26" Height="26" ToolTip.Tip="收藏">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.Heart}" Width="14" Height="14" />
+            </Button>
+            <Button Classes="cbtn" Width="26" Height="26" ToolTip.Tip="更多">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.More}" Width="14" Height="14" Filled="True" />
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- 唱片与歌词 -->
+      <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,10,0,0">
+        <Border Width="212" Height="212" CornerRadius="20" ClipToBounds="True">
+          <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+              <GradientStop Offset="0" Color="#232746" />
+              <GradientStop Offset="0.4" Color="#3D2F6B" />
+              <GradientStop Offset="0.72" Color="#7C4FA3" />
+              <GradientStop Offset="1" Color="#2FA8C4" />
+            </LinearGradientBrush>
+          </Border.Background>
+          <ctrl:SpinningDisc Width="108" Height="108" IsSpinning="{Binding IsPlaying}"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+
+        <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold" Margin="0,20,0,0"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding Artist}" FontSize="12" Foreground="{StaticResource Text2}"
+                   Margin="0,6,0,0" HorizontalAlignment="Center" />
+
+        <StackPanel Spacing="3" Margin="0,16,0,0" HorizontalAlignment="Center">
+          <TextBlock Text="{Binding LyricsLine0}" FontSize="12.5" Foreground="{StaticResource Text2}"
+                     Opacity="0.5" HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding LyricsLine1}" FontSize="13.5" FontWeight="Medium"
+                     Foreground="#DDE3F2" HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding LyricsLine2}" FontSize="12.5" Foreground="{StaticResource Text2}"
+                     Opacity="0.55" HorizontalAlignment="Center" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- 控制区 -->
+      <StackPanel Grid.Row="2" Margin="40,0,40,22">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12">
+          <TextBlock Text="{Binding PositionText}" FontSize="10.5" Foreground="{StaticResource Text2}"
+                     Width="34" VerticalAlignment="Center" />
+          <ctrl:TrackBar Grid.Column="1" Height="14" Value="{Binding Position, Mode=TwoWay}"
+                         Maximum="{Binding DurationSeconds}" MinHeight="14" />
+          <TextBlock Grid.Column="2" Text="{Binding DurationText}" FontSize="10.5" Foreground="{StaticResource Text2}"
+                     Width="34" TextAlignment="Right" VerticalAlignment="Center" />
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="16">
+          <Button Classes="cbtn" Command="{Binding ToggleShuffleCommand}" ToolTip.Tip="随机">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Shuffle}" Width="15" Height="15" Foreground="{Binding ShuffleBrush}" />
+          </Button>
+          <Button Classes="cbtn" Command="{Binding PrevCommand}" ToolTip.Tip="上一首">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Prev}" Width="15" Height="15" Filled="True" />
+          </Button>
+
+          <Border Width="46" Height="46" CornerRadius="23" BoxShadow="0 8 24 -8 #F26C8BFF">
+            <Button Width="46" Height="46" CornerRadius="23" Padding="0"
+                    Background="{StaticResource PrimaryGrad}" BorderThickness="0"
+                    Command="{Binding TogglePlayCommand}" ToolTip.Tip="播放/暂停">
+              <ctrl:Icon Data="{Binding PlayIcon}" Width="18" Height="18" Filled="True" Foreground="White" />
+            </Button>
+          </Border>
+
+          <Button Classes="cbtn" Command="{Binding NextCommand}" ToolTip.Tip="下一首">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Next}" Width="15" Height="15" Filled="True" />
+          </Button>
+          <Button Classes="cbtn" Command="{Binding ToggleRepeatCommand}" ToolTip.Tip="循环">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Repeat}" Width="15" Height="15" Foreground="{Binding RepeatBrush}" />
+          </Button>
+
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,0" VerticalAlignment="Center">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Volume}" Width="14" Height="14"
+                       Foreground="{StaticResource Text1}" VerticalAlignment="Center" />
+            <ctrl:TrackBar Width="64" Height="12" MinHeight="12" Maximum="100"
+                           Value="{Binding Volume, Mode=TwoWay}" TrackHeight="3" />
+          </StackPanel>
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+
+    <!-- ==================== 右侧可视化 ==================== -->
+    <Border Grid.Column="2" Background="#24000000" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+      <Grid RowDefinitions="42,Auto,Auto,Auto,*">
+        <TextBlock Text="音频可视化" FontSize="11" Foreground="{StaticResource Text2}"
+                   Margin="16,0" VerticalAlignment="Center" />
+
+        <Border Grid.Row="1" Height="120" Padding="18,16,18,8">
+          <ctrl:AudioBars IsPlaying="{Binding IsPlaying}" />
+        </Border>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" Margin="18,6,18,14">
+          <StackPanel>
+            <TextBlock Text="1411" FontSize="13" FontWeight="SemiBold" />
+            <TextBlock Text="kbps 码率" FontSize="10.5" Foreground="{StaticResource Text2}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1">
+            <TextBlock Text="44.1" FontSize="13" FontWeight="SemiBold" />
+            <TextBlock Text="kHz 采样" FontSize="10.5" Foreground="{StaticResource Text2}" />
+          </StackPanel>
+          <StackPanel Grid.Row="1" Margin="0,10,0,0">
+            <TextBlock Text="Stereo" FontSize="13" FontWeight="SemiBold" />
+            <TextBlock Text="声道" FontSize="10.5" Foreground="{StaticResource Text2}" />
+          </StackPanel>
+          <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,10,0,0">
+            <TextBlock Text="FLAC" FontSize="13" FontWeight="SemiBold" />
+            <TextBlock Text="格式" FontSize="10.5" Foreground="{StaticResource Text2}" />
+          </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="3" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="16,12,16,8">
+          <TextBlock Text="播放队列 · 接下来 6 首" FontSize="10.5" Foreground="{StaticResource Text2}" />
+        </Border>
+
+        <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <ItemsControl ItemsSource="{Binding Queue}" Margin="10,0,10,14">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:PlainRow}">
+                <Grid ColumnDefinitions="Auto,*" Margin="8,7" Height="18">
+                  <TextBlock Text="{Binding Index}" FontSize="10" Foreground="{StaticResource Text2}"
+                             Width="12" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding Text}" FontSize="11.5" Foreground="{StaticResource Text1}"
+                             TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

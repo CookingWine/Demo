@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Aster.ViewModels"
+        xmlns:views="using:Aster.Views"
+        x:Class="Aster.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Aster"
+        Width="1320"
+        Height="850"
+        MinWidth="1080"
+        MinHeight="700"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ExtendClientAreaToDecorationsHint="False">
+
+  <Border CornerRadius="14"
+          Background="{StaticResource Bg1}"
+          BorderBrush="{StaticResource Line2}"
+          BorderThickness="1"
+          BoxShadow="{StaticResource WindowShadow}"
+          ClipToBounds="True">
+    <Panel>
+      <views:ShellView x:Name="Shell" IsVisible="{Binding IsApp}" />
+      <views:LoginView IsVisible="{Binding IsLogin}" />
+      <views:BootView IsVisible="{Binding IsBoot}" />
+      <views:SettingsOverlay IsVisible="{Binding IsSettingsOpen}" />
+    </Panel>
+  </Border>
+
+</Window>

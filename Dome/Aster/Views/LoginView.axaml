@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Aster.ViewModels"
+             xmlns:ctrl="using:Aster.Controls"
+             x:Class="Aster.Views.LoginView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <UserControl.Styles>
+    <Style Selector="Border.field">
+      <Setter Property="Height" Value="42" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="{DynamicResource W04}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line2}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="12,0" />
+    </Style>
+    <Style Selector="Border.field:pointerover">
+      <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
+    </Style>
+    <Style Selector="Border.field TextBox">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+
+  <Panel Background="{StaticResource Bg1}">
+
+    <Grid ColumnDefinitions="42*,58*">
+
+      <!-- ==================== 品牌区 ==================== -->
+      <Border>
+        <Border.Background>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="#0C1022" />
+            <GradientStop Offset="0.4" Color="#161B38" />
+            <GradientStop Offset="0.74" Color="#2A2154" />
+            <GradientStop Offset="1" Color="#0B1122" />
+          </LinearGradientBrush>
+        </Border.Background>
+
+        <Panel>
+          <Panel.Background>
+            <RadialGradientBrush Center="30%,65%" GradientOrigin="30%,65%" Radius="0.9">
+              <GradientStop Offset="0" Color="#408060D8" />
+              <GradientStop Offset="1" Color="#00000000" />
+            </RadialGradientBrush>
+          </Panel.Background>
+
+          <Grid RowDefinitions="Auto,*,Auto" Margin="38,34">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Border Width="28" Height="28" CornerRadius="8" Background="{StaticResource LogoGrad}">
+                <ctrl:LogoMark Margin="3.5" PetalBrush="#0A0B12" />
+              </Border>
+              <TextBlock Text="Aster" FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="1" VerticalAlignment="Center">
+              <TextBlock Text="把数据" FontSize="37" FontWeight="SemiBold" LineHeight="46">
+                <TextBlock.Foreground>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Offset="0" Color="#F2F5FF" />
+                    <GradientStop Offset="0.46" Color="#BCC8FF" />
+                    <GradientStop Offset="1" Color="#A78BFA" />
+                  </LinearGradientBrush>
+                </TextBlock.Foreground>
+              </TextBlock>
+              <TextBlock Text="变成决策" FontSize="37" FontWeight="SemiBold" LineHeight="46">
+                <TextBlock.Foreground>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Offset="0" Color="#F2F5FF" />
+                    <GradientStop Offset="0.46" Color="#BCC8FF" />
+                    <GradientStop Offset="1" Color="#A78BFA" />
+                  </LinearGradientBrush>
+                </TextBlock.Foreground>
+              </TextBlock>
+              <TextBlock Text="成员、订单与增长指标集中在一处，随时掌握业务的真实状态。"
+                         FontSize="12.5" Foreground="#9BA5C2" LineHeight="22" MaxWidth="272"
+                         TextWrapping="Wrap" Margin="0,16,0,0" />
+            </StackPanel>
+
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+              <TextBlock Text="© 2026 Aster" FontSize="10.5" Foreground="#4E5670" />
+              <TextBlock Grid.Column="1" Text="v1.4.2" FontSize="10.5" Foreground="#4E5670" />
+            </Grid>
+          </Grid>
+        </Panel>
+      </Border>
+
+      <!-- ==================== 表单区 ==================== -->
+      <Grid Grid.Column="1" ColumnDefinitions="*,Auto" RowDefinitions="Auto,*">
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="0,10,10,0">
+          <Button Classes="chrome" Width="34" Height="26" Click="OnMinimize">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Minus}" Width="12" Height="12" Thickness="1.4" />
+          </Button>
+          <Button Classes="chrome" Width="34" Height="26" Click="OnMaximize">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Square}" Width="12" Height="12" Thickness="1.4" />
+          </Button>
+          <Button Classes="chrome close" Width="34" Height="26" Click="OnClose">
+            <ctrl:Icon Data="{x:Static ctrl:Icons.Close}" Width="12" Height="12" Thickness="1.4" />
+          </Button>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Width="350" VerticalAlignment="Center"
+                    HorizontalAlignment="Center" Margin="40,0">
+          <TextBlock Text="欢迎回来" FontSize="22" FontWeight="SemiBold" />
+          <TextBlock Text="登录你的账户以继续" FontSize="12" Foreground="{StaticResource Text2}" Margin="0,7,0,24" />
+
+          <StackPanel Margin="0,0,0,15">
+            <TextBlock Text="账号" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
+            <Border Classes="field">
+              <Grid ColumnDefinitions="Auto,*">
+                <ctrl:Icon Data="{x:Static ctrl:Icons.User}" Width="15" Height="15"
+                           Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" Text="{Binding UserName, Mode=TwoWay}" Margin="9,0,0,0"
+                         Watermark="name@aster.io" />
+              </Grid>
+            </Border>
+          </StackPanel>
+
+          <StackPanel Margin="0,0,0,15">
+            <TextBlock Text="密码" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
+            <Border Classes="field">
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <ctrl:Icon Data="{x:Static ctrl:Icons.Lock}" Width="15" Height="15"
+                           Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" Text="{Binding Password, Mode=TwoWay}" Margin="9,0,0,0"
+                         PasswordChar="●" RevealPassword="{Binding ShowPassword}" />
+                <Button Grid.Column="2" Classes="ghost" Width="24" Height="24" Padding="0"
+                        Command="{Binding TogglePasswordCommand}" ToolTip.Tip="显示密码">
+                  <ctrl:Icon Data="{x:Static ctrl:Icons.Eye}" Width="15" Height="15"
+                             Foreground="{StaticResource Text2}" />
+                </Button>
+              </Grid>
+            </Border>
+          </StackPanel>
+
+          <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,20">
+            <CheckBox Content="记住我" IsChecked="{Binding Remember, Mode=TwoWay}" FontSize="11.5"
+                      Foreground="{StaticResource Text1}" Padding="0" MinHeight="20" />
+            <Button Grid.Column="1" Classes="link" Content="忘记密码？" Command="{Binding OpenForgotCommand}" />
+          </Grid>
+
+          <Button Classes="pri" Height="42" CornerRadius="8" FontSize="13" Content="登录"
+                  Command="{Binding LoginCommand}" HorizontalAlignment="Stretch" />
+
+          <TextBlock Text="{Binding LoginError}" FontSize="11.5" Foreground="{StaticResource Red}"
+                     HorizontalAlignment="Center" Margin="0,10,0,0" />
+
+          <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" Margin="0,22,0,0">
+            <TextBlock Text="还没有账号？" FontSize="11.5" Foreground="{StaticResource Text2}" />
+            <Button Classes="link" Content="联系管理员" Command="{Binding OpenContactCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Grid>
+    </Grid>
+
+    <!-- ==================== 忘记密码 ==================== -->
+    <Panel IsVisible="{Binding IsForgotDialog}" Background="#B8030407">
+      <Border Width="420" VerticalAlignment="Center" HorizontalAlignment="Center"
+              Background="{StaticResource Bg1}" BorderBrush="{StaticResource Line2}" BorderThickness="1"
+              CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
+        <StackPanel>
+          <Grid ColumnDefinitions="*,Auto" Margin="20,16,14,0">
+            <TextBlock Text="重置密码" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="chrome" Width="28" Height="28"
+                    Command="{Binding CloseDialogCommand}">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.Close}" Width="13" Height="13" Thickness="1.8" />
+            </Button>
+          </Grid>
+
+          <StackPanel IsVisible="{Binding IsForgotStep1}" Margin="20,14,20,0">
+            <TextBlock Text="输入账号绑定的邮箱，我们会发送一封包含重置链接的邮件，链接在 30 分钟内有效。"
+                       FontSize="11.5" Foreground="{StaticResource Text2}" LineHeight="20"
+                       TextWrapping="Wrap" Margin="0,0,0,16" />
+            <TextBlock Text="账号邮箱" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
+            <Border Classes="field">
+              <Grid ColumnDefinitions="Auto,*">
+                <ctrl:Icon Data="{x:Static ctrl:Icons.Mail}" Width="15" Height="15"
+                           Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" Text="{Binding ForgotEmail, Mode=TwoWay}" Margin="9,0,0,0" />
+              </Grid>
+            </Border>
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,16,0,18">
+              <Button Content="取消" Height="34" Padding="16,0" Command="{Binding CloseDialogCommand}" />
+              <Button Classes="pri" Content="发送重置链接" Height="34" Padding="16,0"
+                      Command="{Binding SendResetCommand}" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel IsVisible="{Binding IsForgotStep2}" Margin="20,24,20,0">
+            <Border Width="46" Height="46" CornerRadius="23" Background="#213DDC97" BorderBrush="#3D3DDC97"
+                    BorderThickness="1" HorizontalAlignment="Center">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.Check}" Width="21" Height="21" Thickness="2.2"
+                         Foreground="{StaticResource Green}" />
+            </Border>
+            <TextBlock Text="重置邮件已发送" FontSize="14" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Margin="0,14,0,8" />
+            <TextBlock Text="请点击邮件中的链接完成密码重置" FontSize="11.5" Foreground="{StaticResource Text2}"
+                       HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+            <Button Classes="pri" Content="知道了" Height="34" Padding="20,0" HorizontalAlignment="Right"
+                    Margin="0,20,0,18" Command="{Binding CloseDialogCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Panel>
+
+    <!-- ==================== 联系管理员 ==================== -->
+    <Panel IsVisible="{Binding IsContactDialog}" Background="#B8030407">
+      <Border Width="420" VerticalAlignment="Center" HorizontalAlignment="Center"
+              Background="{StaticResource Bg1}" BorderBrush="{StaticResource Line2}" BorderThickness="1"
+              CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
+        <StackPanel>
+          <Grid ColumnDefinitions="*,Auto" Margin="20,16,14,0">
+            <TextBlock Text="联系管理员" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="chrome" Width="28" Height="28"
+                    Command="{Binding CloseDialogCommand}">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.Close}" Width="13" Height="13" Thickness="1.8" />
+            </Button>
+          </Grid>
+
+          <StackPanel IsVisible="{Binding IsContactStep1}" Margin="20,14,20,0">
+            <TextBlock Text="如果账号被停用、绑定邮箱已失效，或无法完成密码重置，请联系管理员协助处理。"
+                       FontSize="11.5" Foreground="{StaticResource Text2}" LineHeight="20"
+                       TextWrapping="Wrap" Margin="0,0,0,16" />
+            <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                    CornerRadius="9" Padding="13,12">
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <Border Width="38" Height="38" CornerRadius="19" Background="{StaticResource AvatarGrad}">
+                  <TextBlock Text="陈" FontSize="14" FontWeight="SemiBold" Foreground="#0A0B10"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1" Margin="11,0,0,0" VerticalAlignment="Center">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <TextBlock Text="陈墨" FontSize="12.5" FontWeight="SemiBold" />
+                    <Border Classes="roleTag" Background="#266C8BFF" BorderBrush="#3D6C8BFF" VerticalAlignment="Center">
+                      <TextBlock Text="管理员" FontSize="9.5" Foreground="#A9BAFF" />
+                    </Border>
+                  </StackPanel>
+                  <TextBlock Text="chenmo@aster.io" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,2,0,0" />
+                </StackPanel>
+                <Button Grid.Column="2" Content="{Binding AdminCopyText}" Height="28" Padding="12,0"
+                        Command="{Binding CopyAdminCommand}" VerticalAlignment="Center" />
+              </Grid>
+            </Border>
+            <TextBlock Text="工作日通常在 2 小时内回复" FontSize="10.5" Foreground="{StaticResource Text2}"
+                       HorizontalAlignment="Center" Margin="0,11,0,0" />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,16,0,18">
+              <Button Content="关闭" Height="34" Padding="16,0" Command="{Binding CloseDialogCommand}" />
+              <Button Classes="pri" Content="发送邮件" Height="34" Padding="16,0" Command="{Binding SendMailCommand}" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel IsVisible="{Binding IsContactStep2}" Margin="20,24,20,0">
+            <Border Width="46" Height="46" CornerRadius="23" Background="#213DDC97" BorderBrush="#3D3DDC97"
+                    BorderThickness="1" HorizontalAlignment="Center">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.Check}" Width="21" Height="21" Thickness="2.2"
+                         Foreground="{StaticResource Green}" />
+            </Border>
+            <TextBlock Text="邮件已发送" FontSize="14" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Margin="0,14,0,8" />
+            <TextBlock Text="我们已向管理员 陈墨 发送协助申请，请留意 chenmo@aster.io 的回复"
+                       FontSize="11.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
+                       TextAlignment="Center" HorizontalAlignment="Center" />
+            <Button Classes="pri" Content="知道了" Height="34" Padding="20,0" HorizontalAlignment="Right"
+                    Margin="0,20,0,18" Command="{Binding CloseDialogCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Panel>
+  </Panel>
+</UserControl>

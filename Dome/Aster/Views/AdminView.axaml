@@ -1,0 +1,595 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Aster.ViewModels"
+             xmlns:ctrl="using:Aster.Controls"
+             x:Class="Aster.Views.AdminView"
+             x:DataType="vm:AdminViewModel">
+
+  <UserControl.Styles>
+    <Style Selector="Border.drow">
+      <Setter Property="BorderBrush" Value="#0AFFFFFF" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Border.drow:pointerover">
+      <Setter Property="Background" Value="#07FFFFFF" />
+    </Style>
+    <Style Selector="TextBlock.th">
+      <Setter Property="FontSize" Value="10.5" />
+      <Setter Property="Foreground" Value="{DynamicResource Text2}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.td">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="{DynamicResource Text1}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+  </UserControl.Styles>
+
+  <ContentControl Content="{Binding ActivePanel}"
+                  HorizontalContentAlignment="Stretch"
+                  VerticalContentAlignment="Stretch">
+    <ContentControl.DataTemplates>
+
+      <!-- ==================== 概览 ==================== -->
+      <DataTemplate DataType="{x:Type vm:OverviewPanel}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="22,14,22,22">
+
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" Classes="pageTitle" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Text2}" Margin="0,4,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Classes="seg">
+                  <ItemsControl ItemsSource="{Binding Segments}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type vm:SegmentItem}">
+                        <Button Classes="seg" Classes.selected="{Binding IsSelected}"
+                                Content="{Binding Label}"
+                                Command="{Binding Command}" CommandParameter="{Binding}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+                <Button>
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ctrl:Icon Data="{x:Static ctrl:Icons.Download}" Width="13" Height="13" />
+                    <TextBlock Text="导出" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+                <Button Classes="pri">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ctrl:Icon Data="{x:Static ctrl:Icons.Plus}" Width="13" Height="13" />
+                    <TextBlock Text="新增成员" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </Grid>
+
+            <!-- 指标卡 -->
+            <ItemsControl ItemsSource="{Binding Kpis}" Margin="0,0,0,12">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Columns="4" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:KpiItem}">
+                  <Border Classes="card" Margin="0,0,12,0" Padding="14,10">
+                    <StackPanel>
+                      <TextBlock Text="{Binding Title}" FontSize="11" Foreground="{StaticResource Text2}" />
+                      <TextBlock Text="{Binding Value}" FontSize="21" FontWeight="SemiBold" Margin="0,6,0,5" />
+                      <Border Classes="pill" Background="{Binding DeltaBackground}" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Delta}" FontSize="10.5" Foreground="{Binding DeltaBrush}" />
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- 图表 -->
+            <Grid ColumnDefinitions="170*,100*" Margin="0,0,0,12">
+              <Border Classes="card" Padding="14,12,14,8" Margin="0,0,12,0">
+                <StackPanel>
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,9">
+                    <StackPanel>
+                      <TextBlock Text="访问与转化趋势" Classes="cardTitle" />
+                      <TextBlock Text="{Binding ChartSubtitle}" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,3,0,0" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Top">
+                      <StackPanel Orientation="Horizontal" Spacing="5">
+                        <Border Width="7" Height="7" CornerRadius="2" Background="{StaticResource Accent}" VerticalAlignment="Center" />
+                        <TextBlock Text="访问量" FontSize="10.5" Foreground="{StaticResource Text2}" />
+                      </StackPanel>
+                      <StackPanel Orientation="Horizontal" Spacing="5">
+                        <Border Width="7" Height="7" CornerRadius="2" Background="{StaticResource Violet}" VerticalAlignment="Center" />
+                        <TextBlock Text="下单数" FontSize="10.5" Foreground="{StaticResource Text2}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Grid>
+                  <ctrl:TrendChart Height="128"
+                                   Primary="{Binding Visits}"
+                                   Secondary="{Binding Orders}"
+                                   PrimaryBrush="{StaticResource Accent}"
+                                   SecondaryBrush="{StaticResource Violet}" />
+                  <ItemsControl ItemsSource="{Binding AxisLabels}" Margin="22,4,12,8">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <UniformGrid Rows="1" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding}" FontSize="10" Foreground="{StaticResource Text2}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+
+              <Border Grid.Column="1" Classes="card" Padding="14,12,14,8">
+                <StackPanel>
+                  <StackPanel Margin="0,0,0,9">
+                    <TextBlock Text="渠道构成" Classes="cardTitle" />
+                    <TextBlock Text="按订单来源统计" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,3,0,0" />
+                  </StackPanel>
+                  <Grid ColumnDefinitions="Auto,*">
+                    <Panel Width="104" Height="104">
+                      <ctrl:DonutChart Values="{Binding ChannelValues}" Width="104" Height="104" />
+                      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="3,214" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="总订单" FontSize="10" Foreground="{StaticResource Text2}" HorizontalAlignment="Center" />
+                      </StackPanel>
+                    </Panel>
+                    <StackPanel Grid.Column="1" Margin="16,0,0,0" Spacing="9" VerticalAlignment="Center">
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Width="7" Height="7" CornerRadius="2" Background="{StaticResource Accent}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="网页端" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="8,0,0,0" />
+                        <TextBlock Grid.Column="2" Text="46%" FontSize="11.5" />
+                      </Grid>
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Width="7" Height="7" CornerRadius="2" Background="{StaticResource Violet}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="移动端" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="8,0,0,0" />
+                        <TextBlock Grid.Column="2" Text="28%" FontSize="11.5" />
+                      </Grid>
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Width="7" Height="7" CornerRadius="2" Background="{StaticResource Cyan}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="小程序" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="8,0,0,0" />
+                        <TextBlock Grid.Column="2" Text="17%" FontSize="11.5" />
+                      </Grid>
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Width="7" Height="7" CornerRadius="2" Background="{StaticResource Green}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="其他" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="8,0,0,0" />
+                        <TextBlock Grid.Column="2" Text="9%" FontSize="11.5" />
+                      </Grid>
+                    </StackPanel>
+                  </Grid>
+                  <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,8,0,0" Padding="0,10,0,4">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="客单价" FontSize="11" Foreground="{StaticResource Text2}" />
+                      <TextBlock Grid.Column="1" Text="¥150.24" FontSize="11.5" />
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </Border>
+            </Grid>
+
+            <!-- 成员表 -->
+            <Border Classes="card">
+              <StackPanel>
+                <Grid ColumnDefinitions="*,Auto" Margin="16,11">
+                  <TextBlock Text="成员与权限" Classes="cardTitle" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Border Height="27" Width="180" CornerRadius="6" Background="{StaticResource W04}"
+                            BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="9,0">
+                      <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                        <ctrl:Icon Data="{x:Static ctrl:Icons.Search}" Width="12" Height="12" Foreground="{StaticResource Text2}" />
+                        <TextBlock Text="搜索成员…" FontSize="11.5" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Border>
+                    <Button Classes="ghost" Height="26" Padding="8,0">
+                      <StackPanel Orientation="Horizontal" Spacing="5">
+                        <ctrl:Icon Data="{x:Static ctrl:Icons.Filter}" Width="13" Height="13" />
+                        <TextBlock Text="筛选" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                  </StackPanel>
+                </Grid>
+                <Border Height="1" Background="{StaticResource Line}" />
+
+                <Grid ColumnDefinitions="34*,13*,14*,20*,19*" Height="30" Background="#26000000">
+                  <TextBlock Classes="th" Text="成员" Margin="16,0,0,0" />
+                  <TextBlock Grid.Column="1" Classes="th" Text="角色" />
+                  <TextBlock Grid.Column="2" Classes="th" Text="状态" />
+                  <TextBlock Grid.Column="3" Classes="th" Text="最近活跃" />
+                  <TextBlock Grid.Column="4" Classes="th" Text="操作" HorizontalAlignment="Right" Margin="0,0,16,0" />
+                </Grid>
+
+                <ItemsControl ItemsSource="{Binding Members}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:MemberRow}">
+                      <Border Classes="drow" Height="46">
+                        <Grid ColumnDefinitions="34*,13*,14*,20*,19*">
+                          <StackPanel Orientation="Horizontal" Spacing="9" Margin="16,0,0,0" VerticalAlignment="Center">
+                            <Border Width="26" Height="26" CornerRadius="13" Background="{Binding Avatar}">
+                              <TextBlock Text="{Binding Initial}" FontSize="10.5" FontWeight="SemiBold"
+                                         Foreground="#0B0D13" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                              <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{StaticResource Text0}" />
+                              <TextBlock Text="{Binding Email}" FontSize="10.5" Foreground="{StaticResource Text2}" Margin="0,1,0,0" />
+                            </StackPanel>
+                          </StackPanel>
+                          <Border Grid.Column="1" Classes="roleTag" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Role}" FontSize="11.5" Foreground="{StaticResource Text1}" />
+                          </Border>
+                          <Border Grid.Column="2" Classes="pill" Background="{Binding StatusBackground}"
+                                  HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                              <Border Width="5" Height="5" CornerRadius="3" Background="{Binding StatusBrush}" VerticalAlignment="Center" />
+                              <TextBlock Text="{Binding Status}" FontSize="10.5" Foreground="{Binding StatusBrush}" />
+                            </StackPanel>
+                          </Border>
+                          <TextBlock Grid.Column="3" Classes="td" Text="{Binding LastActive}" />
+                          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4"
+                                      HorizontalAlignment="Right" Margin="0,0,14,0" VerticalAlignment="Center">
+                            <Button Classes="ghost" Width="24" Height="24" Padding="0">
+                              <ctrl:Icon Data="{x:Static ctrl:Icons.Edit}" Width="13" Height="13" Foreground="{StaticResource Text2}" />
+                            </Button>
+                            <Button Classes="ghost" Width="24" Height="24" Padding="0">
+                              <ctrl:Icon Data="{x:Static ctrl:Icons.More}" Width="13" Height="13" Foreground="{StaticResource Text2}" />
+                            </Button>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Grid ColumnDefinitions="*,Auto" Margin="16,9">
+                  <TextBlock Text="共 128 位成员，当前显示 1–5" FontSize="11" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="‹" FontSize="11" Foreground="{StaticResource Text2}" Margin="6,0" />
+                    <Border Width="24" Height="24" CornerRadius="5" Background="#2E6C8BFF">
+                      <TextBlock Text="1" FontSize="11" Foreground="#C3D0FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="2" FontSize="11" Foreground="{StaticResource Text2}" Margin="6,0" VerticalAlignment="Center" />
+                    <TextBlock Text="3" FontSize="11" Foreground="{StaticResource Text2}" Margin="4,0" VerticalAlignment="Center" />
+                    <TextBlock Text="…" FontSize="11" Foreground="{StaticResource Text2}" Margin="4,0" VerticalAlignment="Center" />
+                    <TextBlock Text="26" FontSize="11" Foreground="{StaticResource Text2}" Margin="4,0" VerticalAlignment="Center" />
+                    <TextBlock Text="›" FontSize="11" Foreground="{StaticResource Text2}" Margin="4,0" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </DataTemplate>
+
+      <!-- ==================== 成员与权限 ==================== -->
+      <DataTemplate DataType="{x:Type vm:MembersPanel}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="22,14,22,22">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" Classes="pageTitle" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Text2}" Margin="0,4,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Classes="seg">
+                  <ItemsControl ItemsSource="{Binding Segments}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type vm:SegmentItem}">
+                        <Button Classes="seg" Classes.selected="{Binding IsSelected}" Content="{Binding Label}"
+                                Command="{Binding Command}" CommandParameter="{Binding}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+                <Button Content="导出名单" />
+                <Button Classes="pri" Content="邀请成员" />
+              </StackPanel>
+            </Grid>
+
+            <Border Classes="card">
+              <StackPanel>
+                <Grid ColumnDefinitions="*,Auto" Margin="16,11">
+                  <TextBlock Text="全部成员" Classes="cardTitle" VerticalAlignment="Center" />
+                  <Border Grid.Column="1" Height="27" Width="180" CornerRadius="6" Background="{StaticResource W04}"
+                          BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="9,0">
+                    <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                      <ctrl:Icon Data="{x:Static ctrl:Icons.Search}" Width="12" Height="12" Foreground="{StaticResource Text2}" />
+                      <TextBlock Text="搜索姓名或邮箱…" FontSize="11.5" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Border>
+                </Grid>
+                <Border Height="1" Background="{StaticResource Line}" />
+                <Grid ColumnDefinitions="30*,14*,16*,14*,18*,8*" Height="30" Background="#26000000">
+                  <TextBlock Classes="th" Text="成员" Margin="16,0,0,0" />
+                  <TextBlock Grid.Column="1" Classes="th" Text="角色" />
+                  <TextBlock Grid.Column="2" Classes="th" Text="部门" />
+                  <TextBlock Grid.Column="3" Classes="th" Text="状态" />
+                  <TextBlock Grid.Column="4" Classes="th" Text="最近活跃" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Members}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:MemberRow}">
+                      <Border Classes="drow" Height="46">
+                        <Grid ColumnDefinitions="30*,14*,16*,14*,18*,8*">
+                          <StackPanel Orientation="Horizontal" Spacing="9" Margin="16,0,0,0" VerticalAlignment="Center">
+                            <Border Width="26" Height="26" CornerRadius="13" Background="{Binding Avatar}">
+                              <TextBlock Text="{Binding Initial}" FontSize="10.5" FontWeight="SemiBold"
+                                         Foreground="#0B0D13" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                              <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{StaticResource Text0}" />
+                              <TextBlock Text="{Binding Email}" FontSize="10.5" Foreground="{StaticResource Text2}" Margin="0,1,0,0" />
+                            </StackPanel>
+                          </StackPanel>
+                          <Border Grid.Column="1" Classes="roleTag" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Role}" FontSize="11.5" Foreground="{StaticResource Text1}" />
+                          </Border>
+                          <TextBlock Grid.Column="2" Classes="td" Text="{Binding Department}" />
+                          <Border Grid.Column="3" Classes="pill" Background="{Binding StatusBackground}"
+                                  HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                              <Border Width="5" Height="5" CornerRadius="3" Background="{Binding StatusBrush}" VerticalAlignment="Center" />
+                              <TextBlock Text="{Binding Status}" FontSize="10.5" Foreground="{Binding StatusBrush}" />
+                            </StackPanel>
+                          </Border>
+                          <TextBlock Grid.Column="4" Classes="td" Text="{Binding LastActive}" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto" Margin="16,9">
+                  <TextBlock Text="共 128 位成员，当前显示 1–5" FontSize="11" Foreground="{StaticResource Text2}" />
+                  <TextBlock Grid.Column="1" Text="‹   1   2   3   …   26   ›" FontSize="11" Foreground="{StaticResource Text2}" />
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </DataTemplate>
+
+      <!-- ==================== 订单 ==================== -->
+      <DataTemplate DataType="{x:Type vm:OrdersPanel}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="22,14,22,22">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" Classes="pageTitle" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Text2}" Margin="0,4,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Classes="seg">
+                  <ItemsControl ItemsSource="{Binding Segments}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type vm:SegmentItem}">
+                        <Button Classes="seg" Classes.selected="{Binding IsSelected}" Content="{Binding Label}"
+                                Command="{Binding Command}" CommandParameter="{Binding}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+                <Button Content="导出" />
+              </StackPanel>
+            </Grid>
+
+            <Border Classes="card">
+              <StackPanel>
+                <Grid ColumnDefinitions="*,Auto" Margin="16,11">
+                  <TextBlock Text="订单列表" Classes="cardTitle" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="按创建时间倒序" FontSize="11" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                </Grid>
+                <Border Height="1" Background="{StaticResource Line}" />
+                <Grid ColumnDefinitions="22*,18*,16*,14*,14*,16*" Height="30" Background="#26000000">
+                  <TextBlock Classes="th" Text="订单号" Margin="16,0,0,0" />
+                  <TextBlock Grid.Column="1" Classes="th" Text="客户" />
+                  <TextBlock Grid.Column="2" Classes="th" Text="金额" />
+                  <TextBlock Grid.Column="3" Classes="th" Text="渠道" />
+                  <TextBlock Grid.Column="4" Classes="th" Text="状态" />
+                  <TextBlock Grid.Column="5" Classes="th" Text="创建时间" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Orders}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:OrderRow}">
+                      <Border Classes="drow" Height="40">
+                        <Grid ColumnDefinitions="22*,18*,16*,14*,14*,16*">
+                          <TextBlock Text="{Binding Id}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                     Foreground="{StaticResource Text0}" Margin="16,0,0,0" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1" Classes="td" Text="{Binding Customer}" />
+                          <TextBlock Grid.Column="2" Classes="td" Text="{Binding Amount}" Foreground="{StaticResource Text0}" />
+                          <TextBlock Grid.Column="3" Classes="td" Text="{Binding Channel}" />
+                          <Border Grid.Column="4" Classes="pill" Background="{Binding StatusBackground}"
+                                  HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                              <Border Width="5" Height="5" CornerRadius="3" Background="{Binding StatusBrush}" VerticalAlignment="Center" />
+                              <TextBlock Text="{Binding Status}" FontSize="10.5" Foreground="{Binding StatusBrush}" />
+                            </StackPanel>
+                          </Border>
+                          <TextBlock Grid.Column="5" Classes="td" Text="{Binding CreatedAt}" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto" Margin="16,9">
+                  <TextBlock Text="共 3,214 笔订单，当前显示 1–5" FontSize="11" Foreground="{StaticResource Text2}" />
+                  <TextBlock Grid.Column="1" Text="‹   1   2   3   …   643   ›" FontSize="11" Foreground="{StaticResource Text2}" />
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </DataTemplate>
+
+      <!-- ==================== 审计 ==================== -->
+      <DataTemplate DataType="{x:Type vm:AuditPanel}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="22,14,22,22">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" Classes="pageTitle" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Text2}" Margin="0,4,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Classes="seg">
+                  <ItemsControl ItemsSource="{Binding Segments}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type vm:SegmentItem}">
+                        <Button Classes="seg" Classes.selected="{Binding IsSelected}" Content="{Binding Label}"
+                                Command="{Binding Command}" CommandParameter="{Binding}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+                <Button Content="导出日志" />
+              </StackPanel>
+            </Grid>
+
+            <Border Classes="card">
+              <StackPanel>
+                <Grid ColumnDefinitions="*,Auto" Margin="16,11">
+                  <TextBlock Text="今天" Classes="cardTitle" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="共 23 条记录" FontSize="11" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                </Grid>
+                <Border Height="1" Background="{StaticResource Line}" />
+                <ItemsControl ItemsSource="{Binding Rows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:AuditRow}">
+                      <Border Classes="drow" Padding="16,11">
+                        <Grid ColumnDefinitions="Auto,46,*">
+                          <Border Width="7" Height="7" CornerRadius="4" Background="{Binding DotBrush}"
+                                  VerticalAlignment="Top" Margin="0,6,0,0" />
+                          <TextBlock Grid.Column="1" Text="{Binding Time}" FontSize="11" Foreground="{StaticResource Text2}"
+                                     Margin="12,1,0,0" />
+                          <TextBlock Grid.Column="2" Text="{Binding Text}" FontSize="12" Foreground="{StaticResource Text1}"
+                                     TextWrapping="Wrap" LineHeight="19" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </DataTemplate>
+
+      <!-- ==================== 报表 ==================== -->
+      <DataTemplate DataType="{x:Type vm:ReportsPanel}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="22,14,22,22">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" Classes="pageTitle" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Text2}" Margin="0,4,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Classes="seg">
+                  <ItemsControl ItemsSource="{Binding Segments}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type vm:SegmentItem}">
+                        <Button Classes="seg" Classes.selected="{Binding IsSelected}" Content="{Binding Label}"
+                                Command="{Binding Command}" CommandParameter="{Binding}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+                <Button Content="生成报告" />
+              </StackPanel>
+            </Grid>
+
+            <ItemsControl ItemsSource="{Binding Cards}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Columns="2" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:ReportCard}">
+                  <Border Classes="card" Margin="0,0,12,12" Padding="18,16">
+                    <StackPanel>
+                      <TextBlock Text="{Binding Title}" FontSize="11.5" Foreground="{StaticResource Text2}" />
+                      <TextBlock Text="{Binding Value}" FontSize="26" FontWeight="SemiBold" Margin="0,9,0,9" />
+                      <TextBlock Text="{Binding Delta}" FontSize="11" Foreground="{Binding DeltaBrush}" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </DataTemplate>
+
+      <!-- ==================== 导出 ==================== -->
+      <DataTemplate DataType="{x:Type vm:ExportPanel}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="22,14,22,22">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" Classes="pageTitle" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Text2}" Margin="0,4,0,0" />
+              </StackPanel>
+              <Button Grid.Column="1" Classes="pri" Content="新建导出" VerticalAlignment="Center" />
+            </Grid>
+
+            <Border Classes="card">
+              <StackPanel>
+                <TextBlock Text="最近导出" Classes="cardTitle" Margin="16,11" />
+                <Border Height="1" Background="{StaticResource Line}" />
+                <Grid ColumnDefinitions="36*,16*,22*,14*,12*" Height="30" Background="#26000000">
+                  <TextBlock Classes="th" Text="文件名" Margin="16,0,0,0" />
+                  <TextBlock Grid.Column="1" Classes="th" Text="导出人" />
+                  <TextBlock Grid.Column="2" Classes="th" Text="时间" />
+                  <TextBlock Grid.Column="3" Classes="th" Text="大小" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Rows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:ExportRow}">
+                      <Border Classes="drow" Height="40">
+                        <Grid ColumnDefinitions="36*,16*,22*,14*,12*">
+                          <TextBlock Text="{Binding File}" FontSize="12" Foreground="{StaticResource Text0}"
+                                     Margin="16,0,0,0" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1" Classes="td" Text="{Binding Owner}" />
+                          <TextBlock Grid.Column="2" Classes="td" Text="{Binding Time}" />
+                          <TextBlock Grid.Column="3" Classes="td" Text="{Binding Size}" />
+                          <TextBlock Grid.Column="4" Text="下载" FontSize="11.5" Foreground="{StaticResource Accent}"
+                                     VerticalAlignment="Center" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </DataTemplate>
+
+    </ContentControl.DataTemplates>
+  </ContentControl>
+</UserControl>

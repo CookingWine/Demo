@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Aster.ViewModels"
+             xmlns:ctrl="using:Aster.Controls"
+             x:Class="Aster.Views.HomeView"
+             x:DataType="vm:HomeViewModel">
+
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="26,24,28,34">
+
+      <!-- ============ 问候 ============ -->
+      <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,22">
+        <StackPanel VerticalAlignment="Bottom">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{Binding Greeting}" FontSize="23" FontWeight="SemiBold" Foreground="{StaticResource Text0}" />
+            <TextBlock Text="{Binding UserName}" FontSize="23" FontWeight="SemiBold">
+              <TextBlock.Foreground>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                  <GradientStop Offset="0" Color="#8FA8FF" />
+                  <GradientStop Offset="0.5" Color="#A78BFA" />
+                  <GradientStop Offset="1" Color="#3DD6E8" />
+                </LinearGradientBrush>
+              </TextBlock.Foreground>
+            </TextBlock>
+          </StackPanel>
+          <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{StaticResource Text2}" Margin="0,7,0,0" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+          <Button>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.Plus}" Width="13" Height="13" />
+              <TextBlock Text="新建文档" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Classes="pri">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ctrl:Icon Data="{x:Static ctrl:Icons.Play}" Width="13" Height="13" Filled="True" />
+              <TextBlock Text="继续播放" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Grid>
+
+      <!-- ============ 指标卡 ============ -->
+      <ItemsControl ItemsSource="{Binding Kpis}" Margin="0,0,0,16">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Columns="4" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="{x:Type vm:KpiItem}">
+            <Border Classes="card" Margin="0,0,14,0" Padding="15,14">
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" FontSize="11.5" Foreground="{StaticResource Text2}" />
+                <StackPanel Orientation="Horizontal" Margin="0,9,0,7">
+                  <TextBlock Text="{Binding Value}" Classes="metric" Foreground="{Binding ValueBrush}" />
+                  <TextBlock Text="{Binding Unit}" FontSize="13" Foreground="{StaticResource Text1}"
+                             VerticalAlignment="Bottom" Margin="2,0,0,3"
+                             IsVisible="{Binding HasUnit}" />
+                  <TextBlock Text="{Binding Tail}" FontSize="12" Foreground="{StaticResource Text2}"
+                             VerticalAlignment="Bottom" Margin="4,0,0,3"
+                             IsVisible="{Binding HasTail}" />
+                </StackPanel>
+                <Border Classes="pill" Background="{Binding DeltaBackground}" HorizontalAlignment="Left">
+                  <TextBlock Text="{Binding Delta}" FontSize="11" Foreground="{Binding DeltaBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- ============ 主栅格 ============ -->
+      <Grid ColumnDefinitions="155*,100*">
+
+        <!-- 左列 -->
+        <StackPanel>
+          <Border Classes="card" Margin="0,0,0,14">
+            <StackPanel>
+              <Grid ColumnDefinitions="*,Auto" Margin="16,14">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <ctrl:Icon Data="{x:Static ctrl:Icons.PlayCircle}" Width="14" Height="14"
+                             Foreground="{StaticResource Accent}" />
+                  <TextBlock Text="最近编辑" Classes="cardTitle" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="查看全部 →" FontSize="11.5" Foreground="{StaticResource Text2}" />
+              </Grid>
+              <Border Height="1" Background="{StaticResource Line}" />
+              <ItemsControl ItemsSource="{Binding RecentDocs}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:RecentDocItem}">
+                    <Border Padding="16,10" BorderBrush="#0AFFFFFF" BorderThickness="0,0,0,1">
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Width="30" Height="30" CornerRadius="7" Background="{Binding IconBackground}"
+                                VerticalAlignment="Center">
+                          <ctrl:Icon Data="{x:Static ctrl:Icons.Doc}" Width="14" Height="14"
+                                     Foreground="{Binding IconBrush}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{StaticResource Text0}" />
+                          <TextBlock Text="{Binding Meta}" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="{Binding Time}" FontSize="11"
+                                   Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="7" Margin="16,14">
+                <ctrl:Icon Data="{x:Static ctrl:Icons.Lightning}" Width="14" Height="14"
+                           Foreground="{StaticResource Accent}" />
+                <TextBlock Text="快捷操作" Classes="cardTitle" />
+              </StackPanel>
+              <Border Height="1" Background="{StaticResource Line}" />
+              <ItemsControl ItemsSource="{Binding QuickActions}" Margin="14">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <UniformGrid Columns="2" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:QuickAction}">
+                    <Button Height="38" Margin="0,0,9,9" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left" Padding="11,0" CornerRadius="8">
+                      <StackPanel Orientation="Horizontal" Spacing="9">
+                        <ctrl:Icon Data="{Binding Icon}" Width="14" Height="14" Foreground="{StaticResource Accent}" />
+                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{StaticResource Text1}"
+                                   VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 右列 -->
+        <StackPanel Grid.Column="1" Margin="14,0,0,0">
+          <Border Classes="card" Margin="0,0,0,14">
+            <StackPanel>
+              <Grid ColumnDefinitions="*,Auto" Margin="16,14">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <ctrl:Icon Data="{x:Static ctrl:Icons.Music}" Width="14" Height="14"
+                             Foreground="{StaticResource Accent}" />
+                  <TextBlock Text="继续播放" Classes="cardTitle" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="进入 →" FontSize="11.5" Foreground="{StaticResource Text2}" />
+              </Grid>
+              <Border Height="1" Background="{StaticResource Line}" />
+              <Grid ColumnDefinitions="Auto,*" Margin="16">
+                <Border Width="76" Height="76" CornerRadius="10">
+                  <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                      <GradientStop Offset="0" Color="#2B2F55" />
+                      <GradientStop Offset="0.45" Color="#4B3A78" />
+                      <GradientStop Offset="0.75" Color="#8C5AA8" />
+                      <GradientStop Offset="1" Color="#3DD6E8" />
+                    </LinearGradientBrush>
+                  </Border.Background>
+                  <TextBlock Text="♪" FontSize="24" Foreground="#D9FFFFFF"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1" Margin="14,2,0,0" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding NowPlayingTitle}" FontSize="13.5" FontWeight="SemiBold"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding NowPlayingArtist}" FontSize="11.5" Foreground="{StaticResource Text2}"
+                             Margin="0,4,0,10" />
+                  <Border Height="3" CornerRadius="3" Background="{StaticResource W10}">
+                    <Border Width="42" Height="3" CornerRadius="3" HorizontalAlignment="Left"
+                            Background="{StaticResource AccentViolet}" />
+                  </Border>
+                  <Grid ColumnDefinitions="*,*" Margin="0,6,0,0">
+                    <TextBlock Text="{Binding NowPlayingPosition}" FontSize="10" Foreground="{StaticResource Text2}" />
+                    <TextBlock Grid.Column="1" Text="{Binding NowPlayingDuration}" FontSize="10"
+                               Foreground="{StaticResource Text2}" HorizontalAlignment="Right" />
+                  </Grid>
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="7" Margin="16,14">
+                <ctrl:Icon Data="{x:Static ctrl:Icons.Clock}" Width="14" Height="14"
+                           Foreground="{StaticResource Accent}" />
+                <TextBlock Text="今日节奏" Classes="cardTitle" />
+              </StackPanel>
+              <Border Height="1" Background="{StaticResource Line}" />
+              <StackPanel Margin="16,14">
+                <ctrl:Sparkline Points="{Binding Rhythm}" Height="78" Stroke="{StaticResource Accent}" />
+                <Grid ColumnDefinitions="*,*,*,*" Margin="0,7,0,0">
+                  <TextBlock Text="08:00" FontSize="10" Foreground="{StaticResource Text2}" />
+                  <TextBlock Grid.Column="1" Text="12:00" FontSize="10" Foreground="{StaticResource Text2}" />
+                  <TextBlock Grid.Column="2" Text="16:00" FontSize="10" Foreground="{StaticResource Text2}"
+                             HorizontalAlignment="Center" />
+                  <TextBlock Grid.Column="3" Text="20:00" FontSize="10" Foreground="{StaticResource Text2}"
+                             HorizontalAlignment="Right" />
+                </Grid>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Grid>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
