@@ -67,6 +67,8 @@ dotnet run
 
 只编译不运行：`dotnet build`，产物在 `Dome/Aster/bin/Debug/net8.0/`。
 
+> **演示登录**：账号与密码默认为空，任意非空内容都能登录（无后端校验），登录后直接进入工作台。
+
 > **关于 NuGet 源**：`Dome/Aster/NuGet.Config` 默认指向国内镜像 `https://nuget.azure.cn/v3/index.json`，
 > 首次 `restore` 更快。需要官方源时删除该文件，或改成 `https://api.nuget.org/v3/index.json`。
 

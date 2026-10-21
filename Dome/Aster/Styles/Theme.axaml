@@ -226,6 +226,50 @@
     </ControlTheme>
 
 
+  <!-- 复选框：对齐设计稿的 15px 圆角方框 -->
+  <ControlTheme x:Key="{x:Type CheckBox}" TargetType="CheckBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Text1}" />
+    <Setter Property="FontSize" Value="11.5" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid ColumnDefinitions="Auto,*" Background="Transparent">
+          <Border Name="Box" Width="15" Height="15" CornerRadius="4"
+                  Background="{DynamicResource W04}"
+                  BorderBrush="{DynamicResource Line2}"
+                  BorderThickness="1"
+                  VerticalAlignment="Center">
+            <Path Name="Check" Width="9" Height="9"
+                  Data="M0.8 4.6 3.4 7.2 8.2 1.6"
+                  Stroke="White" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round"
+                  Stretch="None"
+                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                  IsVisible="False" />
+          </Border>
+          <ContentPresenter Grid.Column="1" Content="{TemplateBinding Content}"
+                            Margin="7,0,0,0" VerticalAlignment="Center" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:checked /template/ Border#Box">
+      <Setter Property="Background" Value="{DynamicResource Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+    </Style>
+    <Style Selector="^:checked /template/ Path#Check">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:pointerover /template/ Border#Box">
+      <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
+    </Style>
+    <Style Selector="^:checked:pointerover /template/ Border#Box">
+      <Setter Property="Background" Value="#7A96FF" />
+      <Setter Property="BorderBrush" Value="#7A96FF" />
+    </Style>
+  </ControlTheme>
+
   <!-- ===================== 窗口阴影 ===================== -->
   <BoxShadows x:Key="WindowShadow">0 18 48 0 #CC000000</BoxShadows>
   <BoxShadows x:Key="PopShadow">0 24 70 0 #E6000000</BoxShadows>

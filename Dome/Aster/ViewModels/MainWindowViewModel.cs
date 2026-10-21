@@ -30,8 +30,8 @@ public sealed class MainWindowViewModel : ObservableObject
     private object? _activeView;
     private bool _isSettingsOpen;
     private DialogKind _dialog = DialogKind.None;
-    private string _userName = "chenmo@aster.io";
-    private string _password = "aster2026";
+    private string _userName = string.Empty;
+    private string _password = string.Empty;
     private bool _remember = true;
     private bool _showPassword;
     private bool _isBusy;
