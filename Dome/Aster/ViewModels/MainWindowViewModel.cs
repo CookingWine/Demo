@@ -63,7 +63,7 @@ public sealed class MainWindowViewModel : ObservableObject
         Markdown = new MarkdownViewModel();
         MusicResult = new MusicViewModel();
         Admin = new AdminViewModel();
-        Settings = new SettingsViewModel();
+        Settings = new SettingsViewModel(LogoutCommand);
 
         RailItems = new ObservableCollection<RailItem>
         {

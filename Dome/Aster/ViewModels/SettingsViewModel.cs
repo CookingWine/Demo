@@ -86,7 +86,30 @@ public sealed class ButtonValue : SettingValue
     public string Text { get; init; } = string.Empty;
     public bool IsPrimary { get; init; }
     public bool IsDanger { get; init; }
-    public ICommand? Command { get; init; }
+    private static readonly ICommand Noop = new RelayCommand(() => { });
+
+    public ICommand? Command { get; init; } = Noop;
+
+    public bool IsNormal => !IsDanger && !IsPrimary;
+
+    // 直接用画刷驱动外观，避免类名绑定在不同控件间行为不一致
+    public Avalonia.Media.IBrush Background => IsDanger
+        ? Palette.Alpha("#F8716E", 0.17)
+        : IsPrimary
+            ? Palette.Gradient("#7A96FF", "#5C7BF7")
+            : Palette.Alpha("#FFFFFF", 0.04);
+
+    public Avalonia.Media.IBrush BorderBrush => IsDanger
+        ? Palette.Alpha("#F8716E", 0.45)
+        : IsPrimary
+            ? Palette.Alpha("#FFFFFF", 0.14)
+            : Palette.Alpha("#FFFFFF", 0.12);
+
+    public Avalonia.Media.IBrush TextBrush => IsDanger
+        ? Palette.Solid("#FF8B88")
+        : IsPrimary
+            ? Avalonia.Media.Brushes.White
+            : Palette.Solid("#9BA3B7");
 }
 
 public sealed class InfoValue : SettingValue
@@ -168,9 +191,11 @@ public sealed class SettingSection : SelectableItem
 public sealed class SettingsViewModel : ObservableObject
 {
     private SettingSection? _current;
+    private readonly ICommand? _logoutCommand;
 
-    public SettingsViewModel()
+    public SettingsViewModel(ICommand? logoutCommand = null)
     {
+        _logoutCommand = logoutCommand;
         SelectCommand = new RelayCommand(o =>
         {
             if (o is SettingSection s) Select(s);
@@ -262,7 +287,8 @@ public sealed class SettingsViewModel : ObservableObject
             Row("两步验证", "登录时需要输入额外的动态验证码", new ToggleValue { IsOn = true }),
             Row("登录设备", "当前有 3 台设备保持登录状态", new ButtonValue { Text = "管理设备" })));
         s.Groups.Add(Group("会话",
-            Row("退出当前账号", "返回登录界面，本地缓存不会被清除", new ButtonValue { Text = "退出登录" }),
+            Row("退出当前账号", "返回登录界面，本地缓存不会被清除",
+                new ButtonValue { Text = "退出登录", IsDanger = true, Command = _logoutCommand }),
             Row("注销账号", "永久删除账号及全部关联数据，无法恢复",
                 new ButtonValue { Text = "注销账号", IsDanger = true })));
         return s;

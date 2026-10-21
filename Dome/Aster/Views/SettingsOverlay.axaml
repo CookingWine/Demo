@@ -152,7 +152,10 @@
 
     <!-- 行取值：按钮 -->
     <DataTemplate DataType="{x:Type vm:ButtonValue}">
-      <Button Content="{Binding Text}" Command="{Binding Command}" />
+      <Button Content="{Binding Text}" Command="{Binding Command}"
+              Background="{Binding Background}"
+              BorderBrush="{Binding BorderBrush}"
+              Foreground="{Binding TextBrush}" />
     </DataTemplate>
 
     <!-- 行取值：只读值 -->
@@ -194,7 +197,8 @@
           <StackPanel VerticalAlignment="Center">
             <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{StaticResource Text0}" />
             <TextBlock Text="{Binding Desc}" FontSize="11.5" Foreground="{StaticResource Text2}"
-                       Margin="0,2,0,0" MaxWidth="420" TextWrapping="Wrap" IsVisible="{Binding HasDesc}" />
+                       Margin="0,2,0,0" MaxWidth="420" HorizontalAlignment="Left"
+                       TextWrapping="Wrap" IsVisible="{Binding HasDesc}" />
           </StackPanel>
           <ContentControl Grid.Column="1" Content="{Binding Value}" Margin="24,0,0,0"
                           VerticalAlignment="Center" HorizontalAlignment="Right"
