@@ -44,15 +44,16 @@ public class LogoMark : Control
         var core = CoreBrush ?? new SolidColorBrush(Colors.White, 0.55);
         var k = Math.Min(w, h) / 64.0;
 
-        for (var i = 0; i < 6; i++)
+        // 设计稿为 5 瓣（rotate 0/72/144/216/288），不是 6 瓣
+        for (var i = 0; i < 5; i++)
         {
-            var m = Matrix.CreateTranslation(-32, -32)
-                    * Matrix.CreateScale(k, k)
-                    * Matrix.CreateRotation(i * Math.PI / 3)
+            // 花瓣坐标已相对中心 (0,-11)，只需 缩放 → 旋转 → 平移
+            var m = Matrix.CreateScale(k, k)
+                    * Matrix.CreateRotation(i * 2 * Math.PI / 5)
                     * Matrix.CreateTranslation(w / 2, h / 2);
             using (context.PushTransform(m))
             {
-                context.DrawEllipse(brush, null, new Point(0, -11), 6.6, 11.2);
+                context.DrawEllipse(brush, null, new Point(0, -10.6), 7.4, 11.0);
             }
         }
 

@@ -40,6 +40,7 @@ public static class Icons
     public static readonly string Cart =
         "M3 5h2l2.4 10.5h10.2L20 8H6" + Circle(9, 19, 1.5) + Circle(17, 19, 1.5);
     public static readonly string Trend = "M3 17 9 11l4 4 8-8M17 7h4v4";
+    public static readonly string Currency = "M7 4.5 12 11l5-6.5M12 11v9M7.5 15.2h9M7.5 18.4h9";
     public static readonly string Download = "M12 3v12M7 10l5 5 5-5M4 19h16";
     public static readonly string Plus = "M12 5v14M5 12h14";
     public static readonly string Minus = "M4 12h16";

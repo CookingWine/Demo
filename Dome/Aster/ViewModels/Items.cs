@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Avalonia.Media;
@@ -117,6 +118,12 @@ public sealed class KpiItem
     public string? Tail { get; init; }
     public string Delta { get; init; } = string.Empty;
     public string DeltaKind { get; init; } = "up";
+    public string? Icon { get; init; }
+    public IReadOnlyList<double>? Spark { get; init; }
+    public IBrush? SparkBrush { get; init; }
+
+    public bool HasIcon => !string.IsNullOrEmpty(Icon);
+    public bool HasSpark => Spark is { Count: > 1 };
     public IBrush? ValueBrushOverride { get; init; }
 
     public IBrush ValueBrush => ValueBrushOverride ?? Palette.Solid("#E9ECF4");

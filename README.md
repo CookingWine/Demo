@@ -5,7 +5,9 @@
 
 `Avalonia 11.3` · `.NET 8` · macOS / Windows / Linux
 
-![工作台](docs/screenshots/workspace.png)
+<p align="center">
+  <img src="docs/screenshots/workspace.png" width="100%" alt="Aster 工作台">
+</p>
 
 ## 功能一览
 
@@ -20,15 +22,20 @@
 
 ## 界面预览
 
-| 登录 | 文档编辑器 |
-| --- | --- |
-| ![登录](docs/screenshots/login.png) | ![文档](docs/screenshots/editor.png) |
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/screenshots/login.png" width="430" alt="登录"><br><sub>登录 · 忘记密码 / 联系管理员两步弹窗</sub></td>
+    <td align="center" width="50%"><img src="docs/screenshots/editor.png" width="430" alt="文档编辑器"><br><sub>文档 · 目录树 + 行号编辑器 + 实时预览</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><img src="docs/screenshots/music.png" width="430" alt="音乐播放器"><br><sub>音乐 · 唱片舞台 + 可视化 + 队列</sub></td>
+    <td align="center" width="50%"><img src="docs/screenshots/admin.png" width="430" alt="运营管理"><br><sub>管理 · 趋势图 / 环形图 / 成员表</sub></td>
+  </tr>
+</table>
 
-| 音乐播放器 | 运营管理 |
-| --- | --- |
-| ![音乐](docs/screenshots/music.png) | ![管理](docs/screenshots/admin.png) |
-
-![设置](docs/screenshots/settings.png)
+<p align="center">
+  <img src="docs/screenshots/settings.png" width="900" alt="设置面板">
+</p>
 
 ## 快速开始
 

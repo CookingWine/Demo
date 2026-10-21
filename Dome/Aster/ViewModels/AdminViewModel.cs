@@ -141,16 +141,31 @@ public sealed class OverviewPanel : AdminPanel
 
     public ObservableCollection<KpiItem> Kpis { get; } = new()
     {
-        new KpiItem { Title = "活跃用户", Value = "12,486", Delta = "↑ 12.4%", DeltaKind = "up" },
-        new KpiItem { Title = "订单总量", Value = "3,214", Delta = "↑ 8.1%", DeltaKind = "up" },
-        new KpiItem { Title = "总营收", Value = "¥482,900", Delta = "↑ 23.6%", DeltaKind = "up" },
-        new KpiItem { Title = "转化率", Value = "4.82%", Delta = "↓ 0.8%", DeltaKind = "dn" }
+        new KpiItem
+        {
+            Title = "活跃用户", Value = "12,486", Delta = "↑ 12.4%", DeltaKind = "up",
+            Icon = Controls.Icons.Users, SparkBrush = Palette.Solid(Palette.GreenColor),
+            Spark = new double[] { 17, 14, 16, 9, 11, 6, 3 }
+        },
+        new KpiItem
+        {
+            Title = "订单总量", Value = "3,214", Delta = "↑ 8.1%", DeltaKind = "up",
+            Icon = Controls.Icons.Cart, SparkBrush = Palette.Solid(Palette.GreenColor),
+            Spark = new double[] { 14, 16, 11, 13, 8, 9, 5 }
+        },
+        new KpiItem
+        {
+            Title = "总营收", Value = "¥482,900", Delta = "↑ 23.6%", DeltaKind = "up",
+            Icon = Controls.Icons.Currency, SparkBrush = Palette.Solid(Palette.GreenColor),
+            Spark = new double[] { 18, 15, 17, 10, 12, 5, 2 }
+        },
+        new KpiItem
+        {
+            Title = "转化率", Value = "4.82%", Delta = "↓ 0.8%", DeltaKind = "dn",
+            Icon = Controls.Icons.Trend, SparkBrush = Palette.Solid(Palette.RedColor),
+            Spark = new double[] { 5, 8, 6, 12, 10, 15, 17 }
+        }
     };
-
-    public IReadOnlyList<double> Spark1 { get; } = new double[] { 17, 14, 16, 9, 11, 6, 3 };
-    public IReadOnlyList<double> Spark2 { get; } = new double[] { 14, 16, 11, 13, 8, 9, 5 };
-    public IReadOnlyList<double> Spark3 { get; } = new double[] { 18, 15, 17, 10, 12, 5, 2 };
-    public IReadOnlyList<double> Spark4 { get; } = new double[] { 5, 8, 6, 12, 10, 15, 17 };
 
     public IReadOnlyList<double> Visits { get; } = new double[] { 108, 92, 100, 66, 74, 42, 30 };
     public IReadOnlyList<double> Orders { get; } = new double[] { 126, 118, 122, 104, 110, 92, 86 };
