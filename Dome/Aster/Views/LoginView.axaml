@@ -30,7 +30,7 @@
 
   <Panel Background="{StaticResource Bg1}">
 
-    <Grid ColumnDefinitions="42*,58*">
+    <Grid ColumnDefinitions="42*,58*" PointerPressed="OnDragPressed">
 
       <!-- ==================== 品牌区 ==================== -->
       <Border>
