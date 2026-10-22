@@ -135,6 +135,8 @@ dotnet publish -c Release -r osx-arm64 --self-contained false
 - **MVVM**：手写 `ObservableObject` / `RelayCommand`，列表项自带命令与选中态，
   视图通过 `DataTemplate` 按 ViewModel 类型自动匹配。
 - **无边框窗口**：`SystemDecorations=None` + 透明窗口，自绘标题栏负责拖拽、双击最大化与窗口按钮；
+  登录页整页可拖拽（输入框、按钮与弹窗区域除外）；四边/四角留 6–14px 透明热区做 `BeginResizeDrag`
+  缩放，最小尺寸为设计稿的 1320×850。
   内容区圆角 14 + 阴影由 `Border` 承担。
 - **主题切换友好**：样式全部走 `DynamicResource`，替换资源字典即可做浅色主题。
 
