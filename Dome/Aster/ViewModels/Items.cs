@@ -92,13 +92,17 @@ public sealed class SubNavGroupEntry : SubNavEntry
 
 public sealed class SubNavLinkEntry : SubNavEntry
 {
-    public SubNavLinkEntry(string key, string title, string icon, ICommand command, string? badge = null)
+    public SubNavLinkEntry(string key, string title, string icon, ICommand command, string? badge = null,
+        bool showIcon = true, bool emphasized = false, double height = 38)
     {
         Key = key;
         Title = title;
         Icon = icon;
         Command = command;
         Badge = badge;
+        ShowIcon = showIcon;
+        Emphasized = emphasized;
+        Height = height;
     }
 
     public string Key { get; }
@@ -107,6 +111,11 @@ public sealed class SubNavLinkEntry : SubNavEntry
     public ICommand Command { get; }
     public string? Badge { get; }
     public bool HasBadge => !string.IsNullOrEmpty(Badge);
+    public bool ShowIcon { get; }
+    public bool Emphasized { get; }
+    public double Height { get; }
+    public double TitleFontSize => Emphasized ? 15 : 14;
+    public Avalonia.Media.FontWeight TitleWeight => Emphasized ? Avalonia.Media.FontWeight.Medium : Avalonia.Media.FontWeight.Normal;
 }
 
 /// <summary>指标卡。</summary>

@@ -11,8 +11,8 @@
       <Setter Property="Background" Value="{DynamicResource Bg2}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="12" />
-      <Setter Property="Padding" Value="16,14" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="Padding" Value="20,18" />
     </Style>
     <Style Selector="Border.wcard:pointerover">
       <Setter Property="BorderBrush" Value="{DynamicResource Line2}" />
@@ -21,20 +21,20 @@
     <Style Selector="Border.srow">
       <Setter Property="BorderBrush" Value="#0AFFFFFF" />
       <Setter Property="BorderThickness" Value="0,0,0,1" />
-      <Setter Property="Padding" Value="16,13" />
+      <Setter Property="Padding" Value="18,14" />
     </Style>
   </UserControl.Styles>
 
-  <Grid RowDefinitions="46,*">
+  <Grid RowDefinitions="64,*">
 
-    <!-- ============ 顶部条 ============ -->
+    <!-- ============ 顶部任务条 ============ -->
     <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="24,0">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="{Binding TopBarTitle}" FontSize="12.5" FontWeight="SemiBold"
-                   Foreground="{StaticResource Text1}" VerticalAlignment="Center" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-          <Button Classes="ghost" Width="26" Height="26" Padding="0" ToolTip.Tip="更多">
-            <ctrl:Icon Data="{x:Static ctrl:Icons.More}" Width="14" Height="14" Filled="True" />
+        <TextBlock Text="{Binding TopBarTitle}" FontSize="18" FontWeight="Bold"
+                   Foreground="{StaticResource Text0}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <Button Classes="ghost" Height="30" Padding="8,0" ToolTip.Tip="更多">
+            <TextBlock Text="•••" FontSize="18" FontWeight="Bold" Foreground="{StaticResource Text2}" />
           </Button>
         </StackPanel>
       </Grid>
@@ -47,13 +47,13 @@
 
         <ScrollViewer x:Name="ChatScroll" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="28,24,28,8">
+          <StackPanel Margin="60,28,28,8" MaxWidth="900" HorizontalAlignment="Left">
 
-            <TextBlock Text="今日工作台" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="今日工作台" FontSize="30" FontWeight="Bold" />
             <TextBlock Text="从常用入口开始，也可以直接在下方对话中交办工作。"
-                       FontSize="12.5" Foreground="{StaticResource Text2}" Margin="0,8,0,22" />
+                       FontSize="15" Foreground="{StaticResource Text2}" Margin="0,10,0,26" />
 
-            <ItemsControl ItemsSource="{Binding Cards}">
+            <ItemsControl ItemsSource="{Binding Cards}" Width="840">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <UniformGrid Columns="3" />
@@ -61,21 +61,20 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:WorkbenchCard}">
-                  <Button Background="Transparent" BorderThickness="0" Padding="0"
+                  <Button Background="Transparent" BorderThickness="0" Padding="0" MinHeight="0"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                          Margin="0,0,12,0" MinHeight="0"
+                          Margin="0,0,30,0"
                           Command="{Binding Command}" CommandParameter="{Binding}">
-                    <Border Classes="wcard">
+                    <Border Classes="wcard" Height="142">
                       <StackPanel>
-                        <Border CornerRadius="999" Padding="9,3" HorizontalAlignment="Left"
+                        <Border CornerRadius="13" Padding="9,4" HorizontalAlignment="Left"
                                 Background="{Binding ChipBackground}">
-                          <TextBlock Text="{Binding Chip}" FontSize="10.5"
+                          <TextBlock Text="{Binding Chip}" FontSize="12" FontWeight="Medium"
                                      Foreground="{Binding ChipForeground}" />
                         </Border>
-                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"
-                                   Margin="0,12,0,6" />
-                        <TextBlock Text="{Binding Desc}" FontSize="11.5" Foreground="{StaticResource Text2}"
-                                   TextWrapping="Wrap" LineHeight="19" />
+                        <TextBlock Text="{Binding Title}" FontSize="21" FontWeight="Bold" Margin="0,12,0,0" />
+                        <TextBlock Text="{Binding Desc}" FontSize="13" Foreground="{StaticResource Text2}"
+                                   TextWrapping="Wrap" LineHeight="20" Margin="0,13,0,0" />
                       </StackPanel>
                     </Border>
                   </Button>
@@ -83,31 +82,32 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <Border Height="1" Background="{StaticResource Line}" Margin="0,26,0,24" />
-
             <!-- 对话 -->
-            <ItemsControl ItemsSource="{Binding Messages}">
+            <TextBlock Text="对话上下文" FontSize="20" FontWeight="Bold" Margin="0,40,0,20" />
+
+            <ItemsControl ItemsSource="{Binding Messages}" Width="840">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:ChatMessage}">
                   <Grid Margin="0,0,0,20">
                     <!-- Agent -->
-                    <StackPanel IsVisible="{Binding IsAgent}" MaxWidth="640" HorizontalAlignment="Left">
-                      <TextBlock Text="{Binding Author}" FontSize="11.5" Foreground="{StaticResource Text2}"
-                                 Margin="0,0,0,7" />
-                      <TextBlock Text="{Binding Text}" FontSize="12.5" Foreground="{StaticResource Text0}"
-                                 TextWrapping="Wrap" LineHeight="22" />
+                    <StackPanel IsVisible="{Binding IsAgent}" MaxWidth="760" HorizontalAlignment="Left">
+                      <TextBlock Text="{Binding Author}" FontSize="13" FontWeight="Bold"
+                                 Foreground="{StaticResource Text2}" Margin="0,0,0,10" />
+                      <TextBlock Text="{Binding Text}" FontSize="15" Foreground="{StaticResource Text0}"
+                                 TextWrapping="Wrap" LineHeight="24" />
                     </StackPanel>
 
                     <!-- 我 -->
-                    <StackPanel IsVisible="{Binding IsUser}" MaxWidth="520" HorizontalAlignment="Right">
-                      <TextBlock Text="{Binding Author}" FontSize="11.5" Foreground="{StaticResource Text2}"
-                                 HorizontalAlignment="Right" Margin="0,0,0,7" />
-                      <Border Background="#1F6C8BFF" BorderBrush="#336C8BFF" BorderThickness="1"
-                              CornerRadius="10" Padding="14,10">
-                        <TextBlock Text="{Binding Text}" FontSize="12.5" Foreground="#E4EAFF"
-                                   TextWrapping="Wrap" LineHeight="22" />
-                      </Border>
-                    </StackPanel>
+                    <Border IsVisible="{Binding IsUser}" MaxWidth="620" HorizontalAlignment="Right"
+                            Background="#1F6C8BFF" CornerRadius="12" Padding="16,12"
+                            BorderBrush="#266C8BFF" BorderThickness="1">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Author}" FontSize="13" FontWeight="Bold"
+                                   Foreground="#9FB4FF" Margin="0,0,0,8" />
+                        <TextBlock Text="{Binding Text}" FontSize="15" Foreground="#E4EAFF"
+                                   TextWrapping="Wrap" LineHeight="24" />
+                      </StackPanel>
+                    </Border>
                   </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -116,35 +116,39 @@
         </ScrollViewer>
 
         <!-- 输入框 -->
-        <Border Grid.Row="1" Margin="28,10,28,20" CornerRadius="12"
-                Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line2}" BorderThickness="1"
-                Padding="14,12,12,10">
+        <Border Grid.Row="1" Width="800" HorizontalAlignment="Left" Margin="80,10,0,20"
+                CornerRadius="18" Background="{StaticResource Bg2}"
+                BorderBrush="{StaticResource Line2}" BorderThickness="1"
+                Padding="26,20,24,16">
           <Grid RowDefinitions="Auto,Auto">
             <TextBox x:Name="Composer"
                      Text="{Binding Draft, Mode=TwoWay}"
                      Watermark="输入业务指令，或 @ 同事发起协作请求"
                      AcceptsReturn="True" TextWrapping="Wrap"
-                     MinHeight="46" MaxHeight="120"
+                     MinHeight="38" MaxHeight="120"
                      Background="Transparent" BorderThickness="0"
-                     FontSize="12.5" Padding="2,2"
+                     FontSize="16" Padding="0"
                      VerticalContentAlignment="Top"
                      KeyDown="OnComposerKeyDown" />
 
-            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,6,0,0">
-              <Button Classes="ghost" Width="26" Height="26" Padding="0" ToolTip.Tip="添加附件">
-                <ctrl:Icon Data="{x:Static ctrl:Icons.Plus}" Width="14" Height="14" Thickness="1.8" />
-              </Button>
-              <Button Grid.Column="1" Classes="ghost" Height="26" Padding="8,0" Margin="4,0,0,0"
-                      HorizontalAlignment="Left" HorizontalContentAlignment="Left" FontSize="11.5">
-                <StackPanel Orientation="Horizontal" Spacing="5">
-                  <ctrl:Icon Data="{x:Static ctrl:Icons.Message}" Width="12" Height="12" />
-                  <TextBlock Text="协作" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-              <Button Grid.Column="2" Width="30" Height="30" Padding="0" CornerRadius="8"
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,10,0,0">
+              <TextBlock Text="+" FontSize="24" Foreground="{StaticResource Text1}"
+                         VerticalAlignment="Center" Margin="2,0,0,0" />
+              <Border Grid.Column="1" CornerRadius="13" Padding="10,4" Margin="16,0,0,0"
+                      Background="#1FF5B942" VerticalAlignment="Center">
+                <TextBlock Text="Full access" FontSize="12" FontWeight="Medium"
+                           Foreground="{DynamicResource Amber}" />
+              </Border>
+              <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"
+                          VerticalAlignment="Center" Margin="0,0,14,0">
+                <TextBlock Text="5.5 Medium" FontSize="14" Foreground="{StaticResource Text2}" />
+                <ctrl:Icon Data="{x:Static ctrl:Icons.ChevronDown}" Width="11" Height="11"
+                           Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+              </StackPanel>
+              <Button Grid.Column="4" Width="44" Height="38" Padding="0" CornerRadius="8"
                       Background="{StaticResource PrimaryGrad}" BorderThickness="0"
                       Command="{Binding SendCommand}" ToolTip.Tip="发送（Enter）">
-                <ctrl:Icon Data="{x:Static ctrl:Icons.ArrowUp}" Width="15" Height="15"
+                <ctrl:Icon Data="{x:Static ctrl:Icons.ArrowUp}" Width="17" Height="17"
                            Thickness="1.9" Foreground="White" />
               </Button>
             </Grid>
@@ -155,35 +159,31 @@
       <!-- ============ 分区页 ============ -->
       <ScrollViewer IsVisible="{Binding IsSection}" VerticalScrollBarVisibility="Auto"
                     HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="28,24,28,28">
-          <StackPanel Orientation="Horizontal" Spacing="10">
+        <StackPanel Margin="60,32,40,28" MaxWidth="900" HorizontalAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="12">
             <Border Width="34" Height="34" CornerRadius="9" Background="{DynamicResource AccentSoft}"
                     VerticalAlignment="Center">
-              <ctrl:Icon Data="{Binding SectionIcon}" Width="17" Height="17"
-                         Foreground="{StaticResource Accent}" />
+              <ctrl:Icon Data="{Binding SectionIcon}" Width="16" Height="16" Foreground="{StaticResource Accent}" />
             </Border>
-            <StackPanel VerticalAlignment="Center">
-              <TextBlock Text="{Binding SectionTitle}" FontSize="20" FontWeight="SemiBold" />
-            </StackPanel>
+            <TextBlock Text="{Binding SectionTitle}" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
           </StackPanel>
+          <TextBlock Text="{Binding SectionDesc}" FontSize="15" Foreground="{StaticResource Text2}"
+                     Margin="0,10,0,24" />
 
-          <TextBlock Text="{Binding SectionDesc}" FontSize="12.5" Foreground="{StaticResource Text2}"
-                     Margin="0,10,0,20" />
-
-          <Border Classes="card">
+          <Border Classes="card" Width="840" HorizontalAlignment="Left">
             <ItemsControl ItemsSource="{Binding Rows}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:SectionRow}">
                   <Border Classes="srow">
                     <Grid ColumnDefinitions="*,Auto">
-                      <StackPanel>
-                        <TextBlock Text="{Binding Title}" FontSize="13" Foreground="{StaticResource Text0}" />
-                        <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="{StaticResource Text2}"
-                                   Margin="0,4,0,0" />
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}" FontSize="15" Foreground="{StaticResource Text0}" />
+                        <TextBlock Text="{Binding Meta}" FontSize="13" Foreground="{StaticResource Text2}"
+                                   Margin="0,5,0,0" />
                       </StackPanel>
                       <Border Grid.Column="1" Classes="pill" Background="{Binding TagBackground}"
                               VerticalAlignment="Center" IsVisible="{Binding HasTag}">
-                        <TextBlock Text="{Binding Tag}" FontSize="11" Foreground="{Binding TagBrush}" />
+                        <TextBlock Text="{Binding Tag}" FontSize="12" Foreground="{Binding TagBrush}" />
                       </Border>
                     </Grid>
                   </Border>

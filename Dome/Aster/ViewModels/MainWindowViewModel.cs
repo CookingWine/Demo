@@ -136,6 +136,7 @@ public sealed class MainWindowViewModel : ObservableObject
         private set => Set(ref _subNavTitle, value);
     }
 
+    public double SubNavWidth => _moduleKey == "admin" ? 260 : 184;
     public bool IsSubNavUserVisible => _moduleKey == "admin";
     public bool IsRailAvatarVisible => !IsSubNavUserVisible;
     public string SubNavUserInitial => "张";
@@ -280,6 +281,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         IsSubNavVisible = true;
         OnPropertyChanged(nameof(IsSubNavUserVisible));
+        OnPropertyChanged(nameof(SubNavWidth));
         OnPropertyChanged(nameof(IsRailAvatarVisible));
 
         switch (item.Key)
@@ -319,14 +321,20 @@ public sealed class MainWindowViewModel : ObservableObject
                 AddSubNav("settlement", "基础结算", Controls.Icons.Currency, null);
                 AddSubNav("approval", "协作与审批", Controls.Icons.List, null);
                 SubNavEntries.Add(new SubNavGroupEntry("项目"));
-                AddSubNav("project", "河南省中医院", Controls.Icons.Folder, null);
+                SubNavEntries.Add(new SubNavLinkEntry("project", "河南省中医院", Controls.Icons.Folder, SubNavCommand, null, true, true));
                 SubNavEntries.Add(new SubNavGroupEntry("最近"));
-                AddSubNav("recent-1", "清远电子 首月结算", Controls.Icons.Clock, null);
-                AddSubNav("recent-2", "恒川制造 员工增减", Controls.Icons.Clock, null);
-                AddSubNav("recent-3", "远航科技 政策审核", Controls.Icons.Clock, null);
+                AddRecent("recent-1", "清远电子 首月结算");
+                AddRecent("recent-2", "恒川制造 员工增减");
+                AddRecent("recent-3", "远航科技 政策审核");
                 SelectSubNav("workbench");
                 break;
         }
+    }
+
+    private void AddRecent(string key, string title)
+    {
+        SubNavEntries.Add(new SubNavLinkEntry(key, title, Controls.Icons.Clock, SubNavCommand,
+            null, showIcon: false, emphasized: false, height: 34));
     }
 
     private void AddSubNav(string key, string title, string icon, string? badge)

@@ -30,9 +30,10 @@
     <!-- 二级导航：分组标题 -->
     <DataTemplate DataType="{x:Type vm:SubNavGroupEntry}">
       <TextBlock Text="{Binding Title}"
-                 FontSize="9.5"
-                 Foreground="#4B5264"
-                 Margin="9,14,9,6" />
+                 FontSize="14"
+                 FontWeight="Bold"
+                 Foreground="{StaticResource Text3}"
+                 Margin="14,26,14,8" />
     </DataTemplate>
 
     <!-- 二级导航：条目 -->
@@ -40,22 +41,27 @@
       <Button Classes="subnav"
               Classes.selected="{Binding IsSelected}"
               Command="{Binding Command}"
-              CommandParameter="{Binding}">
+              CommandParameter="{Binding}"
+              Height="{Binding Height}"
+              Padding="14,0">
         <Grid ColumnDefinitions="Auto,*,Auto">
-          <ctrl:Icon Data="{Binding Icon}" Width="15" Height="15" VerticalAlignment="Center" />
+          <ctrl:Icon Data="{Binding Icon}" Width="16" Height="16" VerticalAlignment="Center"
+                     IsVisible="{Binding ShowIcon}" />
           <TextBlock Grid.Column="1"
                      Text="{Binding Title}"
-                     FontSize="12.5"
-                     Margin="9,0,0,0"
+                     FontSize="{Binding TitleFontSize}"
+                     FontWeight="{Binding TitleWeight}"
+                     Margin="10,0,0,0"
                      VerticalAlignment="Center"
                      TextTrimming="CharacterEllipsis" />
           <Border Grid.Column="2"
                   IsVisible="{Binding HasBadge}"
-                  CornerRadius="4"
-                  Padding="6,1"
-                  Background="#24F5B942"
+                  CornerRadius="13"
+                  Padding="9,3"
+                  Background="#26F8716E"
                   VerticalAlignment="Center">
-            <TextBlock Text="{Binding Badge}" FontSize="9.5" Foreground="{DynamicResource Amber}" />
+            <TextBlock Text="{Binding Badge}" FontSize="11.5" FontWeight="Medium"
+                       Foreground="{DynamicResource Red}" />
           </Border>
         </Grid>
       </Button>
@@ -149,29 +155,28 @@
       </Border>
 
       <!-- 二级导航 -->
-      <Border Grid.Column="1" Width="184" IsVisible="{Binding IsSubNavVisible}"
+      <Border Grid.Column="1" Width="{Binding SubNavWidth}" IsVisible="{Binding IsSubNavVisible}"
               Background="#29000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
         <Grid RowDefinitions="Auto,*,Auto">
           <TextBlock Text="{Binding SubNavTitle}"
-                     FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Text2}"
-                     Margin="18,16,10,10" />
+                     FontSize="11" FontWeight="Bold" Foreground="{StaticResource Text3}"
+                     Margin="24,20,12,10" />
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding SubNavEntries}" Margin="10,0,10,12" />
+            <ItemsControl ItemsSource="{Binding SubNavEntries}" Margin="14,0,14,12" />
           </ScrollViewer>
 
           <!-- 底部当前用户 -->
           <Border Grid.Row="2" IsVisible="{Binding IsSubNavUserVisible}"
-                  BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="13,11">
-            <Grid ColumnDefinitions="Auto,*">
-              <Border Width="26" Height="26" CornerRadius="13" Background="{StaticResource AvatarGrad}">
-                <TextBlock Text="{Binding SubNavUserInitial}" FontSize="11" FontWeight="SemiBold"
+                  BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,12">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+              <Border Width="30" Height="30" CornerRadius="15" Background="{StaticResource AvatarGrad}">
+                <TextBlock Text="{Binding SubNavUserInitial}" FontSize="13" FontWeight="Bold"
                            Foreground="#0A0B10" HorizontalAlignment="Center" VerticalAlignment="Center" />
               </Border>
-              <StackPanel Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center">
-                <TextBlock Text="{Binding SubNavUserName}" FontSize="12" Foreground="{StaticResource Text0}" />
-                <TextBlock Text="{Binding SubNavUserRole}" FontSize="10.5" Foreground="{StaticResource Text2}"
-                           Margin="0,2,0,0" />
-              </StackPanel>
+              <TextBlock Grid.Column="1" Text="{Binding SubNavUserName}" FontSize="14" FontWeight="Medium"
+                         Foreground="{StaticResource Text0}" Margin="10,0,0,0" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="{Binding SubNavUserRole}" FontSize="11"
+                         Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
             </Grid>
           </Border>
         </Grid>
