@@ -23,7 +23,7 @@
 
 ## 2026-10-22
 
-### 6. 按 HR Agent 原型重构工作区界面（布局 + 内容）
+### 6. 按 HR Agent 原型重构工作区界面（布局 + 内容） — `d2a2811`
 
 - **改动**：参考 `HR Agent · 会话与交叉验证工作空间.html` 交互原型，把原来的「管理」模块整体换成工作区结构：侧栏四个入口（工作台 / 协作与审批 / 客户工作空间 / Workflow）+ 项目与最近会话，内容区六个页面；保留原有深色令牌与 `#6C8BFF` 强调色，不引入新配色。
 - **文件**：`ViewModels/AdminViewModel.cs`（重写）、`Views/AdminView.axaml`（重写）、`Views/AdminView.axaml.cs`、`ViewModels/MainWindowViewModel.cs`、`README.md`。
