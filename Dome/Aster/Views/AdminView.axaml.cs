@@ -1,5 +1,4 @@
 using System.Collections.Specialized;
-using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
@@ -9,7 +8,6 @@ namespace Aster.Views;
 
 public partial class AdminView : UserControl
 {
-    private ScrollViewer? _scroll;
     private AdminViewModel? _vm;
 
     public AdminView()
@@ -20,19 +18,37 @@ public partial class AdminView : UserControl
     protected override void OnDataContextChanged(System.EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_vm is not null) _vm.Messages.CollectionChanged -= OnMessagesChanged;
+        if (_vm is not null)
+        {
+            _vm.Messages.CollectionChanged -= OnMessagesChanged;
+            _vm.FlowMessages.CollectionChanged -= OnMessagesChanged;
+        }
+
         _vm = DataContext as AdminViewModel;
-        if (_vm is not null) _vm.Messages.CollectionChanged += OnMessagesChanged;
-        Dispatcher.UIThread.Post(ScrollToEnd, DispatcherPriority.Loaded);
+        if (_vm is not null)
+        {
+            _vm.Messages.CollectionChanged += OnMessagesChanged;
+            _vm.FlowMessages.CollectionChanged += OnMessagesChanged;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            ScrollToEnd("ChatScroll");
+            ScrollToEnd("FlowScroll");
+        }, DispatcherPriority.Loaded);
     }
 
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => Dispatcher.UIThread.Post(ScrollToEnd, DispatcherPriority.Loaded);
+        => Dispatcher.UIThread.Post(() =>
+        {
+            ScrollToEnd("ChatScroll");
+            ScrollToEnd("FlowScroll");
+        }, DispatcherPriority.Loaded);
 
-    private void ScrollToEnd()
+    private void ScrollToEnd(string name)
     {
-        _scroll ??= this.FindControl<ScrollViewer>("ChatScroll");
-        _scroll?.ScrollToEnd();
+        var scroll = this.FindControl<ScrollViewer>(name);
+        scroll?.ScrollToEnd();
     }
 
     private void OnComposerKeyDown(object? sender, KeyEventArgs e)

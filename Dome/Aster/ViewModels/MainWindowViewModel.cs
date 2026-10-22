@@ -320,6 +320,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 AddSubNav("import", "信息导入中心", Controls.Icons.Download, null);
                 AddSubNav("settlement", "基础结算", Controls.Icons.Currency, null);
                 AddSubNav("approval", "协作与审批", Controls.Icons.List, null);
+                AddSubNav("account", "账号与权限", Controls.Icons.Lock, null);
                 SubNavEntries.Add(new SubNavGroupEntry("项目"));
                 SubNavEntries.Add(new SubNavLinkEntry("project", "河南省中医院", Controls.Icons.Folder, SubNavCommand, null, true, true));
                 SubNavEntries.Add(new SubNavGroupEntry("最近"));
