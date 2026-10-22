@@ -99,15 +99,12 @@
         </LinearGradientBrush>
       </Border.Background>
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0,8,0">
-        <Button Classes="ghost" Padding="4,0" Height="30" Background="Transparent" BorderThickness="0"
-                Command="{Binding ShowHomeCommand}" ToolTip.Tip="返回工作台">
-          <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
-            <Border Width="22" Height="22" CornerRadius="6" Background="{StaticResource LogoGrad}">
-              <ctrl:LogoMark Margin="3" PetalBrush="#0A0B12" />
-            </Border>
-            <TextBlock Text="Aster" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource Text0}" />
-          </StackPanel>
-        </Button>
+        <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center" Margin="4,0">
+          <Border Width="22" Height="22" CornerRadius="6" Background="{StaticResource LogoGrad}">
+            <ctrl:LogoMark Margin="3" PetalBrush="#0A0B12" />
+          </Border>
+          <TextBlock Text="Aster" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource Text0}" />
+        </StackPanel>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
           <Button Classes="chrome" Click="OnMinimize" ToolTip.Tip="最小化">

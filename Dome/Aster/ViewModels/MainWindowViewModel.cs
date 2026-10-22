@@ -43,7 +43,6 @@ public sealed class MainWindowViewModel : ObservableObject
             if (o is RailItem item) SelectModule(item);
         });
         OpenSettingsCommand = new RelayCommand(() => IsSettingsOpen = true);
-        ShowHomeCommand = new RelayCommand(ShowHome);
         CloseSettingsCommand = new RelayCommand(() => IsSettingsOpen = false);
         LoginCommand = new RelayCommand(Login, () => !IsBusy);
         LogoutCommand = new RelayCommand(() =>
@@ -60,25 +59,21 @@ public sealed class MainWindowViewModel : ObservableObject
         CopyAdminCommand = new RelayCommand(() => IsAdminCopied = true);
 
         Home = new HomeViewModel();
-        Markdown = new MarkdownViewModel();
-        MusicResult = new MusicViewModel();
         Admin = new AdminViewModel();
         Settings = new SettingsViewModel(LogoutCommand);
 
+        // 文档 / 音乐模块暂时关闭，只保留管理与设置
         RailItems = new ObservableCollection<RailItem>
         {
-            new("md", "文档", Controls.Icons.DocText, SelectModuleCommand),
-            new("music", "音乐", Controls.Icons.Music, SelectModuleCommand),
             new("admin", "管理", Controls.Icons.Bars, SelectModuleCommand),
             new("settings", "设置", Controls.Icons.Sliders, OpenSettingsCommand)
         };
 
-        RailTop = new ObservableCollection<RailItem>(RailItems.Take(3));
-        RailSettings = RailItems[3];
+        RailTop = new ObservableCollection<RailItem>(RailItems.Take(1));
+        RailSettings = RailItems[1];
 
         SubNavEntries = new ObservableCollection<SubNavEntry>();
-        SubNavTitle = "工作台";
-        ActiveView = Home;
+        SelectModule(RailItems[0], true);
 
         var bootTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2000) };
         bootTimer.Tick += (_, _) =>
@@ -90,14 +85,11 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public HomeViewModel Home { get; }
-    public MarkdownViewModel Markdown { get; }
-    public MusicViewModel MusicResult { get; }
     public AdminViewModel Admin { get; }
     public SettingsViewModel Settings { get; }
 
     public ICommand SelectModuleCommand { get; }
     public ICommand OpenSettingsCommand { get; }
-    public ICommand ShowHomeCommand { get; }
     public ICommand CloseSettingsCommand { get; }
     public ICommand LoginCommand { get; }
     public ICommand LogoutCommand { get; }
@@ -149,17 +141,6 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         get => _isSubNavVisible;
         private set => Set(ref _isSubNavVisible, value);
-    }
-
-    /// <summary>回到工作台首页。</summary>
-    private void ShowHome()
-    {
-        foreach (var r in RailItems) r.IsSelected = false;
-        _moduleKey = "home";
-        SubNavEntries.Clear();
-        SubNavTitle = "工作台";
-        IsSubNavVisible = false;
-        ActiveView = Home;
     }
 
     public object? ActiveView
@@ -286,32 +267,6 @@ public sealed class MainWindowViewModel : ObservableObject
 
         switch (item.Key)
         {
-            case "md":
-                SubNavTitle = "文档";
-                ActiveView = Markdown;
-                AddSubNav("all", "全部文档", Controls.Icons.Folder, "128");
-                AddSubNav("recent", "最近编辑", Controls.Icons.Clock, "5");
-                AddSubNav("star", "收藏夹", Controls.Icons.Star, "12");
-                AddSubNav("dirty", "未保存", Controls.Icons.Edit, "2");
-                SubNavEntries.Add(new SubNavGroupEntry("回收"));
-                AddSubNav("trash", "回收站", Controls.Icons.Trash, "0");
-                SelectSubNav("all");
-                break;
-
-            case "music":
-                SubNavTitle = "音乐";
-                ActiveView = MusicResult;
-                AddSubNav("m-all", "全部音乐", Controls.Icons.Music, "248");
-                AddSubNav("m-fav", "我喜欢的", Controls.Icons.Heart, "32");
-                AddSubNav("m-recent", "最近播放", Controls.Icons.Clock, "18");
-                AddSubNav("m-local", "本地文件", Controls.Icons.Hdd, "96");
-                SubNavEntries.Add(new SubNavGroupEntry("歌单"));
-                AddSubNav("pl-focus", "Focus Flow", Controls.Icons.List, "24");
-                AddSubNav("pl-night", "深夜编码", Controls.Icons.List, "41");
-                AddSubNav("pl-commute", "通勤电台", Controls.Icons.List, "12");
-                SelectSubNav("m-all");
-                break;
-
             default:
                 SubNavTitle = "工作区";
                 ActiveView = Admin;
@@ -355,27 +310,7 @@ public sealed class MainWindowViewModel : ObservableObject
         foreach (var entry in SubNavEntries.OfType<SubNavLinkEntry>())
             entry.IsSelected = entry.Key == key;
 
-        switch (_moduleKey)
-        {
-            case "md":
-                Markdown.FilterCommand.Execute(key);
-                break;
-            case "music":
-                MusicResult.FilterCommand.Execute(key switch
-                {
-                    "m-fav" => "收藏",
-                    "m-recent" => "最近",
-                    "m-local" => "专辑",
-                    "pl-focus" => "全部",
-                    "pl-night" => "全部",
-                    "pl-commute" => "全部",
-                    _ => "全部"
-                });
-                break;
-            default:
-                Admin.Select(key);
-                break;
-        }
+        Admin.Select(key);
     }
 
     // ===================== 登录动作 =====================
@@ -397,7 +332,7 @@ public sealed class MainWindowViewModel : ObservableObject
             timer.Stop();
             IsBusy = false;
             Stage = AppStage.App;
-            ShowHome();
+            SelectModule(RailItems[0], true);
         };
         timer.Start();
     }
