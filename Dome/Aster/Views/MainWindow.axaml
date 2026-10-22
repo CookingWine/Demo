@@ -8,13 +8,21 @@
         Title="Aster"
         Width="1320"
         Height="850"
-        MinWidth="1080"
-        MinHeight="700"
+        MinWidth="1320"
+        MinHeight="850"
+        CanResize="True"
         WindowStartupLocation="CenterScreen"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"
         Background="Transparent"
         ExtendClientAreaToDecorationsHint="False">
+
+  <Window.Styles>
+    <!-- 无边框窗口没有系统边框，靠透明热区自己接住鼠标 -->
+    <Style Selector="Border.grip">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+  </Window.Styles>
 
   <Border CornerRadius="14"
           Background="{StaticResource Bg1}"
@@ -27,6 +35,28 @@
       <views:LoginView IsVisible="{Binding IsLogin}" />
       <views:BootView IsVisible="{Binding IsBoot}" />
       <views:SettingsOverlay IsVisible="{Binding IsSettingsOpen}" />
+
+      <!-- ================= 缩放手柄：四边 + 四角 ================= -->
+      <Grid>
+        <Border Classes="grip" Height="6" VerticalAlignment="Top"
+                Cursor="SizeNorthSouth" Tag="North" PointerPressed="OnResizePressed" />
+        <Border Classes="grip" Height="6" VerticalAlignment="Bottom"
+                Cursor="SizeNorthSouth" Tag="South" PointerPressed="OnResizePressed" />
+        <Border Classes="grip" Width="6" HorizontalAlignment="Left"
+                Cursor="SizeWestEast" Tag="West" PointerPressed="OnResizePressed" />
+        <Border Classes="grip" Width="6" HorizontalAlignment="Right"
+                Cursor="SizeWestEast" Tag="East" PointerPressed="OnResizePressed" />
+
+        <!-- 四角覆盖在四边之上，保证角落优先命中 -->
+        <Border Classes="grip" Width="14" Height="14" HorizontalAlignment="Left" VerticalAlignment="Top"
+                Cursor="TopLeftCorner" Tag="NorthWest" PointerPressed="OnResizePressed" />
+        <Border Classes="grip" Width="14" Height="14" HorizontalAlignment="Right" VerticalAlignment="Top"
+                Cursor="TopRightCorner" Tag="NorthEast" PointerPressed="OnResizePressed" />
+        <Border Classes="grip" Width="14" Height="14" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                Cursor="BottomLeftCorner" Tag="SouthWest" PointerPressed="OnResizePressed" />
+        <Border Classes="grip" Width="14" Height="14" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Cursor="BottomRightCorner" Tag="SouthEast" PointerPressed="OnResizePressed" />
+      </Grid>
     </Panel>
   </Border>
 
