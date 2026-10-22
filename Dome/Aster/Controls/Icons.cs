@@ -43,6 +43,7 @@ public static class Icons
     public static readonly string Currency = "M7 4.5 12 11l5-6.5M12 11v9M7.5 15.2h9M7.5 18.4h9";
     public static readonly string Download = "M12 3v12M7 10l5 5 5-5M4 19h16";
     public static readonly string Plus = "M12 5v14M5 12h14";
+    public static readonly string ArrowUp = "M12 19V5M5.5 11.5 12 5l6.5 6.5";
     public static readonly string Minus = "M4 12h16";
     public static readonly string Square = "M6 5h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z";
     public static readonly string Close = "M6 6l12 12M18 6L6 18";

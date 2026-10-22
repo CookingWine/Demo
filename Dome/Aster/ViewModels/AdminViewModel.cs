@@ -1,342 +1,304 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace Aster.ViewModels;
 
-public sealed class MemberRow
+/// <summary>工作台对话消息。</summary>
+public sealed class ChatMessage
 {
-    public string Name { get; init; } = string.Empty;
-    public string Email { get; init; } = string.Empty;
-    public string Initial => Name.Length > 0 ? Name[..1] : "?";
-    public string AvatarFrom { get; init; } = "#7A96FF";
-    public string AvatarTo { get; init; } = "#5C7BF7";
-    public string Role { get; init; } = "编辑";
-    public string Status { get; init; } = "正常";
-    public string StatusKind { get; init; } = "ok";
-    public string LastActive { get; init; } = string.Empty;
-    public string Department { get; init; } = string.Empty;
-
-    public IBrush Avatar => Palette.Gradient(AvatarFrom, AvatarTo);
-
-    public IBrush StatusBrush => StatusKind switch
-    {
-        "ok" => Palette.Solid(Palette.GreenColor),
-        "wait" => Palette.Solid(Palette.AmberColor),
-        _ => Palette.Solid("#626A7D")
-    };
-
-    public IBrush StatusBackground => StatusKind switch
-    {
-        "ok" => Palette.Alpha(Palette.GreenColor, 0.10),
-        "wait" => Palette.Alpha(Palette.AmberColor, 0.10),
-        _ => Palette.Alpha("#FFFFFF", 0.06)
-    };
-}
-
-public sealed class OrderRow
-{
-    public string Id { get; init; } = string.Empty;
-    public string Customer { get; init; } = string.Empty;
-    public string Amount { get; init; } = string.Empty;
-    public string Channel { get; init; } = string.Empty;
-    public string Status { get; init; } = string.Empty;
-    public string StatusKind { get; init; } = "ok";
-    public string CreatedAt { get; init; } = string.Empty;
-
-    public IBrush StatusBrush => StatusKind switch
-    {
-        "ok" => Palette.Solid(Palette.GreenColor),
-        "wait" => Palette.Solid(Palette.AmberColor),
-        _ => Palette.Solid("#626A7D")
-    };
-
-    public IBrush StatusBackground => StatusKind switch
-    {
-        "ok" => Palette.Alpha(Palette.GreenColor, 0.10),
-        "wait" => Palette.Alpha(Palette.AmberColor, 0.10),
-        _ => Palette.Alpha("#FFFFFF", 0.06)
-    };
-}
-
-public sealed class AuditRow
-{
-    public string Time { get; init; } = string.Empty;
+    public string Author { get; init; } = "Agent";
     public string Text { get; init; } = string.Empty;
-    public string Tone { get; init; } = "accent";
+    public bool IsUser { get; init; }
+    public bool IsAgent => !IsUser;
+}
 
-    public IBrush DotBrush => Tone switch
+/// <summary>工作台顶部的快捷入口卡。</summary>
+public sealed class WorkbenchCard
+{
+    public string Chip { get; init; } = string.Empty;
+    public string Tone { get; init; } = "accent";
+    public string Title { get; init; } = string.Empty;
+    public string Desc { get; init; } = string.Empty;
+    public string Prompt { get; init; } = string.Empty;
+    public ICommand Command { get; init; } = null!;
+
+    public IBrush ChipBackground => Tone switch
+    {
+        "green" => Palette.Alpha(Palette.GreenColor, 0.12),
+        "red" => Palette.Alpha(Palette.RedColor, 0.12),
+        _ => Palette.Alpha(Palette.AccentColor, 0.14)
+    };
+
+    public IBrush ChipForeground => Tone switch
     {
         "green" => Palette.Solid(Palette.GreenColor),
-        "cyan" => Palette.Solid(Palette.CyanColor),
         "red" => Palette.Solid(Palette.RedColor),
-        "amber" => Palette.Solid(Palette.AmberColor),
-        _ => Palette.Solid(Palette.AccentColor)
-    };
-
-    public IBrush DotGlow => Tone switch
-    {
-        "green" => Palette.Solid("#3DDC97"),
-        "cyan" => Palette.Solid("#3DD6E8"),
-        "red" => Palette.Solid("#F8716E"),
-        "amber" => Palette.Solid("#F5B942"),
-        _ => Palette.Solid("#6C8BFF")
+        _ => Palette.Solid("#9FB4FF")
     };
 }
 
-public sealed class ReportCard
+/// <summary>通用分区页的一行。</summary>
+public sealed class SectionRow
 {
     public string Title { get; init; } = string.Empty;
-    public string Value { get; init; } = string.Empty;
-    public string Delta { get; init; } = string.Empty;
-    public bool Up { get; init; } = true;
+    public string Meta { get; init; } = string.Empty;
+    public string Tag { get; init; } = string.Empty;
+    public string Tone { get; init; } = "muted";
 
-    public IBrush DeltaBrush => Up ? Palette.Solid(Palette.GreenColor) : Palette.Solid(Palette.RedColor);
-}
+    public bool HasTag => !string.IsNullOrEmpty(Tag);
 
-public sealed class ExportRow
-{
-    public string File { get; init; } = string.Empty;
-    public string Owner { get; init; } = string.Empty;
-    public string Time { get; init; } = string.Empty;
-    public string Size { get; init; } = string.Empty;
-}
-
-/// <summary>管理页各面板的基类。</summary>
-public abstract class AdminPanel : ObservableObject
-{
-    public abstract string Title { get; }
-    public abstract string Subtitle { get; }
-    public ObservableCollection<SegmentItem> Segments { get; } = new();
-    public bool HasSegments => Segments.Count > 0;
-    public string PrimaryAction { get; protected set; } = string.Empty;
-}
-
-public enum OverviewPeriod
-{
-    Today,
-    Week,
-    Month,
-    Custom
-}
-
-public sealed class OverviewPanel : AdminPanel
-{
-    public OverviewPanel(ICommand segmentCommand)
+    public IBrush TagBrush => Tone switch
     {
-        Segments.Add(new SegmentItem("今日", segmentCommand));
-        Segments.Add(new SegmentItem("近 7 天", segmentCommand));
-        Segments.Add(new SegmentItem("本月", segmentCommand));
-        Segments.Add(new SegmentItem("自定义", segmentCommand));
-        Segments[1].IsSelected = true;
-        PrimaryAction = "新增成员";
-    }
-
-    public override string Title => "运营管理";
-    public override string Subtitle => "数据更新时间：2026-10-20 14:18 · 每 5 分钟自动刷新";
-    public string ChartSubtitle => "2026-10-14 至 2026-10-20";
-
-    public ObservableCollection<KpiItem> Kpis { get; } = new()
-    {
-        new KpiItem
-        {
-            Title = "活跃用户", Value = "12,486", Delta = "↑ 12.4%", DeltaKind = "up",
-            Icon = Controls.Icons.Users, SparkBrush = Palette.Solid(Palette.GreenColor),
-            Spark = new double[] { 17, 14, 16, 9, 11, 6, 3 }
-        },
-        new KpiItem
-        {
-            Title = "订单总量", Value = "3,214", Delta = "↑ 8.1%", DeltaKind = "up",
-            Icon = Controls.Icons.Cart, SparkBrush = Palette.Solid(Palette.GreenColor),
-            Spark = new double[] { 14, 16, 11, 13, 8, 9, 5 }
-        },
-        new KpiItem
-        {
-            Title = "总营收", Value = "¥482,900", Delta = "↑ 23.6%", DeltaKind = "up",
-            Icon = Controls.Icons.Currency, SparkBrush = Palette.Solid(Palette.GreenColor),
-            Spark = new double[] { 18, 15, 17, 10, 12, 5, 2 }
-        },
-        new KpiItem
-        {
-            Title = "转化率", Value = "4.82%", Delta = "↓ 0.8%", DeltaKind = "dn",
-            Icon = Controls.Icons.Trend, SparkBrush = Palette.Solid(Palette.RedColor),
-            Spark = new double[] { 5, 8, 6, 12, 10, 15, 17 }
-        }
+        "green" => Palette.Solid(Palette.GreenColor),
+        "amber" => Palette.Solid(Palette.AmberColor),
+        "accent" => Palette.Solid("#9FB4FF"),
+        _ => Palette.Solid("#9BA3B7")
     };
 
-    public IReadOnlyList<double> Visits { get; } = new double[] { 108, 92, 100, 66, 74, 42, 30 };
-    public IReadOnlyList<double> Orders { get; } = new double[] { 126, 118, 122, 104, 110, 92, 86 };
-    public string[] AxisLabels { get; } = { "10-14", "10-15", "10-16", "10-17", "10-18", "10-19", "10-20" };
-
-    public IReadOnlyList<double> ChannelValues { get; } = new double[] { 46, 28, 17, 9 };
-
-    public ObservableCollection<MemberRow> Members { get; } = new(SeedData.Members.Take(5));
-}
-
-public sealed class MembersPanel : AdminPanel
-{
-    public MembersPanel(ICommand segmentCommand)
+    public IBrush TagBackground => Tone switch
     {
-        Segments.Add(new SegmentItem("全部", segmentCommand));
-        Segments.Add(new SegmentItem("管理员", segmentCommand));
-        Segments.Add(new SegmentItem("编辑", segmentCommand));
-        Segments.Add(new SegmentItem("访客", segmentCommand));
-        Segments[0].IsSelected = true;
-        PrimaryAction = "邀请成员";
-    }
-
-    public override string Title => "成员与权限";
-    public override string Subtitle => "共 128 位成员 · 本周新增 6 人";
-    public ObservableCollection<MemberRow> Members { get; } = new(SeedData.Members);
-}
-
-public sealed class OrdersPanel : AdminPanel
-{
-    public OrdersPanel(ICommand segmentCommand)
-    {
-        Segments.Add(new SegmentItem("全部", segmentCommand));
-        Segments.Add(new SegmentItem("待支付", segmentCommand));
-        Segments.Add(new SegmentItem("已支付", segmentCommand));
-        Segments.Add(new SegmentItem("已退款", segmentCommand));
-        Segments[1].IsSelected = true;
-        PrimaryAction = "导出";
-    }
-
-    public override string Title => "订单管理";
-    public override string Subtitle => "近 7 天共 3,214 笔订单 · 待处理 42 笔";
-    public ObservableCollection<OrderRow> Orders { get; } = new(SeedData.Orders);
-}
-
-public sealed class AuditPanel : AdminPanel
-{
-    public AuditPanel(ICommand segmentCommand)
-    {
-        Segments.Add(new SegmentItem("全部", segmentCommand));
-        Segments.Add(new SegmentItem("登录", segmentCommand));
-        Segments.Add(new SegmentItem("成员变更", segmentCommand));
-        Segments.Add(new SegmentItem("数据导出", segmentCommand));
-        Segments[0].IsSelected = true;
-        PrimaryAction = "导出日志";
-    }
-
-    public override string Title => "审计日志";
-    public override string Subtitle => "记录成员的关键操作与登录行为，保留 90 天";
-    public ObservableCollection<AuditRow> Rows { get; } = new(SeedData.Audit);
-}
-
-public sealed class ReportsPanel : AdminPanel
-{
-    public ReportsPanel(ICommand segmentCommand)
-    {
-        Segments.Add(new SegmentItem("今日", segmentCommand));
-        Segments.Add(new SegmentItem("近 7 天", segmentCommand));
-        Segments.Add(new SegmentItem("本月", segmentCommand));
-        Segments[1].IsSelected = true;
-        PrimaryAction = "生成报告";
-    }
-
-    public override string Title => "数据报表";
-    public override string Subtitle => "核心业务指标与环比变化";
-
-    public ObservableCollection<ReportCard> Cards { get; } = new()
-    {
-        new ReportCard { Title = "日活跃用户", Value = "12,486", Delta = "↑ 12.4% 较上一周期" },
-        new ReportCard { Title = "订单转化率", Value = "4.82%", Delta = "↓ 0.8% 较上一周期", Up = false },
-        new ReportCard { Title = "客单价", Value = "¥150.24", Delta = "↑ 3.1% 较上一周期" },
-        new ReportCard { Title = "复购率", Value = "38.6%", Delta = "↑ 1.9% 较上一周期" }
+        "green" => Palette.Alpha(Palette.GreenColor, 0.10),
+        "amber" => Palette.Alpha(Palette.AmberColor, 0.10),
+        "accent" => Palette.Alpha(Palette.AccentColor, 0.12),
+        _ => Palette.Alpha("#FFFFFF", 0.06)
     };
 }
 
-public sealed class ExportPanel : AdminPanel
-{
-    public ExportPanel()
-    {
-        PrimaryAction = "新建导出";
-    }
-
-    public override string Title => "导出记录";
-    public override string Subtitle => "最近 30 天的数据导出历史";
-    public ObservableCollection<ExportRow> Rows { get; } = new(SeedData.Exports);
-}
-
+/// <summary>管理模块：今日工作台（快捷入口 + 对话 + 分区页）。</summary>
 public sealed class AdminViewModel : ObservableObject
 {
-    private object _activePanel;
+    private static readonly string[] Replies =
+    {
+        "好的，正在拉取数据，稍等我把结果贴到对话里。",
+        "已记录。需要我同时生成结算单草稿吗？",
+        "收到，我先按模板校验必填字段，异常项会列在下面。",
+        "这个动作会影响 3 个关联项目，确认后我再执行。"
+    };
+
+    private int _replyIndex;
+    private string _activeKey = "workbench";
+    private string _draft = string.Empty;
+    private string _sectionTitle = "工作台";
+    private string _sectionDesc = string.Empty;
+    private string _sectionIcon = Controls.Icons.Grid;
+    private bool _isWorkbench = true;
 
     public AdminViewModel()
     {
-        SelectPanelCommand = new RelayCommand(o =>
+        SelectCommand = new RelayCommand(o =>
         {
-            if (o is SubNavLinkEntry e) Select(e.Key);
+            if (o is SubNavLinkEntry entry) Select(entry.Key);
         });
-        SegmentCommand = new RelayCommand(_ => { });
-
-        Panels = new Dictionary<string, AdminPanel>
+        CardCommand = new RelayCommand(o =>
         {
-            ["overview"] = new OverviewPanel(SegmentCommand),
-            ["members"] = new MembersPanel(SegmentCommand),
-            ["orders"] = new OrdersPanel(SegmentCommand),
-            ["audit"] = new AuditPanel(SegmentCommand),
-            ["reports"] = new ReportsPanel(SegmentCommand),
-            ["export"] = new ExportPanel()
+            if (o is WorkbenchCard card && !string.IsNullOrEmpty(card.Prompt)) Draft = card.Prompt;
+        });
+        SendCommand = new RelayCommand(Send);
+
+        Cards = new ObservableCollection<WorkbenchCard>
+        {
+            new()
+            {
+                Chip = "创建", Tone = "accent", Title = "新建项目",
+                Desc = "创建客户或项目工作空间。",
+                Prompt = "帮我新建一个项目工作空间",
+                Command = CardCommand
+            },
+            new()
+            {
+                Chip = "3 项", Tone = "green", Title = "KPI 考勤",
+                Desc = "查看绩效、考勤异常、响应时效。",
+                Prompt = "看一下本周的 KPI 与考勤异常",
+                Command = CardCommand
+            },
+            new()
+            {
+                Chip = "12 条", Tone = "red", Title = "待办事项",
+                Desc = "审批、导入、账单到期与协作请求。",
+                Prompt = "列出我今天需要处理的 12 条待办",
+                Command = CardCommand
+            }
         };
 
-        _activePanel = Panels["overview"];
+        Messages = new ObservableCollection<ChatMessage>
+        {
+            new()
+            {
+                Author = "Agent",
+                Text = "早上好。今天有 12 条待办，其中 3 条需要主管审批，2 个客户账单今天到期。"
+            },
+            new()
+            {
+                Author = "张客服", IsUser = true,
+                Text = "先帮我创建河南省中医院项目，并把 9 月员工名单导入挂到这个项目下。"
+            },
+            new()
+            {
+                Author = "Agent",
+                Text = "可以。请上传 9 月员工名单，我会先核对必填字段，再请你确认导入。"
+            }
+        };
+
+        Rows = new ObservableCollection<SectionRow>();
     }
 
-    public ICommand SelectPanelCommand { get; }
-    public ICommand SegmentCommand { get; }
-    public Dictionary<string, AdminPanel> Panels { get; }
+    public ObservableCollection<WorkbenchCard> Cards { get; }
+    public ObservableCollection<ChatMessage> Messages { get; }
+    public ObservableCollection<SectionRow> Rows { get; }
 
-    public object ActivePanel
+    public ICommand SelectCommand { get; }
+    public ICommand CardCommand { get; }
+    public ICommand SendCommand { get; }
+
+    public string ActiveKey
     {
-        get => _activePanel;
-        private set => Set(ref _activePanel, value);
+        get => _activeKey;
+        private set => Set(ref _activeKey, value);
     }
+
+    public bool IsWorkbench
+    {
+        get => _isWorkbench;
+        private set
+        {
+            if (!Set(ref _isWorkbench, value)) return;
+            OnPropertyChanged(nameof(IsSection));
+            OnPropertyChanged(nameof(TopBarTitle));
+        }
+    }
+
+    public bool IsSection => !_isWorkbench;
+
+    /// <summary>顶部条标题：工作台页显示「工作台」，分区页显示模块名。</summary>
+    public string TopBarTitle => _isWorkbench ? "工作台" : "工作区";
+
+    public string SectionTitle
+    {
+        get => _sectionTitle;
+        private set => Set(ref _sectionTitle, value);
+    }
+
+    public string SectionDesc
+    {
+        get => _sectionDesc;
+        private set => Set(ref _sectionDesc, value);
+    }
+
+    public string SectionIcon
+    {
+        get => _sectionIcon;
+        private set => Set(ref _sectionIcon, value);
+    }
+
+    public string Draft
+    {
+        get => _draft;
+        set
+        {
+            if (!Set(ref _draft, value)) return;
+            (SendCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+    }
+
+    public string UserName => "张客服";
+    public string UserInitial => "张";
 
     public void Select(string key)
     {
-        if (Panels.TryGetValue(key, out var panel)) ActivePanel = panel;
+        ActiveKey = key;
+        if (key == "workbench")
+        {
+            SectionTitle = "工作台";
+            IsWorkbench = true;
+            return;
+        }
+
+        var (title, desc, icon, rows) = Describe(key);
+        SectionTitle = title;
+        SectionDesc = desc;
+        SectionIcon = icon;
+        Rows.Clear();
+        foreach (var row in rows) Rows.Add(row);
+        IsWorkbench = false;
     }
-}
 
-internal static class SeedData
-{
-    public static readonly List<MemberRow> Members = new()
+    private static (string Title, string Desc, string Icon, SectionRow[] Rows) Describe(string key) => key switch
     {
-        new MemberRow { Name = "陈墨", Email = "chenmo@aster.io", AvatarFrom = "#7A96FF", AvatarTo = "#5C7BF7", Role = "管理员", Status = "正常", StatusKind = "ok", LastActive = "2 分钟前", Department = "产品部" },
-        new MemberRow { Name = "林晚", Email = "linwan@aster.io", AvatarFrom = "#B79CFF", AvatarTo = "#8C6BE0", Role = "编辑", Status = "正常", StatusKind = "ok", LastActive = "15 分钟前", Department = "运营部" },
-        new MemberRow { Name = "苏晓", Email = "suxiao@aster.io", AvatarFrom = "#6FE3D8", AvatarTo = "#2FB6C9", Role = "访客", Status = "待审核", StatusKind = "wait", LastActive = "1 小时前", Department = "市场部" },
-        new MemberRow { Name = "周野", Email = "zhouye@aster.io", AvatarFrom = "#8FD9A8", AvatarTo = "#4FB07A", Role = "编辑", Status = "正常", StatusKind = "ok", LastActive = "3 小时前", Department = "技术部" },
-        new MemberRow { Name = "何遇", Email = "heyu@aster.io", AvatarFrom = "#D8A3AE", AvatarTo = "#B26A7C", Role = "访客", Status = "已停用", StatusKind = "off", LastActive = "昨天 18:30", Department = "市场部" }
+        "clients" => ("客户工作空间", "按客户组织项目、合同与员工档案。", Controls.Icons.Users, new[]
+        {
+            new SectionRow { Title = "河南省中医院", Meta = "在办项目 2 个 · 员工 128 人", Tag = "进行中", Tone = "green" },
+            new SectionRow { Title = "清远电子", Meta = "首月结算 · 员工 64 人", Tag = "待结算", Tone = "amber" },
+            new SectionRow { Title = "恒川制造", Meta = "员工增减 · 本月新增 12 人", Tag = "进行中", Tone = "green" },
+            new SectionRow { Title = "远航科技", Meta = "政策审核 · 等待材料补充", Tag = "待处理", Tone = "accent" }
+        }),
+
+        "import" => ("信息导入中心", "批量导入员工名单、考勤与账单数据。", Controls.Icons.Download, new[]
+        {
+            new SectionRow { Title = "9 月员工名单.xlsx", Meta = "张客服 · 今天 09:12 · 128 行", Tag = "已导入", Tone = "green" },
+            new SectionRow { Title = "8 月考勤汇总.xlsx", Meta = "张客服 · 昨天 17:40 · 126 行", Tag = "已导入", Tone = "green" },
+            new SectionRow { Title = "清远电子 账单.csv", Meta = "系统 · 昨天 14:02 · 待校验", Tag = "待校验", Tone = "amber" }
+        }),
+
+        "settlement" => ("基础结算", "按服务费与社保口径生成结算单。", Controls.Icons.Currency, new[]
+        {
+            new SectionRow { Title = "清远电子 · 首月服务费", Meta = "计费周期 2026-10 · 64 人", Tag = "¥86,400", Tone = "accent" },
+            new SectionRow { Title = "河南省中医院 · 9 月服务费", Meta = "计费周期 2026-09 · 128 人", Tag = "¥172,800", Tone = "accent" },
+            new SectionRow { Title = "恒川制造 · 增减调整", Meta = "本月新增 12 人 · 待确认", Tag = "待确认", Tone = "amber" }
+        }),
+
+        "approval" => ("协作与审批", "集中处理审批、协作请求与超时提醒。", Controls.Icons.List, new[]
+        {
+            new SectionRow { Title = "员工入职审批 · 河南省中医院", Meta = "张客服 提交 · 12 分钟前", Tag = "待我处理", Tone = "amber" },
+            new SectionRow { Title = "9 月结算单确认", Meta = "财务 王敏 · 1 小时前", Tag = "待我处理", Tone = "amber" },
+            new SectionRow { Title = "合同续签 · 清远电子", Meta = "销售 李锐 · 昨天", Tag = "已通过", Tone = "green" }
+        }),
+
+        "project" => ("河南省中医院", "项目工作空间：合同、员工、结算与协作记录。", Controls.Icons.Folder, new[]
+        {
+            new SectionRow { Title = "9 月员工名单", Meta = "128 人 · 已导入", Tag = "已导入", Tone = "green" },
+            new SectionRow { Title = "服务合同 2026", Meta = "有效期至 2027-03 · 扫描件", Tag = "已归档", Tone = "muted" },
+            new SectionRow { Title = "9 月服务费结算", Meta = "¥172,800 · 待确认", Tag = "待确认", Tone = "amber" }
+        }),
+
+        "recent-1" => ("清远电子 · 首月结算", "从最近的对话继续处理。", Controls.Icons.Clock, new[]
+        {
+            new SectionRow { Title = "核对 64 人社保基数", Meta = "昨天 18:20", Tag = "已完成", Tone = "green" },
+            new SectionRow { Title = "生成首月结算单", Meta = "昨天 17:05", Tag = "待确认", Tone = "amber" }
+        }),
+
+        "recent-2" => ("恒川制造 · 员工增减", "从最近的对话继续处理。", Controls.Icons.Clock, new[]
+        {
+            new SectionRow { Title = "本月新增 12 人名单", Meta = "今天 09:40", Tag = "待导入", Tone = "amber" },
+            new SectionRow { Title = "离职 3 人手续", Meta = "昨天 15:12", Tag = "已完成", Tone = "green" }
+        }),
+
+        "recent-3" => ("远航科技 · 政策审核", "从最近的对话继续处理。", Controls.Icons.Clock, new[]
+        {
+            new SectionRow { Title = "补充材料清单", Meta = "昨天 11:30", Tag = "待补充", Tone = "amber" },
+            new SectionRow { Title = "审核意见回执", Meta = "10-20", Tag = "已回复", Tone = "green" }
+        }),
+
+        _ => ("工作台", "从常用入口开始，也可以直接在下方对话中交办工作。", Controls.Icons.Grid, Array.Empty<SectionRow>())
     };
 
-    public static readonly List<OrderRow> Orders = new()
+    private void Send()
     {
-        new OrderRow { Id = "ORD-7108", Customer = "林晚", Amount = "¥1,280.00", Channel = "网页端", Status = "已支付", StatusKind = "ok", CreatedAt = "今天 14:12" },
-        new OrderRow { Id = "ORD-7107", Customer = "苏晓", Amount = "¥560.00", Channel = "小程序", Status = "待支付", StatusKind = "wait", CreatedAt = "今天 13:48" },
-        new OrderRow { Id = "ORD-7106", Customer = "周野", Amount = "¥3,420.00", Channel = "移动端", Status = "已支付", StatusKind = "ok", CreatedAt = "今天 13:20" },
-        new OrderRow { Id = "ORD-7105", Customer = "何遇", Amount = "¥199.00", Channel = "网页端", Status = "已退款", StatusKind = "off", CreatedAt = "今天 12:05" },
-        new OrderRow { Id = "ORD-7104", Customer = "陈墨", Amount = "¥890.00", Channel = "移动端", Status = "已支付", StatusKind = "ok", CreatedAt = "今天 11:32" }
-    };
+        var text = Draft?.Trim();
+        if (string.IsNullOrEmpty(text)) return;
 
-    public static readonly List<AuditRow> Audit = new()
-    {
-        new AuditRow { Time = "14:12", Text = "陈墨 将 林晚 的角色修改为 编辑" },
-        new AuditRow { Time = "13:48", Text = "林晚 登录成功 · Windows 11 · 上海", Tone = "green" },
-        new AuditRow { Time = "13:20", Text = "系统完成自动备份，耗时 1 分 24 秒", Tone = "cyan" },
-        new AuditRow { Time = "12:05", Text = "陈墨 停用了成员 何遇", Tone = "red" },
-        new AuditRow { Time = "11:32", Text = "苏晓 提交了加入申请，等待审核", Tone = "amber" },
-        new AuditRow { Time = "09:15", Text = "陈墨 导出了成员名单 成员名单.xlsx" }
-    };
+        Messages.Add(new ChatMessage { Author = "张客服", Text = text, IsUser = true });
+        Draft = string.Empty;
 
-    public static readonly List<ExportRow> Exports = new()
-    {
-        new ExportRow { File = "成员名单.xlsx", Owner = "陈墨", Time = "2026-10-20 14:02", Size = "2.1 MB" },
-        new ExportRow { File = "订单明细.csv", Owner = "林晚", Time = "2026-10-19 18:20", Size = "860 KB" },
-        new ExportRow { File = "月度报表.pdf", Owner = "陈墨", Time = "2026-10-18 09:15", Size = "4.7 MB" }
-    };
+        var reply = Replies[_replyIndex++ % Replies.Length];
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(650) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            Messages.Add(new ChatMessage { Author = "Agent", Text = reply });
+        };
+        timer.Start();
+    }
 }

@@ -136,6 +136,12 @@ public sealed class MainWindowViewModel : ObservableObject
         private set => Set(ref _subNavTitle, value);
     }
 
+    public bool IsSubNavUserVisible => _moduleKey == "admin";
+    public bool IsRailAvatarVisible => !IsSubNavUserVisible;
+    public string SubNavUserInitial => "张";
+    public string SubNavUserName => "张客服";
+    public string SubNavUserRole => "客服";
+
     private bool _isSubNavVisible = true;
 
     public bool IsSubNavVisible
@@ -273,6 +279,8 @@ public sealed class MainWindowViewModel : ObservableObject
         SubNavEntries.Clear();
 
         IsSubNavVisible = true;
+        OnPropertyChanged(nameof(IsSubNavUserVisible));
+        OnPropertyChanged(nameof(IsRailAvatarVisible));
 
         switch (item.Key)
         {
@@ -303,16 +311,20 @@ public sealed class MainWindowViewModel : ObservableObject
                 break;
 
             default:
-                SubNavTitle = "管理";
+                SubNavTitle = "工作区";
                 ActiveView = Admin;
-                AddSubNav("overview", "概览", Controls.Icons.Grid, null);
-                AddSubNav("members", "成员与权限", Controls.Icons.Users, "128");
-                AddSubNav("orders", "订单管理", Controls.Icons.Cart, null);
-                AddSubNav("audit", "审计日志", Controls.Icons.Doc, null);
-                SubNavEntries.Add(new SubNavGroupEntry("数据"));
-                AddSubNav("reports", "数据报表", Controls.Icons.Trend, null);
-                AddSubNav("export", "导出记录", Controls.Icons.Download, null);
-                SelectSubNav("overview");
+                AddSubNav("workbench", "工作台", Controls.Icons.Grid, "12");
+                AddSubNav("clients", "客户工作空间", Controls.Icons.Users, null);
+                AddSubNav("import", "信息导入中心", Controls.Icons.Download, null);
+                AddSubNav("settlement", "基础结算", Controls.Icons.Currency, null);
+                AddSubNav("approval", "协作与审批", Controls.Icons.List, null);
+                SubNavEntries.Add(new SubNavGroupEntry("项目"));
+                AddSubNav("project", "河南省中医院", Controls.Icons.Folder, null);
+                SubNavEntries.Add(new SubNavGroupEntry("最近"));
+                AddSubNav("recent-1", "清远电子 首月结算", Controls.Icons.Clock, null);
+                AddSubNav("recent-2", "恒川制造 员工增减", Controls.Icons.Clock, null);
+                AddSubNav("recent-3", "远航科技 政策审核", Controls.Icons.Clock, null);
+                SelectSubNav("workbench");
                 break;
         }
     }
