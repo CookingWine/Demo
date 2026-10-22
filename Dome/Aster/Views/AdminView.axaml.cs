@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Specialized;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -8,11 +9,35 @@ namespace Aster.Views;
 
 public partial class AdminView : UserControl
 {
+    /// <summary>内容列的最大宽度，超出后居中留白，不再继续拉宽。</summary>
+    private const double ContentMaxWidth = 1080;
+
+    /// <summary>内容列与窗口左右边缘的留白。</summary>
+    private const double ContentSideGutter = 48;
+
     private AdminViewModel? _vm;
 
     public AdminView()
     {
         InitializeComponent();
+    }
+
+    /// <summary>窗口尺寸变化时重算内容列宽度，让工作台、列表页与输入框始终对齐同一列。</summary>
+    private void OnContentSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        var width = Math.Min(ContentMaxWidth, e.NewSize.Width - ContentSideGutter * 2);
+        if (width <= 0) return;
+
+        SetColumnWidth(WorkbenchContent, width);
+        SetColumnWidth(WorkbenchComposer, width);
+        SetColumnWidth(SectionContent, width);
+    }
+
+    private static void SetColumnWidth(Control? control, double width)
+    {
+        if (control is null) return;
+        if (double.IsNaN(control.Width) || Math.Abs(control.Width - width) > 0.5)
+            control.Width = width;
     }
 
     protected override void OnDataContextChanged(System.EventArgs e)
