@@ -16,11 +16,44 @@
        坑一：根节点 x:DataType 是 MainWindowViewModel，所以外层绑定要写 Settings.xxx；
              模板内部则以 DataTemplate 的 DataType 为准，写错类型的报错会落到模板里。
        坑二：Value 声明成 object，忘写某个子类的模板时不会编译报错，只会渲染出 ToString 文本。
+
+       整体结构（用缩进树表示，越靠内层越靠里；面板 940×680 居中，遮罩铺满整个控件并垫在下方）：
+         [遮罩] Border  #BD030407 · PointerPressed=OnMaskPressed · 铺满
+           [面板] Border 940×680 · 圆角 14 · PopShadow · ClipToBounds
+             ├ 第 1 行 50 高：头部，左「设置」标题，右 chrome 关闭按钮
+             ├ 第 2 行 * 高（实得 574）：Grid 两列
+             │   ├ 左列 176：ItemsControl（7 个分区按钮）+ 底部 Footer 小字
+             │   └ 右列 *（实得 764）：ContentControl → SettingSection 整页 → ScrollViewer 纵向滚动
+             └ 第 3 行 56 高：底栏，「即时生效」说明 + pri「完成」按钮
+       横向尺寸怎么凑出来的（一整条链，改任何一环都要重算后面的）：
+         940（面板宽）− 176（左栏）＝ 764  右栏可用宽
+         764 − 24 − 24（右栏 StackPanel 的左右 Margin）＝ 716  分区内容宽
+         716 − 16 − 16（Border.groupCard 的左右 Padding）＝ 684  行可用宽
+         684 − 300（右侧取值控件最宽的一类，PathValue）− 24（行内 Margin）＝ 360
+         也就是「左标题列最少还能剩 360」，所以描述文字写 MaxWidth 420 只是保险，
+         实际很难被压到需要换行——除非右侧出现比 300 更宽的控件。
+         注：面板 Border 自带 1px 描边，内部实际是 938 宽；上面按 940 算，差的 2px 会被左侧星号列消化，
+         不影响结论。
+       纵向：680 − 50（头部）− 56（底栏）＝ 574 留给主体，右栏在这 574 内自己滚。
        ========================================================================== -->
 
   <UserControl.Styles>
     <!-- 局部样式：只作用于本浮层。下面都是 Style + Class 选择器（例如 Button.setitem），
          由控件的 Classes 命中；和 Theme.axaml 中用 x:Key 定义的 ControlTheme 不是一回事。 -->
+    <!-- 三种「换外观」的手法在本文件里同时出现，先把边界划清：
+         1) Style + Class 选择器（本区块）：只改属性，不换模板。控件的 Classes 里有这个类名就命中，
+            因此可以叠加——同一个按钮完全可以既是 setitem 又是 selected。
+            条件类 Classes.selected="{Binding IsSelected}" 在绑定的 bool 为 true 时把 selected
+            加进 Classes，为 false 时移除；样式系统随即重新匹配下面那条 Button.setitem.selected。
+         2) ControlTheme + Theme 属性（Theme.axaml 的 SwitchToggle / ChipToggle）：整份换模板，
+            连控件内部结构（Border#Track + Ellipse#Knob）都换掉。一个控件只能挂一个 ControlTheme，
+            所以它和「叠加多个 Class」的模型是互斥的——这也是开关模板里一个 Classes 都不写的原因。
+         3) 直接绑属性（ButtonValue 的三个画刷）：连样式系统都不经过，值从 VM 来。
+            改 VM 就改外观，但它完全不参与 hover / pressed 这类伪类逻辑，所以语气按钮没有悬停变化。
+         优先级：本地值（XAML 里直接写的属性或绑定）> 样式 setter > 主题 setter > 属性默认值。
+         推论：模板里给 Button 写了 Background="{Binding ...}"，本区块的 setter 就覆盖不了它。
+         同优先级内：后声明的样式覆盖先声明的。所以 .selected 写在 :pointerover 之后，
+         悬停在「已选中」的分区上时，强调色底不会被悬停色顶掉。 -->
     <!-- 左栏分区按钮的常态：透明底 + 内容左对齐，行高靠 Padding 撑出来，底部留 2px 间距 -->
     <Style Selector="Button.setitem">
       <Setter Property="Background" Value="Transparent" />
@@ -89,6 +122,11 @@
     <!-- 匹配 SettingSection.TopCard 里的 AccountCard：左侧头像圆（显示姓名首字），
          中间姓名 + 角色标签 + 邮箱 + 加入时间，右侧「更换头像」占位按钮。
          因为结构固定且只有账号页在用，所以没拆成 SettingRow 序列 -->
+    <!-- 模板 1/15 · AccountCard → 一张资料卡：54 直径头像圆 + 姓名/角色标签 + 邮箱 + 加入时间。
+         宽度从哪来：不写 Width，靠父级 StackPanel 拉伸，实际等于右栏内容宽 716。
+         高度：Padding 上下各 15 + 头像 54 = 84，再加 Margin 底部 14，共占 98 的纵向空间。
+         三条绑定各取什么：Initial→头像圆里的首字；Name/Role→第一行；
+         Email→第二行灰字；Joined→第三行更淡的字。 -->
     <DataTemplate DataType="{x:Type vm:AccountCard}">
       <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
               CornerRadius="10" Padding="16,15" Margin="0,0,0,14">
@@ -115,6 +153,12 @@
 
     <!-- 关于头部 -->
     <!-- 匹配 AboutCard：Logo 渐变方块 + 应用名 + 版本号 +「已是最新」绿色胶囊，右侧「检查更新」占位 -->
+    <!-- 模板 2/15 · AboutCard → Logo 方块 + 应用名 + 版本 / 绿色「已是最新」胶囊 / 右侧占位按钮。
+         宽度：同样不写，拉满 716。
+         高度：Padding 上下各 18 + Logo 52 = 88，加 Margin 底部 20 共 108；
+             比 AccountCard 更宽松（18 vs 15、底部 20 vs 14），因为它是页面第一块，要给足呼吸感。
+         绑定：Name→应用名；Version→版本号；Meta→「已是最新 · 日期」；
+              胶囊里的「已是最新」是写死的字，不绑 VM，所以和 Meta 的文案可能重复。 -->
     <DataTemplate DataType="{x:Type vm:AboutCard}">
       <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
               CornerRadius="10" Padding="16,18" Margin="0,0,0,20">
@@ -141,6 +185,13 @@
     <!-- 匹配 TextValue：固定 196 宽的单行输入框，Placeholder 映射到 Watermark（无内容时的灰色提示文字）。
          宽度写死是为了让同列多行输入框左右边缘对齐；自身不设 HorizontalAlignment，
          右对齐由行模板里那个 ContentControl 负责（见下方 SettingRow 模板） -->
+    <!-- 模板 3/15 · TextValue → 单行 TextBox，宽 196（写死），高由全局 MinHeight 30 决定。
+         196 这个数字的来历：右列出现过的四种宽度是 196（文本）/ 158（下拉）/ 186（滑块）/ 300（路径），
+         196 是「比下拉宽一档、又比路径窄」的中间值——邮箱、显示名这类内容比选项文字长，
+         但还不至于长到需要 300。三行文本输入框都用同一个 196，左右边缘才会齐；
+         宽度是字面量而不是绑定：文本行不需要按内容定宽，也不希望在用户输入时宽度抖动。
+         绑定：Text 双向（用户输入直接写回 VM 的 TextValue.Text）；Placeholder → Watermark
+         （水印只在 Text 为空时显示，正好拿来当「未绑定」提示）。 -->
     <DataTemplate DataType="{x:Type vm:TextValue}">
       <TextBox Text="{Binding Text, Mode=TwoWay}" Watermark="{Binding Placeholder}" Width="196" />
     </DataTemplate>
@@ -149,6 +200,13 @@
     <!-- 匹配 SelectValue：选项是字符串集合，Selected 双向绑定；宽度取 VM 的 Width（默认 158），
          Controls.axaml 里全局给 ComboBox 设了 HorizontalAlignment=Right，
          所以它只占自己那一小块，不会把右侧的星号列撑满 -->
+    <!-- 模板 4/15 · SelectValue → ComboBox，宽来自 VM 的 Width（默认 158），高 30（全局 MinHeight）。
+         158 的来历：要在 158 里放下最长的选项「Excel (.xlsx)」「人民币 CNY (¥)」这类十来个字符，
+         再宽就会把左侧标题列挤窄，再窄则会截断文字。
+         为什么能「只占一小块」：Controls.axaml 里全局给 ComboBox 设了 HorizontalAlignment=Right，
+         它不会去撑满父级；而外面行模板的 ContentControl 又是右对齐，两级右对齐叠起来，
+         所有下拉的右边缘才落在同一条线上。
+         绑定：ItemsSource→Options（只读集合，顺序即下拉顺序）；SelectedItem 双向→Selected。 -->
     <DataTemplate DataType="{x:Type vm:SelectValue}">
       <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected, Mode=TwoWay}"
                 Width="{Binding Width}" MinHeight="30" />
@@ -160,6 +218,20 @@
          IsChecked 双向绑定 IsOn；开/关的视觉全在主题里，靠 ^:checked /template/ Border#Track
          这类选择器实现：^ 指控件自身处于 :checked 伪类，/template/ 表示进入控件模板内部取名为
          Track 的元素，因此不需要在这里给轨道和滑块分别绑任何属性 -->
+    <!-- 模板 5/15 · ToggleValue → 挂了 SwitchToggle 主题的 ToggleButton，尺寸 38×21 全在主题里定性。
+         宽度 38 的来历：38 − 17（滑块直径）− 2（左间隙）− 2（右间隙）= 17 的可滑动行程，
+         差不多正好一倍的滑块宽度；21 高的轨道里上下各留 2（(21−17)/2），滑块才像嵌在槽里。
+         这些尺寸全部写在主题里，模板这边一个数值都不写，改比例只改主题一处。
+         绑定只有一条 IsChecked 双向→IsOn，其余视觉全交给主题的伪类样式。
+         关于主题里那条「^:checked /template/ Ellipse#Knob」到底命中什么：
+           ^         指 ControlTheme 的目标控件自身，也就是这个 ToggleButton；
+           :checked  是它的伪类，只有 IsChecked 为 true 时才成立；
+           /template/ 表示「进入控件模板内部继续找」，不是找业务子元素；
+           Ellipse#Knob 是模板里那颗 Name=Knob 的滑块。
+           整条读作「当开关被选中时，模板里的滑块」，命中后只改两件事：
+           HorizontalAlignment 由 Left 变 Right、Margin 由 2,0,0,0 变 0,0,2,0，
+           滑块贴到右边，于是有了「滑过去」的观感——没有任何动画，纯靠对齐方式切换。
+           省掉 /template/ 的话，选择器会去业务子元素里找 Ellipse，永远命不中模板元素。 -->
     <DataTemplate DataType="{x:Type vm:ToggleValue}">
       <ToggleButton Theme="{StaticResource SwitchToggle}" IsChecked="{Binding IsOn, Mode=TwoWay}" />
     </DataTemplate>
@@ -167,6 +239,15 @@
     <!-- 行取值：滑块 -->
     <!-- 匹配 RangeValue：TrackBar 负责拖拽，右侧 TextBlock 显示 DisplayText。
          整体宽 186、读数固定 44 宽并右对齐，这样从 80% 拖到 100% 时轨道长度不变 -->
+    <!-- 模板 6/15 · RangeValue → 横向 StackPanel：TrackBar 126 + 间距 10 + 读数 44 = 180，
+         但容器写的是 Width=186，多出来的 6 是容器内的空余（内容左对齐，所以读数右边缘比其它控件
+         内缩 6）。这 6 的来源无从考证：可能是给读数留的右侧呼吸，也可能只是凑出来的整数。
+         为什么读数固定 44：从 "80%" 到 "130%" 再到 "10 份"（3~4 个字符），44 都能装下；
+         固定宽度才能保证拖动时轨道长度不变、读数不把轨道挤短。
+         绑定：Minimum/Maximum→Min/Max；Value 双向→Value（setter 里会 Math.Round 取整）；
+              Text→DisplayText（计算属性，靠 VM 手动补通知才会刷新）。
+         交互约束：TrackBar 自身 Focusable=false，所以滑块只能用鼠标拖，不能用 Tab 聚焦后按方向键调；
+         这是控件层面的既定设计（条状控件若可聚焦，Tab 会在每个滑块上多停一次）。 -->
     <DataTemplate DataType="{x:Type vm:RangeValue}">
       <StackPanel Orientation="Horizontal" Spacing="10" Width="186">
         <ctrl:TrackBar Width="126" Height="14" MinHeight="14"
@@ -180,6 +261,13 @@
     <!-- 行取值：多选标签 -->
     <!-- 匹配 ChipsValue：默认 ItemsControl 是纵向 StackPanel，这里换成 WrapPanel，
          标签多到一行放不下时自动换行；整体靠右，与其它取值控件保持同一条右边线 -->
+    <!-- 模板 7/15 · ChipsValue → 可换行的标签组，整体最宽 300、靠右。
+         为什么是 MaxWidth 而不是 Width：标签数量不定（主题 3 个、指标卡 4 个），
+         用 MaxWidth 让它在放得下时收紧、放不下时才换行；MaxWidth 300 与 PathValue 的 300 同源，
+         都是「右列最宽不超过 300」这条约束的体现。
+         注意 WrapPanel 的 HorizontalAlignment=Right：换行后第二行也整体靠右，
+         而不是从左边重新排——这样视觉重心始终贴着右边缘。
+         内层 ItemTemplate 是显式模板，优先级高于隐式模板，所以 ChipItem 只会渲染成小标签。 -->
     <DataTemplate DataType="{x:Type vm:ChipsValue}">
       <ItemsControl ItemsSource="{Binding Items}" MaxWidth="300">
         <ItemsControl.ItemsPanel>
@@ -193,6 +281,10 @@
                ChipToggle 和上面的 SwitchToggle 一样是 ControlTheme 而不是 Class，
                选中态由主题内部的 ^:checked 选择器改 Border#Bg 的底色和描边 -->
           <DataTemplate DataType="{x:Type vm:ChipItem}">
+            <!-- 附加模板 A · ChipItem → 一枚小标签。宽度由内容 + Padding 10,4 撑出来（不写死），
+                 所以「深色」和「跟随系统」宽度不同，靠 WrapPanel 排成一行。
+                 Margin 0,0,6,6 在主题里：横竖间距都是 6，换行时上下行也保持同样间隔。
+                 IsChecked 双向绑定，没有命令参与，因此再次点击会取消选中（多选语义）。 -->
             <ToggleButton Theme="{StaticResource ChipToggle}" Content="{Binding Label}"
                           IsChecked="{Binding IsSelected, Mode=TwoWay}" />
           </DataTemplate>
@@ -203,6 +295,13 @@
     <!-- 行取值：按钮 -->
     <!-- 匹配 ButtonValue：文案、命令、三个画刷全部来自 VM，模板里不出现任何颜色。
          好处是「默认 / 主按钮 / 危险」三种语气只需要在 VM 里换开关，XAML 完全不动 -->
+    <!-- 模板 8/15 · ButtonValue → 普通 Button，宽度完全由内容（文案）决定，不写任何尺寸。
+         高度由全局 Button 样式的 MinHeight 28 与 Padding 12,0 决定（约 28），
+         所以「修改密码」和「退出登录」两个按钮宽度不同但高度一致。
+         四条绑定：Content→Text；Command→Command（没接线的落到 Noop）；
+                  Background/BorderBrush/Foreground→三个画刷属性。
+         模板里一个颜色都没有：三种语气（普通/主/危险）改名只改 VM，这里不用动。
+         代价：因为背景是本地绑定值，本文件顶部那些 Button.setitem 之类的样式类对它无效。 -->
     <DataTemplate DataType="{x:Type vm:ButtonValue}">
       <Button Content="{Binding Text}" Command="{Binding Command}"
               Background="{Binding Background}"
@@ -212,6 +311,11 @@
 
     <!-- 行取值：只读值 -->
     <!-- 匹配 InfoValue：等宽字体、不可编辑，用于版本号一类需要逐字符对齐的值 -->
+    <!-- 模板 9/15 · InfoValue → 等宽 TextBlock，宽度由内容决定（右对齐后左边缘逐行不齐，
+         但因为字数接近、又用等宽字体，视觉上仍像一列）。
+         为什么用等宽：11.3.22 / 8.0.0 / win-x64 里数字和字母的宽度不同，
+         比例字体下三行的字符对不齐，看起来像没排版。
+         FontSize 11.5 比正文小半号，与左侧没有描述文案的紧凑行高配合。 -->
     <DataTemplate DataType="{x:Type vm:InfoValue}">
       <TextBlock Text="{Binding Text}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                  Foreground="{StaticResource Text1}" VerticalAlignment="Center" />
@@ -220,6 +324,15 @@
     <!-- 行取值：路径 -->
     <!-- 匹配 PathValue：只读 TextBox 方便选中复制长路径，右侧「打开」目前只是占位（没接 Command）。
          整体宽度由 Grid 固定在 300，避免超长路径把整行撑宽 -->
+    <!-- 模板 10/15 · PathValue → 300 宽的横向 Grid：只读 TextBox（吃掉 Auto 列）+ 「打开」按钮。
+         300 的来历：这是右列所有取值控件里最宽的一种，也就是行宽约束的下限来源
+         （684 − 300 − 24 = 360，左侧标题列还剩 360）。路径动辄上百个字符，300 也放不下，
+         所以 TextBox 内部靠横向滚动/光标定位，而不是把行撑宽——这正是「固定宽 + 只读 + 等宽字体」
+         三个选择一起要解决的问题：可看、可复制、不破坏布局。
+         Grid 用 Auto,Auto 而不是 *,Auto：总宽已被外层 300 锁死，第一列拿到的是
+         「300 减去按钮宽度与 6 的间距」剩下的那部分，第二列只占按钮自身宽度；
+         这里写 * 效果相同，写 Auto 只是习惯。
+         按钮没有 Command，点击无行为，属于占位。 -->
     <DataTemplate DataType="{x:Type vm:PathValue}">
       <Grid ColumnDefinitions="Auto,Auto" Width="300">
         <TextBox Text="{Binding Text}" IsReadOnly="True" FontFamily="{StaticResource MonoFont}"
@@ -231,6 +344,12 @@
     <!-- 行取值：色板 -->
     <!-- 匹配 PaletteValue：横向一排色块。选中态靠 Classes.selected 绑定 SwatchItem.IsSelected，
          由 VM 里的 SwatchCommand 保证互斥；背景色直接绑 Brush，不用在这里列颜色 -->
+    <!-- 模板 11/15 · PaletteValue → 一排 6 个 20×20 色块，横向 8 间距，总宽 6×20 + 5×8 = 160。
+         160 比下拉的 158 宽 2，比文本的 196 窄 36，是右列最窄的一类取值。
+         选中环不是独立元素，而是按钮自身的 2px 边框：常态透明、选中变白（Button.swatch.selected），
+         因为 BorderThickness 一直是 2，切换时只换颜色不换尺寸，色块不会跳一下。
+         绑定：Swatches→ItemsSource；每项的 Background→Brush；Classes.selected→IsSelected；
+              Command→SwatchCommand，CommandParameter 传色块自身（命令靠它判断点了哪个）。 -->
     <DataTemplate DataType="{x:Type vm:PaletteValue}">
       <ItemsControl ItemsSource="{Binding Swatches}">
         <ItemsControl.ItemsPanel>
@@ -240,6 +359,10 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="{x:Type vm:SwatchItem}">
+            <!-- 附加模板 B · SwatchItem → 20×20 圆角色块，宽高全部来自 Button.swatch 样式。
+                 这里同时用了「静态类」和「条件类」：Classes="swatch" 是常量写法，
+                 Classes.selected="{Binding IsSelected}" 是绑定写法——后者在 bool 为 true 时
+                 把 selected 追加进 Classes，样式系统随即重新匹配 Button.swatch.selected。 -->
             <Button Classes="swatch" Classes.selected="{Binding IsSelected}"
                     Background="{Binding Brush}" Command="{Binding Command}" CommandParameter="{Binding}" />
           </DataTemplate>
@@ -254,6 +377,17 @@
          同一个模板里 Value 可以是 TextBox，也可以是开关或按钮。
          右侧统一 HorizontalAlignment=Right：所有取值控件贴齐同一条右边线，标题在左、值在右，
          视线扫一列就能读完，也让每行控件宽度不同（196 的输入框、158 的下拉）不会显得参差 -->
+    <!-- 模板 12/15 · SettingRow → 一行：左标题 + 可选描述，右取值控件。行宽 684（见文件头的宽度账）。
+         Grid 用 *,Auto：左列吃掉所有剩余空间，右列只占控件自身宽度。所以无论右侧是 158 还是 300，
+         右边缘都贴着同一条线、左列自动伸缩；若把右列也写成 *，不同宽度的控件会被拉成同宽，
+         反而看不出「这个值有多长」。
+         高度不写：由内容加 Border.setrow 的 Padding 0,10 决定，约 55（标题 + 描述）或 37（只有标题）。
+         关键机制「二次匹配」：右列的 ContentControl Content="{Binding Value}"，Value 的静态类型是
+             object，绑定时拿到的是运行时实例（TextValue / ToggleValue / ButtonValue ...），
+             ContentControl 会拿这个实例再走一次隐式模板查找，命中哪个 DataType 就实例化哪个模板。
+             这就是「一个行模板容纳所有控件类型」的全部秘密，也是整条数据链的最后一跳。
+             它是一次性的：SettingRow 不实现通知，Value 换类型不会让这一行自动换模板，
+             只能整页重建（换分区时就是重建的）。 -->
     <DataTemplate DataType="{x:Type vm:SettingRow}">
       <Border Classes="setrow">
         <Grid ColumnDefinitions="*,Auto">
@@ -277,6 +411,11 @@
     <!-- 分组 -->
     <!-- 匹配 SettingGroup：小标题（比正文小一号、用次级文字色）+ 圆角卡片，
          卡片内的 ItemsControl 把 Rows 逐行展开，行模板就是上面那个 SettingRow -->
+    <!-- 模板 13/15 · SettingGroup → 小标题（10.5 号、次级色、左边缩进 2 与卡片内容对齐）+ 圆角卡片。
+         宽度：撑满 716；卡片自身 Padding 16,2 让行内容左右各留 16，上下只留 2——
+         因为每行自己已有 10 的上下 Padding，卡片再给 10 会让首尾行离边框太远。
+         卡片内的 ItemsControl 不写 ItemsPanel：默认就是纵向 StackPanel，正是想要的效果。
+         Margin 底部 12 是卡片之间的间距，比行内的 10 略大，让「组」和「行」的层级看得出来。 -->
     <DataTemplate DataType="{x:Type vm:SettingGroup}">
       <StackPanel Margin="0,0,0,12">
         <TextBlock Text="{Binding Title}" FontSize="10.5" FontWeight="SemiBold"
@@ -290,6 +429,11 @@
     <!-- 链接行 -->
     <!-- 匹配 LinkItem：图标 + 标题 + 副标题 + 右侧「›」箭头。整行不可点击，
          因为目前只做展示，Command 字段留着给后续接线用 -->
+    <!-- 模板 14/15 · LinkItem → 一行 40 高的链接：14 图标 + 标题 + 灰色副标题 + 右侧「›」。
+         宽度撑满 684；高度写死 40 而不是靠内容：图标 14 与文字基线不好自动对齐，
+         固定 40 后三列都能用 VerticalAlignment=Center 稳稳居中。
+         注意标题与副标题是横向并排（同一个 Horizontal StackPanel），不是上下两行。
+         整行没有按钮、也没有 PointerPressed，所以点击无反应；Command 字段在 VM 里留着但没绑。 -->
     <DataTemplate DataType="{x:Type vm:LinkItem}">
       <Grid ColumnDefinitions="Auto,*,Auto" Height="40">
         <ctrl:Icon Data="{Binding Icon}" Width="14" Height="14" Foreground="{StaticResource Text2}"
@@ -306,6 +450,14 @@
     <!-- 匹配 SettingSection：右栏的整页内容。结构固定为「标题区 + 可选顶部卡 + 若干分组 + 可选资源区」，
          具体有什么由 VM 决定，所以这里是所有 7 个分区共用的一份模板。
          外层 ScrollViewer 只开纵向滚动：内容超出 680 高度时右栏自己滚，不带动整窗 -->
+    <!-- 模板 15/15 · SettingSection → 右栏整页：标题区 + 可选 TopCard + 若干分组 + 可选资源区。
+         宽度：撑满右栏 764（靠外面 ContentControl 的 HorizontalContentAlignment=Stretch）；
+              内层 StackPanel 再给 24 的左右边距 → 内容 716，减去卡片 Padding 16×2 得到行宽 684。
+         高度：撑满主体 574（680 − 50 − 56），超出时由这里的 ScrollViewer 自己纵向滚动，
+              横向滚动直接禁用（设置行本来就不该横向滚动）。
+         四个子块哪些会出现：标题区必在；TopCard 只在 HasTopCard 为 true 时占位；
+              Groups 永远存在（每个分区至少一组）；Links 只在 HasLinks 时出现，目前仅「关于」命中。
+         与左栏那份同类型模板不冲突：左栏用的是显式 ItemTemplate，优先级高于本份隐式模板。 -->
     <DataTemplate DataType="{x:Type vm:SettingSection}">
       <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="24,14,24,18">
@@ -345,6 +497,17 @@
     <!-- 铺满整个控件的半透明黑（#BD 不透明度 + 设计稿底色 #030407），
          点击即关闭浮层，事件处理在 SettingsOverlay.axaml.cs 的 OnMaskPressed。
          它写在面板之前，Z 序位于面板下方，所以只有点到面板之外的区域才会触发关闭 -->
+    <!-- 为什么点面板内部不会误关（把事件路径走一遍）：
+         PointerPressed 是冒泡事件：命中面板里某个控件（例如开关）后，事件沿「视觉树父链」
+         一层层往上冒，经过面板 Border、Panel，最后到 MainWindow 的根节点。
+         而遮罩是面板的「兄弟」而不是祖先，这条冒泡路径根本不经过它 —— 兄弟之间不传递事件。
+         反过来点面板外时，命中测试落到遮罩自己（它有 Background，是可命中区域），
+         事件在遮罩上触发，OnMaskPressed 才被执行。
+         还有两个隐含前提：面板 Border 有 Background（实色即可，透明色也算），所以它自己可命中、
+         会把点击「吃掉」，不会穿透到下面的遮罩；若把背景去掉（Brush 为 null），
+         面板就不再参与命中测试，点它会落到遮罩上、浮层被误关。
+         e.Handled 在 OnMaskPressed 里没有置 true，事件会继续往上冒到窗口根节点，
+         目前根节点没有监听 PointerPressed（只有四边八角的拖拽热区各自监听），所以无副作用。 -->
     <Border Background="#BD030407" PointerPressed="OnMaskPressed" />
 
     <!-- 设置窗口 -->
@@ -352,6 +515,10 @@
          MaxWidth/MaxHeight 与 Width/Height 相同，等于锁死尺寸，防止父容器拉伸。
          PopShadow 是 Theme.axaml 里的 70px 大扩散阴影，用来把面板从暗遮罩上「托」起来；
          ClipToBounds 保证内容不越过 14 圆角，否则滚动内容会在圆角处露直角 -->
+    <!-- 为什么宽度和最大宽度都写：Width/Height 是「期望尺寸」，MaxWidth/MaxHeight 是「上限」。
+         Panel 默认按对齐方式摆放子元素、不会拉伸，但外层若换成会拉伸的容器（如 Grid 的 * 行），
+         单靠 Width 有可能被拉大；两个都写等于把尺寸彻底锁死。
+         面板本身 Padding 为 0：所有内边距都放在三行的子元素上，头部与底栏的分隔线才能贴到左右边缘。 -->
     <Border Width="940" Height="680" MaxWidth="940" MaxHeight="680"
             HorizontalAlignment="Center" VerticalAlignment="Center"
             Background="{StaticResource Bg1}"
@@ -359,9 +526,15 @@
             CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
       <!-- 三行：50 标题栏（固定）、* 主体（占满剩余）、56 底栏（固定），
            中部高度由 680 减去上下两栏得到，右栏再在这个高度内自己滚动 -->
+      <!-- 高度账：50（头部）+ 574（主体，*）+ 56（底栏）= 680。
+           * 行吃掉全部剩余，所以主体高度由面板高度自动算出；头部与底栏都是固定值，
+           因为它们的内容高度本来就固定（一行字 / 一个 34 高的按钮），不需要参与分配。 -->
       <Grid RowDefinitions="50,*,56">
 
         <!-- 头部：标题 + 关闭按钮，下边框把标题栏和内容分开 -->
+        <!-- 头部内边距 20,0,12,0：左边 20 与右栏内容的 24 接近但略小（标题本来就不需要对齐正文），
+             右边只给 12 是因为关闭按钮自带内边距，给 20 会显得离边缘太远。
+             高度 50 由外层固定：内部垂直居中即可，不需要写 Height。 -->
         <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,0,12,0">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="设置" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -376,16 +549,29 @@
 
         <!-- 主体 -->
         <!-- 两列：左栏固定 176（分区数量固定，宽度不需要自适应），右栏星号占满剩余空间 -->
+        <!-- 176 的算法见左栏模板说明：最长标题 + 图标 + 间距 + 内边距约 107，留出余量后取整到 176。
+             若以后左栏要加二级菜单，这个数字和面板宽度都要一起改（764 的宽度账从它开始算）。 -->
         <Grid Grid.Row="1" ColumnDefinitions="176,*">
 
           <!-- 左栏容器：比面板底色再暗一档（12% 黑）并在右侧加一条分隔线，形成视觉分区 -->
           <Border Background="#24000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+            <!-- 颜色说明：#24 的 alpha 是 0x24 = 36/255 ≈ 14%，比「12% 黑」的说法略高一点，
+                 属注释里的近似描述；右侧 1px 竖线用 Line 资源，和分组卡片描边同一档，
+                 左右两栏因此有一道统一的分隔。 -->
             <!-- 两行：分区列表占满高度，底部留给版本号文案；外层 10,12 的内边距让按钮不贴边 -->
             <Grid RowDefinitions="*,Auto" Margin="10,12">
               <ItemsControl ItemsSource="{Binding Settings.Sections}">
                 <!-- 注意：这里是本文件第二份 SettingSection 模板，但写在 ItemTemplate 里属于显式指定，
                      优先级高于上面那份隐式模板，所以左栏只会渲染成一行按钮而不是整页内容 -->
                 <ItemsControl.ItemTemplate>
+                  <!-- 附加模板 C · SettingSection（左栏版）→ 一行按钮：15 图标 + 标题。
+                       宽度：Button 设了 HorizontalAlignment=Stretch，占满 176 − 10×2（Grid 的 Margin）= 156；
+                       高度：Padding 10,8 撑出约 34，加 Margin 底部 2 即 36，7 项共 252，
+                       远小于左栏可用高度（574 − 上下 Margin 24 − 底部文案约 30），不会出现滚动。
+                       176 这个列宽按「最长的标题」定：「存储与备份」5 个字 × 12.5 ≈ 63，
+                       加图标 15、间距 9、左右内边距 20，共约 107，还剩 49 的余量不会截断。
+                       这是显式模板（写在 ItemTemplate 里），所以同一个 SettingSection 在左栏渲染成按钮、
+                       在右栏渲染成整页，两份模板互不干扰。 -->
                   <DataTemplate DataType="{x:Type vm:SettingSection}">
                     <!-- Classes.selected 跟进 IsSelected：点哪个分区，VM 里的 Select 就只会让那个为 true；
                          CommandParameter 传自身，因此 7 个分区的 Command 可以共用同一个 SelectCommand -->
@@ -411,6 +597,12 @@
           <!-- 右栏：Content 绑 Settings.Current（SettingSection），交给隐式模板渲染成整页；
                Stretch 让模板根节点撑满这一格，否则 ScrollViewer 只会跟内容一样宽；
                ClipToBounds 防止滚动内容画出边界盖住圆角 -->
+          <!-- 数据链的首尾在这里接上：Current 一变，这个 ContentControl 就重新查找模板、重建整页。
+               绑定路径带 Settings. 前缀，因为本文件根节点的 x:DataType 是 MainWindowViewModel；
+               进入模板后数据上下文换成各自的 DataType，所以模板内部写的是裸属性名。
+               两个 Stretch 缺一不可：HorizontalContentAlignment 决定模板根的横向拉伸，
+               VerticalContentAlignment 决定纵向；漏掉纵向时 ScrollViewer 只有内容那么高，
+               背景与滚动区域不会铺满 574，滚动条也会跑到半空中。 -->
           <ContentControl Grid.Column="1" Content="{Binding Settings.Current}"
                           HorizontalContentAlignment="Stretch"
                           VerticalContentAlignment="Stretch" ClipToBounds="True" />
@@ -420,6 +612,10 @@
         <!-- 左边是静态说明文案：所有设置项即时生效并自动保存，所以这里没有「应用」按钮；
              右边 pri 是 Controls.axaml 里的主按钮类（渐变底 + 白字），一屏只放这一个主操作，
              点「完成」同样走 CloseSettingsCommand -->
+        <!-- 底栏 56 高、Padding 20,0：与头部同样的左右 20，形成上下呼应的边线。
+             背景 #29000000 是 41/255 ≈ 16% 黑，比左栏的 14% 略深一点，用来压住底部这层「操作条」。
+             「完成」按钮 Height 34、Padding 20,0：34 是 56 高里上下各留 11 的结果，
+             与 pri 类的最小高度配合，不必再写 MinHeight。 -->
         <Border Grid.Row="2" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
                 Background="#29000000" Padding="20,0">
           <Grid ColumnDefinitions="*,Auto">
@@ -432,5 +628,25 @@
       </Grid>
     </Border>
   </Panel>
+
+  <!-- ==================== 阅读时发现的问题（只记录，未改代码） ====================
+       1) RangeValue 模板的容器宽 186，而内容是 126 + 10 + 44 = 180，多出的 6 让读数右边缘
+          比其它控件内缩 6px。行内右对齐时这种偏差肉眼不太看得出，但它确实是「不一致」。
+       2) 左栏底色 #24000000 的 alpha 是 36/255 ≈ 14%，原注释写的是「12% 黑」，属近似值。
+       3) SettingSection 有两份模板（左栏按钮版 / 右栏整页版）。这是有意的，但代价是给
+          SettingSection 加字段时要想清楚「两处是不是都要用」，只在右栏加会漏掉左栏的对应改动。
+       4) 硬编码色值散落在模板里：#BD030407（遮罩）、#24000000 / #29000000（左右栏底）、
+          #336C8BFF（选中描边）、#0AFFFFFF（行分隔线）、#33FFFFFF（头像圆描边）、
+          #0A0B10（头像首字）、#A9BAFF / #266C8BFF / #3D6C8BFF（角色标签）等，
+          都没有走 Theme.axaml 的设计令牌。改深色配色时这些是漏网之鱼。
+       5) 遮罩的「点击关闭」没有防抖：按下即执行命令。连点两下时第二次 IsSettingsOpen 已经是 false，
+          Set 返回 false、不发通知，所以没有可见副作用，但也意味着这里不校验事件来源。
+       6) 「已是最新」胶囊是写死的文本，而 AboutCard.Meta 也带「已是最新 · 日期」，
+          两处语义重复，将来若接真实更新检查，需要一起改。
+       7) LinkItem 模板视觉上像可点击（右侧有「›」箭头），但整行没有命令、也没有指针事件，
+          点了没反应，容易让人以为是 bug。
+       8) 每次切换分区，右栏 ContentControl 都会重建整棵子树（包括 ScrollViewer），
+          因此滚动位置不会保留；重复点同一个分区时 Current 不变、不重建，滚动位置反而保留。
+       ============================================================================ -->
 
 </UserControl>

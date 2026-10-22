@@ -4,9 +4,31 @@
      位置：ShellView 里已有 HomeViewModel 到 HomeView 的 DataTemplate，但一级导航当前只有「管理 / 设置」，
            本页当前未挂到一级导航，保留待恢复。
      数据：全部绑 HomeViewModel 的静态假数据；页面内没有任何 Command，按钮都是空壳。
-     坑：根节点 x:DataType 让绑定走编译期校验，VM 里缺同名属性会直接编译报错。
+     坑：根节点 x:DataType 只是「绑定上下文类型提示」；本项目没有开启编译绑定
+         （csproj 里 AvaloniaUseCompiledBindingsByDefault=false，根元素也没写
+         x:CompileBindings="True"），所以属性名写错不会编译报错，只会在运行期
+         输出绑定错误日志、界面显示为空。
      说明：样式统一用 StaticResource（资源在 App 启动时已加载），不用 DynamicResource。
      ========================================================================== -->
+<!-- 整页结构示意（自上而下只有一个 StackPanel，整页 Margin 26,24,28,34）：
+     ┌───────────────────────────────────────────────────────────────┐
+     │ 问候区 · Grid *,Auto · 左：问候 + 姓名（渐变）+ 副标题          │
+     │                        · 右：新建文档 / 继续播放 两个按钮        │
+     ├───────────────────────────────────────────────────────────────┤
+     │ 指标卡区 · UniformGrid Columns=4 · 四张卡等宽横排               │
+     ├────────────────────────────────┬──────────────────────────────┤
+     │ 左列 155*                       │ 右列 100*                     │
+     │ ┌────────────────────────────┐ │ ┌───────────────────────────┐ │
+     │ │ 最近编辑 · 4 行列表          │ │ │ 继续播放 · 封面 + 进度     │ │
+     │ └────────────────────────────┘ │ └───────────────────────────┘ │
+     │ ┌────────────────────────────┐ │ ┌───────────────────────────┐ │
+     │ │ 快捷操作 · 2x2 按钮          │ │ │ 今日节奏 · Sparkline       │ │
+     │ └────────────────────────────┘ │ └───────────────────────────┘ │
+     └────────────────────────────────┴──────────────────────────────┘
+     列宽 155*:100* 即 60.8% : 39.2%（155/255 与 100/255），两列都随窗口等比伸缩；
+     两列之间那 14px 缝隙不是 ColumnSpacing，而是右列 StackPanel 自带的 Margin 14,0,0,0，
+     这样卡片描边离缝隙的距离与左列保持一致（若再加 ColumnSpacing 会变成 28px）。
+     整页外面套 ScrollViewer：高度不够时纵向滚动；宽度不够时横向禁止滚动，避免卡片被拖出视口。 -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Aster.ViewModels"
@@ -14,6 +36,13 @@
              x:Class="Aster.Views.HomeView"
              x:DataType="vm:HomeViewModel">
 
+  <!-- 根节点三个命名空间的作用：
+       xmlns:vm="using:Aster.ViewModels" → 让 DataType="{x:Type vm:KpiItem}" 这类模板匹配能解析到 C# 类型；
+       xmlns:ctrl="using:Aster.Controls" → 让 ctrl:Icon / ctrl:Sparkline 这些自绘控件可被声明；
+       x:DataType="vm:HomeViewModel"     → 声明本文件的绑定上下文类型，为 {Binding} 提供类型推导，
+                                           也是 DataTemplate 内 x:DataType 的继承起点。注意它只负责
+                                           「类型提示」：本项目的编译绑定是关闭的，属性名写错不会
+                                           编译失败，只在运行期输出绑定错误。 -->
   <!-- 整页可滚动：只开纵向滚动条、横向禁用，避免窗口变窄时卡片被拖出视口产生横向晃动。 -->
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
     <!-- 页面内容纵向堆叠，26/24/28/34 的内边距即整页留白基准（左 / 上 / 右 / 下）。 -->
@@ -72,14 +101,27 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <!-- 单卡三层：标题 / 数值行 / Delta 胶囊；卡片间距由 Border 的 Margin 0,0,14,0 提供。 -->
+          <!-- 模板消费的字段（全部来自 KpiItem，均为 init-only，渲染完就不再变）：
+               Title → ①②③ 之外的第一行灰标题
+               Value / Unit / Tail → 数值行三段拼接
+               Delta → 胶囊文字；ValueBrush / DeltaBrush / DeltaBackground → 三处颜色
+               DeltaKind 本身在模板里一次都没出现：字符串到画刷的 switch 全写在 Items.cs 的 KpiItem 里。 -->
           <DataTemplate DataType="{x:Type vm:KpiItem}">
             <Border Classes="card" Margin="0,0,14,0" Padding="15,14">
               <StackPanel>
                 <TextBlock Text="{Binding Title}" FontSize="11.5" Foreground="{StaticResource Text2}" />
+                <!-- 数值行三段拼接的排版意图：这是一句"数字 + 单位 + 附注"，读起来要像同一句话， -->
+                <!-- 但三级字号（26 / 13 / 12）又要让人一眼看出主次。 -->
+                <!-- 三个 TextBlock 全部 VerticalAlignment=Bottom 且统一再抬 3px 下边距： -->
+                <!-- 26px 数字的基线本身偏低，靠底部对齐 + 3px 才能让 13px 单位、12px 附注的基线视觉上压在同一条线上。 -->
                 <StackPanel Orientation="Horizontal" Margin="0,9,0,7">
                   <!-- Classes="metric" 提供 26px + SemiBold（见 Controls.axaml 的 TextBlock.metric），颜色绑 VM 的 ValueBrush。 -->
                   <TextBlock Text="{Binding Value}" Classes="metric" Foreground="{Binding ValueBrush}" />
                   <!-- Unit / Tail 都是可空字段，用 HasUnit / HasTail 控制显隐，避免空串也占位撑出空隙。 -->
+                  <!-- 单位 13px、Margin 2,0,0,3：要紧贴大数字，所以左侧只留 2px，读作"32h"。 -->
+                  <!-- 附注 12px、Margin 4,0,0,3：与单位之间再多 4px，读作"32h 18m"里的分隔，语气上不再是同一个量。 -->
+                  <!-- 两段各自绑 HasUnit / HasTail（值为 null 或空串时为 false）：IsVisible=false 的元素不参与布局， -->
+                  <!-- 所以第一张卡（无单位无附注）右侧不会出现两段空洞；换成 Visibility 靠 Opacity 隐藏就会留白。 -->
                   <TextBlock Text="{Binding Unit}" FontSize="13" Foreground="{StaticResource Text1}"
                              VerticalAlignment="Bottom" Margin="2,0,0,3"
                              IsVisible="{Binding HasUnit}" />
@@ -88,6 +130,11 @@
                              IsVisible="{Binding HasTail}" />
                 </StackPanel>
                 <!-- Delta 胶囊：Border.pill 给 999 圆角，底色与文字色分别绑 DeltaBackground / DeltaBrush，XAML 不做颜色分支。 -->
+                <!-- 这两个画刷由 KpiItem 内部的 switch 按 DeltaKind 现算： -->
+                <!--   up   → 绿字 + 绿 10% 底；dn → 红字 + 红 10% 底；warn → 琥珀字 + 琥珀 10% 底；其它 → 灰字 + 白 5% 底。 -->
+                <!-- 模板这一层只看得到"两个 IBrush"，既没有 Color 常量也没有条件样式， -->
+                <!-- 所以新增一种语义（比如 info）只改 Items.cs 的映射表，本文件不用动。 -->
+                <!-- HorizontalAlignment=Left：Border 默认按内容宽度收窄，但在 StackPanel 里会被拉满，这里显式靠左贴边。 -->
                 <Border Classes="pill" Background="{Binding DeltaBackground}" HorizontalAlignment="Left">
                   <TextBlock Text="{Binding Delta}" FontSize="11" Foreground="{Binding DeltaBrush}" />
                 </Border>
@@ -220,8 +267,11 @@
                   <TextBlock Text="{Binding NowPlayingArtist}" FontSize="11.5" Foreground="{StaticResource Text2}"
                              Margin="0,4,0,10" />
                   <!-- 进度条是两层 Border：外层 3px 灰轨（W10），内层紫色填充（AccentViolet）。 -->
+                  <!-- 内层宽度靠 HorizontalAlignment=Left 从左侧生长，右端不封口，视觉上就是"已播过一段"。 -->
                   <Border Height="3" CornerRadius="3" Background="{StaticResource W10}">
                     <!-- 内层 Width=42 是写死的，没有绑 NowPlayingProgress，所以进度永远停在同一位置。 -->
+                    <!-- 提醒：VM 里 NowPlayingProgress 也是 42，但那是 0~100 的百分数，这里是像素； -->
+                    <!-- 两个 42 只是数值上的巧合，不存在任何换算，别把它们当成"进度条已经绑上了"。 -->
                     <Border Width="42" Height="3" CornerRadius="3" HorizontalAlignment="Left"
                             Background="{StaticResource AccentViolet}" />
                   </Border>
@@ -248,6 +298,10 @@
               <StackPanel Margin="16,14">
                 <!-- Sparkline 绑 Points（IReadOnlyList<double>）与 Stroke，内部自行求 min/max 画折线 + 渐变面积。 -->
                 <!-- Height=78 给足画布高度；13 个点会被均匀拉伸铺满整行宽度。 -->
+                <!-- 自归一化说明：Sparkline.Render 先扫一遍点集求 min/max，把 [min, max] 线性压到 [0, 1]， -->
+                <!-- 再映射到"扣掉线宽留白之后"的高度。所以 Rhythm 里给 60/52/56 这种原始量级就够了， -->
+                <!-- 不需要预先换算成百分比或像素；改成 0.6/0.52/0.56 画出来一模一样。 -->
+                <!-- 唯一的门槛是"至少两个点"：少于两个点控件直接 return，这里 13 个点远高于下限。 -->
                 <ctrl:Sparkline Points="{Binding Rhythm}" Height="78" Stroke="{StaticResource Accent}" />
                 <!-- 4 等分刻度：首列左对齐、末列右对齐，中间两列居中，视觉上与折线起止点对齐。 -->
                 <Grid ColumnDefinitions="*,*,*,*" Margin="0,7,0,0">

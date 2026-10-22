@@ -11,6 +11,26 @@
      坑：MinWidth/MinHeight 与初始 Width/Height 同为 1320x850，三栏布局按此宽度设计，
          再窄会把内容区挤坏，所以最小尺寸不允许更小。
      ============================================================ -->
+
+<!-- 整窗结构（1320 × 850，除桌面合成之外全部自绘）：
+     ┌───────────────────────────────────────────────────────────┐ ← 窗口矩形：一块透明画布
+     │ ┌───────────────────────────────────────────────────────┐ │
+     │ │ Border：圆角 14 · Bg1 底 · Line2 1px 描边 · 外阴影    │ │
+     │ │ ┌───────────────────────────────────────────────────┐ │ │
+     │ │ │ Panel：五层叠放，后声明者在上                     │ │ │
+     │ │ │  1 ShellView        IsVisible = IsApp             │ │ │
+     │ │ │  2 LoginView        IsVisible = IsLogin           │ │ │
+     │ │ │  3 BootView         IsVisible = IsBoot            │ │ │
+     │ │ │  4 SettingsOverlay  IsVisible = IsSettingsOpen    │ │ │
+     │ │ │  5 Grid：8 个 6/14px 缩放热区（压在最上层）       │ │ │
+     │ │ └───────────────────────────────────────────────────┘ │ │
+     │ └───────────────────────────────────────────────────────┘ │
+     └───────────────────────────────────────────────────────────┘
+     四层视图是「叠页面」而不是「切页面」：四个实例常驻，只切 IsVisible，
+     既省掉反复重建的开销，也保住了各视图内部的滚动位置与输入状态。 -->
+<!-- 注意区分两件事：这里常驻的是四个「阶段视图」（Shell / Login / Boot / 设置浮层），
+     它们从应用启动活到退出；而 ShellView 内部按 ActiveView 换页时，页面是会重建的
+     （ContentControl 换内容就重新实例化），细节见 ShellView.axaml 内容区那段说明。 -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Aster.ViewModels"
@@ -29,11 +49,45 @@
         Background="Transparent"
         ExtendClientAreaToDecorationsHint="False">
 
+  <!-- ===== 根元素属性：无边框窗口的开关组合 =====
+       Title="Aster"：任务栏、Alt+Tab 与系统菜单里显示的名字；自绘标题栏不读它。
+       Width/Height=1320×850：设计稿基准尺寸，单位是逻辑像素（DIP）。
+         高分屏上会乘缩放比变成物理像素，XAML 里的数字不需要跟着 DPI 改。
+       MinWidth/MinHeight 与初始尺寸完全相同：与 CanResize=True 组合后得到
+         「只能放大、不能缩小」——三栏 74 + 260 + 内容区按 1320 宽排布，
+         再窄内容区会被挤到换行或截断，所以下限直接钉在初始值上。
+         没有设 MaxWidth/MaxHeight，放大上限就是屏幕工作区。
+       CanResize=True：允许用户改变窗口尺寸，它是热区能生效的前提——
+         设为 False 时窗口没有可缩放边框，系统收到缩放请求也不会动，
+         八个热区就退化成八块透明贴纸；而真正限制下限的是 MinWidth/MinHeight。
+       WindowStartupLocation=CenterScreen：按主屏「工作区」（已扣掉任务栏）居中，
+         而不是按物理屏幕居中，否则窗口底边会被任务栏压住。
+       SystemDecorations=None：不要系统画的标题栏、边框与三枚按钮，窗口只剩客户区。
+         代价是拖动、缩放、双击最大化、系统圆角与系统投影全部消失（本文件与
+         ShellView 各自补一半）。
+       TransparencyLevelHint=Transparent：请求逐像素透明的合成方式
+         （Windows 上走 DWM 分层窗口）。圆角之外要真的透出桌面，必须有它。
+       Background=Transparent：把窗口自身那层底色换成「透明画刷」。
+         在 Border / Panel 这类容器上，Background=null 表示「不绘制、也不参与命中测试」，
+         Transparent 则表示「透明但仍接住鼠标」——窗口这层写 Transparent 是为了语义明确：
+         底色被清空，但根视觉依然是一块可绘制、可命中的面。
+       ExtendClientAreaToDecorationsHint=False：显式关掉「客户区扩展到标题栏」机制。
+         那套机制是给「保留系统边框、只自绘标题栏」的窗口准备的；
+         这里已经没有装饰，打开只会多一层坐标换算和标题栏高度补偿。
+       四者合起来的效果：SystemDecorations 拿掉系统边框 → TransparencyLevelHint 让
+       窗口像素可以带 alpha → Background 清空底色 → 真正被看见的「窗体」是下面那层
+       Border 的圆角、描边与阴影。视觉上像有系统边框，系统眼里仍是普通矩形。 -->
+
   <!-- ===== 窗口级样式：仅服务于自绘缩放热区 ===== -->
   <Window.Styles>
     <!-- 无边框窗口没有系统边框，靠透明热区自己接住鼠标 -->
+    <!-- 样式写在 Window.Styles 里，作用域仅限本窗口的视觉子树（不会污染其它窗口/弹层）；
+         用 .grip 类而不是逐个元素写 Background，是为了让「热区」这个概念在 XAML 里
+         只需出现一次，八个 Border 共享同一条规则，将来改颜色/加描边只改这里。 -->
     <!-- 热区必须显式给透明背景：Avalonia 中 Background=null 的控件不参与命中测试，
          那样鼠标会穿透到下面的页面，缩放就永远触发不了 -->
+    <!-- 另注：透明画刷虽然看不见，但它让 Border 成为「可命中」的对象，
+         这正是热区能用一条 Background 换来鼠标事件的原理。 -->
     <Style Selector="Border.grip">
       <Setter Property="Background" Value="Transparent" />
     </Style>
@@ -43,6 +97,18 @@
        TransparencyLevelHint=Transparent 让窗口自身背景全透明，真正的「窗体」是这一层 Border。
        ClipToBounds 保证内部视图不会溢出圆角；BoxShadow 需要窗口透明才看得见，
        这也是不用 SystemDecorations 的代价与收益：圆角与外阴影换来自绘边框的全部工作。 -->
+  <!-- 逐项说明这层 Border 的视觉职责（它是整窗唯一「实心」的矩形）：
+       CornerRadius=14：设计稿的窗口圆角，比 Win11 系统的 8 更「卡片化」。
+         它只影响绘制与 ClipToBounds，不改变窗口的矩形命中区域——四角仍是窗口的地盘。
+       Background={StaticResource Bg1}：整窗的基色 #0E1015。后面 rail 的 18% 黑、
+         二级导航的 16% 黑都叠在它上面，所有明度差都以它为基准。
+       BorderBrush=Line2 + BorderThickness=1：Line2 是 12% 白，这 1px 就是「系统边框」
+         的替身；也是圆角处唯一能看出窗口边界的地方（阴影在深色桌面上几乎不可见）。
+       BoxShadow=WindowShadow：0 18 48 #CC000000（下移 18、模糊 48、80% 黑），
+         设计意图是在浅色桌面上把窗口托起来。注意阴影画在 Border 之外，
+         而 Border 已经填满窗口客户区，所以真正落到屏幕上的部分会被窗口边缘裁掉，
+         实际观感比参数看起来更收敛（见文件末尾的问题记录）。
+       ClipToBounds=True：裁的是子元素（页面内容不会画出圆角），不影响自身的阴影绘制。 -->
   <Border CornerRadius="14"
           Background="{StaticResource Bg1}"
           BorderBrush="{StaticResource Line2}"
@@ -52,6 +118,9 @@
     <!-- 叠层容器：四个视图共享同一块矩形区域，靠 IsVisible 互斥显隐；
          子元素按声明顺序叠放，越靠后越靠上，所以 SettingsOverlay 必须在页面之后、
          缩放热区之前：设置浮层要盖住页面，但不能盖住热区。 -->
+    <!-- Panel 是最朴素的布局容器：不做行列划分，所有子元素都叠在同一块区域里，
+         默认拉伸填满；Z 序 = 声明顺序（后声明者在上），且没有任何排序属性可改。
+         IsVisible=false 的子元素既不参与布局也不参与命中，所以互斥显隐不会互相干扰。 -->
     <Panel>
       <!-- Shell 在 code-behind 里会生成同名字段，便于调试时定位主线视图；
            实际显隐完全由 VM 的 IsApp（AppStage.App）驱动 -->
@@ -62,8 +131,18 @@
 
       <!-- ================= 缩放手柄：四边 + 四角 ================= -->
       <!-- 外层 Grid 不做行列划分，八个 Border 各自用对齐方式贴边，互不干扰布局 -->
+      <!-- 这一层是 Panel 的最后一个子元素，因此压在所有页面之上：
+           好处是浮层、弹层都不会挡住缩放，边缘永远可拖；
+           代价是页面最外侧 6px 内的控件（例如内容区第一列的按钮边沿）会被热区吃掉点击，
+           这是无边框窗口的常规取舍——想避免只能给热区加更严格的命中条件。 -->
       <!-- 四边：厚 6px，因为太厚会盖住页面边缘的点击，太薄则不易命中 -->
       <Grid>
+        <!-- 八个 Border 都没有 Grid.Row/Column，全部落在同一格 (0,0)，
+             位置完全由 HorizontalAlignment/VerticalAlignment 决定：
+             Top = 整条横带贴在顶部、Bottom = 贴底、Left/Right 同理。
+             它们互不挤压，因为 Grid 不做行列分隔，也就没有「占位」的概念。
+             Grid 自身没有 Background，所以中间那片空白不参与命中测试，
+             页面中间的点击可以照常穿透到下面的视图。 -->
         <!-- Tag 与 WindowEdge 枚举名一一对应（North/South/West/East/NorthWest...），
              code-behind 里直接 Enum.TryParse 转成系统枚举，省掉 8 个重复处理器 -->
         <Border Classes="grip" Height="6" VerticalAlignment="Top"
@@ -75,9 +154,24 @@
         <Border Classes="grip" Width="6" HorizontalAlignment="Right"
                 Cursor="SizeWestEast" Tag="East" PointerPressed="OnResizePressed" />
 
+        <!-- 四条边的尺寸写法有讲究：只写「厚度」这一个维度，另一维不写 → 默认拉伸，
+             于是 North/South 是贯穿整宽的横带、West/East 是贯穿整高的竖带，
+             窗口尺寸变化时自动跟随，不需要任何代码参与。
+             6px 是经验值：Windows 原生边框约 4~8px，取 6 既好抓取又不至于明显侵占页面。
+             Cursor 用 SizeNorthSouth（上下双向箭头）/ SizeWestEast（左右双向箭头），
+             与系统窗口边缘的光标保持一致，用户不用试就知道这里能拖。 -->
         <!-- 四角覆盖在四边之上，保证角落优先命中 -->
         <!-- 四角取 14px 见方，比 6px 的边条更宽，保证落在角落时先命中角而不是相邻的边 -->
         <!-- 光标用 TopLeftCorner 等角标样式，与系统窗口的视觉预期保持一致 -->
+        <!-- 为什么四角写在四边之后：命中测试按 Z 序从最上层往下找，而 Z 序就是声明顺序
+             （后声明者在上），所以「写在后」等于「优先命中」。角落 14×14 与边条 6px 重叠的
+             那 6px 区域，最终由角接管——拖角落时是斜向缩放，拖边时才是单向缩放。
+             也可以用 Panel.ZIndex 显式指定层级，但这里没必要：
+             声明顺序本身已经表达了意图，多写一个附加属性反而要额外维护。 -->
+        <!-- 14 的来历：与窗口圆角 CornerRadius 同值。圆角半径就是「边看起来开始弯」的位置，
+             让热区的角块覆盖这段弧度，视觉与手感才对得上；比边条的 6 大，也保证角落优先。 -->
+        <!-- Tag 取 NorthWest/NorthEast/SouthWest/SouthEast，与 WindowEdge 枚举完全同名，
+             顺序也按「先上下、后左右」写成 NorthWest 而不是 WestNorth。 -->
         <Border Classes="grip" Width="14" Height="14" HorizontalAlignment="Left" VerticalAlignment="Top"
                 Cursor="TopLeftCorner" Tag="NorthWest" PointerPressed="OnResizePressed" />
         <Border Classes="grip" Width="14" Height="14" HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -89,5 +183,15 @@
       </Grid>
     </Panel>
   </Border>
+
+  <!-- ===== 本文件相关的已知观察（只记录，不改代码） =====
+       1) BoxShadow：Border 已经填满窗口客户区，而阴影是画在 Border 之外（下移 18、模糊 48），
+          超出窗口表面的部分会被裁掉，所以 WindowShadow 在桌面上几乎看不见。
+          参数本身没问题，缺的是「给阴影留余量」——常见做法是给窗口留一圈透明 padding，
+          或让 Border 四周各缩进 20 左右。这条同样出现在上面的逐项说明里。
+       2) 缩放热区压在所有页面之上：页面最外侧 6px 内的按钮、链接会被热区吃掉点击。
+          这是「边缘永远可拖」的代价，两者是同一个设计的两面。
+       3) CanResize=True 配 MinWidth/MinHeight 等于初始尺寸，实际效果是「只能放大、不能缩小」；
+          将来若要支持小屏，得同时下调三栏的基准宽度，光改 MinWidth 会把内容区挤坏。 -->
 
 </Window>

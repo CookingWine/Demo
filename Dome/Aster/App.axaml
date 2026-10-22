@@ -9,12 +9,26 @@
      易踩坑：选择器样式写进 MergedDictionaries 不会生效；RequestedThemeVariant="Dark"
            只切换 FluentTheme 内置变体，本项目配色实际由 Theme.axaml 的令牌决定。
      ============================================================ -->
+
+<!-- 根元素属性逐项说明（这些属性决定「这份 XAML 属于谁」与「主题从哪来」）：
+     x:Class="Aster.App"：把本文件声明为 Aster.App 这个 partial 类型的 XAML 半边。
+       AvaloniaXamlLoader.Load(this) 解析到这里时，会把内容灌进那个已经存在的实例，
+       所以 App 的生命周期（Initialize → OnFrameworkInitializationCompleted）能先于窗口发生。
+     RequestedThemeVariant="Dark"：只切换 FluentTheme 内置的明/暗变体（系统控件默认配色、
+       滚动条、ToolTip、右键菜单等），以及 ThemeVariant 作用域资源的查找键；
+       本项目 90% 的观感来自 Theme.axaml 的自定义令牌，所以把它改成 Light 不会让界面变浅，
+       只会让 FluentTheme 自带的少数控件（如未覆写的下拉项）跟着变浅。 -->
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Aster.App"
              RequestedThemeVariant="Dark">
 
   <!-- ===== 资源区：设计令牌 ===== -->
+  <!-- 资源（Resources）与样式（Styles）是两条独立的通道：
+       资源靠「键」查找（{StaticResource Bg1}），只提供对象、本身不会作用于任何控件；
+       样式靠「选择器」命中控件（Style Selector="Button.nav"），必须放进 Styles 才会生效。
+       把选择器样式误放进 MergedDictionaries 是常见错误：字典能加载、键也查得到，
+       但没有任何控件被它作用，界面上表现为「样式完全没生效」。 -->
   <Application.Resources>
     <!-- 显式包一层 ResourceDictionary：MergedDictionaries 是该类型的成员，
          也便于以后在同一字典里追加非合并的局部资源 -->
@@ -22,18 +36,30 @@
       <ResourceDictionary.MergedDictionaries>
         <!-- 颜色、画刷、字体、ControlTheme、BoxShadows 全部来自这里，
              用 ResourceInclude 而非 StyleInclude：前者进资源字典，后者才进样式树 -->
+        <!-- avares:// 是 Avalonia 自己注册的 URI 方案，格式为 avares://<程序集名>/<资源路径>；
+             这里的 Aster 就是 Aster.csproj 里的 AssemblyName，改名时这两处必须同步改，
+             否则运行期会抛「找不到资源」而不是编译错误。 -->
         <ResourceInclude Source="avares://Aster/Styles/Theme.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>
 
   <!-- ===== 样式区：基础主题 + 通用控件样式 ===== -->
+  <!-- 样式树的查找顺序：控件自身 Styles → 祖先 → Application.Styles（按注册顺序），
+       「同一个属性被多处设置时，最后命中且优先级相同的那条生效」。 -->
   <Application.Styles>
     <!-- FluentTheme 提供 Button / TextBox / ScrollBar 等默认模板，
          Controls.axaml 在其之上做覆写与补充 -->
+    <!-- FluentTheme 的工作方式是「挂载一棵内建的样式子树」：里面既有各控件的默认
+         ControlTheme（Button、TextBox、ScrollBar…的模板），也有少量全局样式；
+         它读的正是根元素上的 RequestedThemeVariant 来选明/暗两套配色。 -->
     <FluentTheme />
     <!-- 顺序有意义：通用样式必须在 FluentTheme 之后加载，
          否则同等优先级下会被默认模板的选择器压回去 -->
+    <!-- 同理，Application.Resources 整段写在 Application.Styles 之前也不是排版偏好：
+         Controls.axaml 里大量 {StaticResource Accent} / {StaticResource NavButton}
+         是「解析到这里就必须存在」的求值方式，XAML 按属性元素的书写顺序加载，
+         把 Resources 放到 Styles 后面就会在启动时直接抛「找不到资源」。 -->
     <StyleInclude Source="avares://Aster/Styles/Controls.axaml" />
   </Application.Styles>
 

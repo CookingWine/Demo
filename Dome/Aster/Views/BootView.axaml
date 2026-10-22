@@ -8,6 +8,10 @@
            不会出现「进度条没走满就跳走」的断裂感。
      坑：本文件没有 x:DataType，DataContext 继承自 MainWindow，不要在这里绑定业务属性。
      ============================================================ -->
+
+<!-- 本文件没有 x:DataType，也没有任何 {Binding}：闪屏的一切都是常量。
+     它唯一「动」的地方是进度条宽度，用手写关键帧而不是绑定驱动，
+     因为这里没有真实进度可汇报——动画只是「看得见的等待」，与启动耗时无关。 -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ctrl="using:Aster.Controls"
@@ -16,22 +20,50 @@
   <!-- ===== 进度条动画：用关键帧推进 Width =====
        选择动画 Width 而不是 ScaleTransform，是为了让填充条始终贴着 3px 高的轨道被裁剪，
        圆角不会因为缩放而变形 -->
+  <!-- 动画机制的三个要点（不补这三点很难理解为什么它「刚好」接上 2 秒的定时器）：
+       1) 启动时机：样式动画在控件挂上视觉树、并且被这条选择器命中时开始计时，
+          不是「XAML 解析那一刻」。BootView 是 MainWindow 的常驻子元素，
+          所以它随窗口一起挂树，等于「应用一启动就开始跑」。
+       2) 插值方式：KeyFrame 之间默认线性插值（没有 KeySpline），所以前 55% 走 108px、
+          后 45% 走 60px，前段平均速度约为后段的 1.5 倍，看起来是「先冲一下再等」。
+          这种节奏对启动动画很重要：匀速会显得卡住，先快后慢才像在推进。
+       3) 只跑一次：IsVisible 切换不会让控件离开视觉树，动画时钟不会重置，
+          所以从 Login 返回 Boot（如果有入口）时会直接停在满格，不会重播。 -->
   <UserControl.Styles>
     <!-- bootfill 只作用于这一条填充条；样式定义在局部 Styles 里，避免污染全局 -->
+    <!-- 两处机制说明：
+         1) 选择器 Border.bootfill 的命中条件是「类型是 Border 且类名列表里有 bootfill」，
+            两个条件都满足才应用，所以不会误伤其它 Border；
+         2) 用 Style.Animations 而不是 Transitions：Transitions 是「属性被赋值时补一段过渡」，
+            需要有触发源（如 hover）；Animations 是自带时钟的关键帧时间线，
+            没有触发源也会自己跑，正好对应「加载动画」这种场景。 -->
     <Style Selector="Border.bootfill">
       <Style.Animations>
         <!-- Duration 1.85s 略短于 VM 里 2000ms 的启动定时器，留出约 150ms 的「满格停留」；
              FillMode=Forward 保证动画结束后停在 100% 的宽度，不会回弹到 0 -->
+        <!-- 这两个数字是配对的：1.85 与 2.0 的差值 150ms 就是「满格停留」的时长——
+             进度条先走满、停一下、再切页，比「卡在切页瞬间刚好走满」更像真实加载。
+             若把定时器改到 1.5s，停留就会消失（条还没满页面就切走了），改一个要顺手看另一个。
+             FillMode=Forward 的含义是「结束后把最后一帧的值留住」：动画一旦停止，
+             Width 会保持在 168；不写的话属性回到基础值 0，进度条会在切页前瞬间归零闪一下。 -->
         <Animation Duration="0:0:1.85" FillMode="Forward">
           <!-- 0%：从 0 宽度起步，模拟刚开始加载 -->
+          <!-- 起点必须是 0：填充条的初始 Width 也是 0，两者一致，
+               这样即使动画没能启动（例如控件在样式命中之前就被移出视觉树），
+               界面也停在「未开始」而不是半满的奇怪状态。 -->
           <KeyFrame Cue="0%">
             <Setter Property="Width" Value="0" />
           </KeyFrame>
           <!-- 55%：已到 108px（约 64%），前段快、后段慢，制造「先冲一下再等」的真实加载节奏 -->
+          <!-- 108 的来源可以量化：108 / 168 ≈ 64%，而时间才走到 55%，
+               宽度进度比时间进度超前 9 个点，这 9 个点就是「前段更快」的全部量化依据。
+               改这个值时只要记住「Cue 是时间、Width 是进度」，两者不成正比才是设计意图。 -->
           <KeyFrame Cue="55%">
             <Setter Property="Width" Value="108" />
           </KeyFrame>
           <!-- 100%：收在 168px，正好等于轨道总宽，视觉上是刚好填满而不是溢出 -->
+          <!-- 168 必须等于轨道 Width，否则末帧要么没填满、要么被轨道的 ClipToBounds 裁掉；
+               两者是同一个设计尺寸的两次书写，改轨道宽度时这里要同步。 -->
           <KeyFrame Cue="100%">
             <Setter Property="Width" Value="168" />
           </KeyFrame>
@@ -46,6 +78,22 @@
     <!-- 属性元素会覆盖上面 Background 属性的 #08090D，最终生效的是这层径向渐变：
          中心 18% 的冷蓝光晕，0.45 处衰减到 7%，边缘完全透明，
          用来把视线聚到中间的 Logo 上 -->
+    <!-- 参数逐个解释（这是整个界面唯一用径向渐变的地方，值得看细）：
+         Center=50%,42%：光晕圆心在水平正中、垂直 42% 处，比几何中心略高，
+           因为下方还有状态文案与版本号，视觉重心上移才不会显得头轻脚重。
+         GradientOrigin 与 Center 取同值 → 光从圆心正上方发出，没有偏心打光；
+           两者不同会形成「斜射光」，本项目不需要那种戏剧效果。
+         RadiusX / RadiusY 都是 80%：百分比是相对控件自身宽高的比例单位，
+           所以光晕随窗口缩放而缩放，不是固定像素半径；取 80% 让渐变在边界之前衰减完。
+         三个 Stop 要连 alpha 一起读：
+           0    → #2E6C8BFF：alpha 0x2E = 46，约 18%，冷蓝（6C8BFF 是品牌蓝）；
+           0.45 → #12A78BFA：alpha 0x12 = 18，约 7%，色相已换成 A78BFA（品牌紫）——
+                  中心和中间圈不是同一种蓝，渐变途中发生过一次极轻的蓝转紫；
+           1    → #00000000：全透明，于是光晕没有可见的边界线。 -->
+    <!-- 一个容易忽略的后果：属性元素覆盖了 Panel 的 Background="#08090D"，
+         而渐变最外圈是全透明，所以这层「深色底」实际上一点都没画出来——
+         闪屏边缘透出的是窗口那层 Bg1(#0E1015)，整体比 #08090D 略亮。
+         想让 #08090D 真的生效，需要把最外圈的 Stop 改成不透明色。 -->
     <Panel.Background>
       <RadialGradientBrush Center="50%,42%" GradientOrigin="50%,42%" RadiusX="80%" RadiusY="80%">
         <GradientStop Offset="0" Color="#2E6C8BFF" />
@@ -56,34 +104,63 @@
 
     <!-- 内容整体居中：竖向 StackPanel 用两个 Center 对齐，
          所以窗口缩放时闪屏始终停在视觉中心 -->
+    <!-- 居中的实现分两层：StackPanel 自身两个 Center 负责「整组在窗口中居中」；
+         组内每个子元素再各自 HorizontalAlignment=Center，负责「每行相对最宽那一行居中」。
+         少了第二层，行宽不同的文本会各自从左边起排（StackPanel 默认左对齐），
+         标题与副标题就会错开一截。 -->
     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
       <!-- 74px 圆角 20 的品牌方块：与 ShellView 标题栏里 22px 的版本同款渐变，
            只是尺寸更大；LogoMark 内缩 10px，花瓣色取近黑以形成镂空感 -->
+      <!-- 尺寸关系：74 的方块 + 圆角 20，LogoMark 四周各内缩 10，实际绘制区 54×54。
+         内缩而不是让花瓣铺满，是因为 74 的方块本身是「背景」，花瓣是「前景图形」，
+         两者之间需要留白才像品牌标识；22 与 74 的版本用同一比例（3/22 ≈ 10/74）。 -->
       <Border Width="74" Height="74" CornerRadius="20" Background="{StaticResource LogoGrad}">
         <ctrl:LogoMark Margin="10" PetalBrush="#0A0B12" />
       </Border>
 
       <!-- 主标题与副标题：字号差近一倍，靠 22px / 7px 的上下间距拉开层级 -->
+      <!-- 22 是「Logo 与标题」的距离，7 是「标题与副标题」的距离——
+           大间距分组、小间距归组，这是版式里最基本的一条：距离表达关系。
+           副标题用 Text2 而不是 Text3，是因为它仍需要被读清（状态说明），
+           而 Text3 那一档在这个尺寸下几乎只剩剪影。 -->
       <TextBlock Text="Aster" FontSize="21" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,22,0,0" />
       <TextBlock Text="管理系统工作台" FontSize="11.5" Foreground="{StaticResource Text2}"
                  HorizontalAlignment="Center" Margin="0,7,0,0" />
 
       <!-- 进度条轨道：168x3，圆角 3 让两端是半圆；
            ClipToBounds 必须开，否则子 Border 的 Width 动画会画出圆角之外 -->
+      <!-- ClipToBounds 为什么非开不可：Border 的 CornerRadius 只作用于它自己绘制的背景，
+           不会自动裁剪子元素；填充条是子元素、右端是直角，宽度过一半后就会露出方角，
+           看起来像「圆角槽里插了一根方头针」。开裁剪后子元素被压成轨道形状，右端自然变半圆。
+           轨道底色 #17FFFFFF：alpha 0x17 = 23，约 9% 白——比背景亮一点点，够看出「槽」；
+           再亮会喧宾夺主，再暗就和背景分不开。
+           Margin 0,34,0,0 把它与副标题拉开 34，让进度条读起来属于「状态区」而非标题区。 -->
       <Border Width="168" Height="3" CornerRadius="3" Background="#17FFFFFF" Margin="0,34,0,0"
               HorizontalAlignment="Center" ClipToBounds="True">
         <!-- 填充条：初始 Width=0，由 bootfill 的关键帧动画推到 168；
              HorizontalAlignment=Left 让宽度增长从左侧开始，而不是向两侧扩张 -->
+        <!-- 这三个属性各有分工：
+             1) Height=3 与轨道相同，自己也带 CornerRadius=3（两端半圆），
+                动画过程中右端超出轨道的部分由外层 ClipToBounds 裁掉；
+             2) HorizontalAlignment=Left 决定「增长方向」：默认 Stretch 会被布局拉满，
+                Width 就没有意义了；改成 Left 之后 Width 才是一个可被动画独立修改的值；
+             3) Background 用 AccentViolet（横向蓝 → 紫渐变，来自 Theme.axaml），
+                渐变方向与进度方向一致，读起来像「能量从左往右注入」。 -->
         <Border Classes="bootfill" Width="0" Height="3" CornerRadius="3" HorizontalAlignment="Left"
                 Background="{StaticResource AccentViolet}" />
       </Border>
 
       <!-- 状态文案用 Text2 这种弱化色，避免与主标题抢注意力 -->
+      <!-- 13 是状态文案与轨道的间距：比 7 大、比 22 小，正好表达「它属于进度条这一组」。
+           文案末尾的省略号是静态字符，不是动画——这里没有任何文字轮播逻辑。 -->
       <TextBlock Text="正在初始化工作区…" FontSize="10.5" Foreground="{StaticResource Text2}"
                  HorizontalAlignment="Center" Margin="0,13,0,0" />
     </StackPanel>
 
     <!-- 版本号贴底居中，颜色比正文更暗（#3F4657），只作为信息存在、不参与视觉层级 -->
+    <!-- #3F4657 比 Text3(#434A5C) 还要暗一档，相当于「令牌之下」的一档自造灰；
+         它不放进 Theme 是因为只服务这一处。底部留 22 与标题栏上下留白同值，
+         视觉上闪屏的上下边界因此是对称的。 -->
     <TextBlock Text="v1.4.2 · Avalonia 11" FontSize="10.5" Foreground="#3F4657"
                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,22" />
   </Panel>

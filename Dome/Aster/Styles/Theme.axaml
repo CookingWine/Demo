@@ -9,6 +9,69 @@
   <!-- 新增令牌：先看能否复用现有档位（Bg / Text / Line / W 系列），确属新语义再按区块追加，键名写用途不写色值 -->
   <!-- 命名体系：Bg0~Bg4 背景由深到浅，Text0~Text3 文字由亮到暗，Line 三档分割线强度，W 系列是半透明白的透明度档位 -->
 
+  <!-- ===================== 令牌速查表 ===================== -->
+  <!-- 只回答"该用哪个键"，分层理由见下文各区块的逐条注释；色值不在这里重复，改色仍只改下面一处 -->
+  <!-- 三列读法：层级（这块面在视觉上有多靠前）· 键名（就是资源键，XAML 里写 {DynamicResource 键名}）· 典型用途（谁在用） -->
+
+  <!-- 一 · 背景 Bg0~Bg4：数字越大越浅，越浅越靠近用户 -->
+  <!--
+       层级      键名   典型用途
+       窗口底    Bg0    窗体最底层；当前无引用，窗口底色实际用的是 Bg1（见 MainWindow 外层 Border）
+       内容面    Bg1    内容区、侧栏、整页阅读底色；同时也是 MainWindow 的整窗基色
+       卡片面    Bg2    Border.card 的默认底色，界面上面积最大的一层
+       悬浮面    Bg3    ToolTip、下拉弹层、浮起的小面板
+       凸起面    Bg4    卡片内部再抬一层的局部块、输入面；当前无引用
+  -->
+
+  <!-- 二 · 文字 Text0~Text3：数字越大越暗，一级只留一种"最亮" -->
+  <!--
+       层级      键名    典型用途
+       主文字    Text0   标题、指标数字、正文强调；按钮悬停后的前景色
+       正文色    Text1   按钮默认前景、二级导航、输入框以外的常规标签
+       辅助色    Text2   说明文字、未选中导航、分组标题
+       最弱色    Text3   极淡标注：注释性小字、侧栏的分组标题；项目里没有专门的禁用态令牌
+  -->
+
+  <!-- 三 · 语义色与线：语义色只在图表与状态里表达含义，线三档 + 白度档位负责"分隔与叠色" -->
+  <!--
+       键名        典型用途
+       Accent      品牌主色：选中态、链接、焦点描边、进度
+       AccentSoft  Accent 的 15% 浅底：选中项与选中 chip 的背景
+       AccentText  放在 AccentSoft 上的提亮文字，避免纯 Accent 发闷
+       Violet      渐变另一端、演示/创作类标签
+       Cyan        信息类次要强调、图表系列色
+       Green       成功、开启、正向增长
+       Amber       警告、待处理、临期
+       Red         错误、失败、删除
+       Line        卡片描边、区块细线（白 6.5%）
+       Line2       输入框、chip、悬浮面板外框（白 12%）
+       LineSoft    卡片内部次级分隔、列表行与行之间（白 3.5%）
+       W03~W14     半透明白底档位，数字即白度百分比
+  -->
+
+  <!-- ===================== 取值优先级 ===================== -->
+  <!-- 四级阶梯，从强到弱：本地值 > 样式 Setter > 继承值 > 默认值。反过来读就是"越抽象越靠后" -->
+  <!-- 一 · 本地值：XAML 里直接写在控件上的属性，或代码里的 SetValue。它永远赢，因为这是"这个实例自己的意见" -->
+  <!-- 例：HomeView 的指标数字同时有 Classes="metric" 与 Foreground="{Binding ValueBrush}"，后者是本地值，所以 .metric 里的 Text0 被盖掉，颜色由 VM 决定 -->
+  <!-- 二 · 样式 Setter：本文件的 ControlTheme 与 Controls.axaml 里的 Style 都算这一级；伪类态（:pointerover / :checked）同样是样式，只是选择器更具体，能在同一控件上盖掉常态值 -->
+  <!-- 三 · 继承值：FontFamily / FontSize / Foreground 这类注册为 Inherits 的属性，控件自身没值时向父级取。Controls.axaml 里一条 Window 样式能管全应用，靠的就是继承 -->
+  <!-- 四 · 默认值：属性注册时写死的 DefaultValue，谁都没设时才轮到它（例如 Button 的 Cursor 默认 Arrow） -->
+  <!-- 排序里还有一档"动画"排在本地值之前：动画进行中会临时压住一切，动画结束再把值还给原来的持有者 -->
+  <!-- 这条阶梯直接解释三类常见困惑：页面里写 Height="42" 能盖掉样式里的尺寸；对已有本地值的实例再改样式没用；给子控件设 Foreground 会断掉从 Window 继承来的颜色 -->
+
+  <!-- 关于 StaticResource 与 DynamicResource： -->
+  <!-- StaticResource 在 XAML 加载时解析一次，把查到的对象直接塞进属性（或 Setter 的 Value）；之后字典里换成别的对象，这个引用仍指着旧的那个 -->
+  <!-- DynamicResource 保存的是"键名 + 待解析"，取值时才走资源查找；字典一换（切主题变体、替换 ResourceDictionary）就重新查表并刷新界面 -->
+  <!-- 所以"运行时换主题"只能靠 DynamicResource。写成 StaticResource 的话，切到另一套色板后界面还是加载时那批画刷实例，颜色不会动 -->
+  <!-- 代价是每次解析都要沿树查键，比直接持有对象慢；因此键在加载期就已确定的（ControlTheme、FontFamily、BoxShadows）用 Static，颜色一律 Dynamic -->
+  <!-- 现状提醒：本文件的画刷内部对 Color 用的也是 StaticResource（如 Bg2 的 Color 取自 Bg2Color），所以即使消费端写 DynamicResource，也只有"整个画刷对象被替换"时才会变；直接改 Bg2Color 的值不会让已有画刷变色 -->
+
+  <!-- ControlTheme 的 Setter 与 Style 的 Setter 谁覆盖谁： -->
+  <!-- ControlTheme 相当于"控件自带的默认打扮"，优先级低于 Styles 集合里针对同一属性的 Setter；所以 Controls.axaml 的 Button.nav 能把主题里的 56/52 重写成同样的值甚至改成别的值 -->
+  <!-- 反过来不成立：主题内部那些 Selector="^:checked ..." 的 Style 属于"主题内部状态"，^ 只指向该主题的目标控件自身，作用域被锁在这份 ControlTheme 里 -->
+  <!-- 外部给控件加类名、或在外层写别的 Style，都命中不到主题内部这几条；它们只认伪类（:checked / :pointerover），不认业务类名 -->
+  <!-- 外部确实要改这些状态色时只有两条路：改主题本身，或者把选择器直接对准模板元素（/template/ #Name），后者走样式树，能压过模板里的 TemplateBinding -->
+
   <!-- ===================== 设计令牌 · 色彩 ===================== -->
   <!-- 这里只存 Color 原始值，控件实际消费的是下面「画刷」区块的 SolidColorBrush；改色只改这一处，画刷与全部控件跟随 -->
   <!-- 背景分层 Bg0~Bg4：越浅越「靠近用户」，用明度差代替投影表达层级，这是深色界面里最稳的层次手段 -->
@@ -135,6 +198,14 @@
     <!-- ============ 窗口标题栏按钮 ============ -->
     <!-- 标题栏按钮：40×28 比系统标题栏按钮更薄，配合自绘无边框窗口的细标题栏；内容只有图标，所以 Padding 归零 -->
     <!-- Border#Bg 是唯一的着色面（默认透明、圆角 5），悬停/关闭红底都由 Controls.axaml 通过 /template/ Border#Bg 改写 -->
+    <!-- 模板元素命名表（名字是外部样式的定位锚点，改名等于让所有状态色静默失效）：
+         元素        类型与尺寸              被哪些选择器命中
+         Border#Bg   Border 40×28 圆角 5     Button.chrome:pointerover 改成 W08
+                                             Button.chrome.close:pointerover 改成 #E5484D
+         无名字元素  ContentPresenter        只负责居中，任何状态都不碰它
+    -->
+    <!-- 尺寸推导：28 高放进 44 高的标题栏（ShellView 的 RowDefinitions="44,*"）后上下各余 8；三枚按钮由外层 StackPanel 的 Spacing="2" 排开，本主题因此不需要 Margin -->
+    <!-- 40 : 28 约等于 1.43，比正方图标按钮更扁，接近系统标题栏按钮的比例；LoginView 里三个同类按钮用 Width=34 Height=26 的本地值收窄，因为登录页标题栏更紧凑 -->
     <ControlTheme x:Key="ChromeButton" TargetType="Button">
       <Setter Property="Width" Value="40" />
       <Setter Property="Height" Value="28" />
@@ -161,6 +232,16 @@
     <!-- ============ 一级导航（rail）============ -->
     <!-- 一级导航：56×52 的固定尺寸让 rail 里每个图标列宽一致、整列竖直对齐；Padding 为 0 是因为内容只有图标 + 一行小字 -->
     <!-- BorderThickness=1 配透明 BorderBrush：先占住 1px 描边位，选中时只换颜色，不会因为多出边框而让图标位置抖动 -->
+    <!-- 模板元素命名表：
+         元素        类型与尺寸                   被哪些选择器命中
+         Border#Bg   Border 56×52 圆角 9          Button.nav:pointerover 改成 W04
+                                                  Button.nav.selected 改成 AccentSoft + #3A6C8BFF 描边
+         Border#Bar  Border 3×24 圆角 0,3,3,0     Button.nav.selected 改成 Accent 并加 12px 外发光
+         无名字元素  ContentPresenter             承载图标 + 竖排文字，只做居中
+    -->
+    <!-- 尺寸推导（横向）：rail 列宽 74（ShellView 的 ColumnDefinitions="74,Auto,*"）减去 56 等于 18，左右各 9；按钮在 View 里写 HorizontalAlignment="Center" 吃掉这 18 -->
+    <!-- 尺寸推导（纵向）：内容是 19 见方的图标 + 4 的 Spacing + 一行 10.5 号字（行高约 14），合计约 37，剩下的 15 由居中均分到上下；因为 Padding 为 0，这层余量完全靠 VerticalAlignment=Center -->
+    <!-- Bar 的位置推导：Width 3 贴在 Border 左内侧，Margin 左 -10 把条推到 Border 之外 10px，落到 9px 留白 + 1px 描边的位置，于是看起来贴住 rail 左边 -->
     <ControlTheme x:Key="NavButton" TargetType="Button">
       <Setter Property="Width" Value="56" />
       <Setter Property="Height" Value="52" />
@@ -199,6 +280,14 @@
 
     <!-- ============ 二级导航 ============ -->
     <!-- 二级导航：没有固定宽高，靠 HorizontalAlignment=Stretch 撑满侧栏宽度，这样悬停底是一整条横条，而不是围着文字的色块 -->
+    <!-- 模板元素命名表：
+         元素        类型与尺寸            被哪些选择器命中
+         Border#Bg   Border 圆角 7          Button.subnav:pointerover 改成 W04
+                                             Button.subnav.selected 改成 AccentSoft + #336C8BFF 描边
+         无名字元素  ContentPresenter        模板里硬写 HorizontalContentAlignment="Stretch"，所以主题里那条控件级的同名 Setter 实际接不上（模板没用 TemplateBinding 接它）
+    -->
+    <!-- 尺寸推导：高度不写死，= 7 上内距 + 7 下内距 + 一行文字的行高；ShellView 的条目再用 Height="{Binding Height}" 由 VM 指定，Padding="14,0" 这个本地值同时盖掉了主题里的 9,7 -->
+    <!-- 圆角 7 比一级导航的 9 小 2：侧栏越往里越"方正"，用圆角递减表达层级更深 -->
     <ControlTheme x:Key="SubNavButton" TargetType="Button">
       <!-- Padding 9,7 决定条目高度，Margin 底部 2px 是相邻条目之间的呼吸位，两者合起来形成列表节奏 -->
       <Setter Property="Padding" Value="9,7" />
@@ -230,6 +319,13 @@
     <!-- ============ 分段控件 ============ -->
     <!-- 分段控件：比普通按钮更紧凑的一档（高 22、字号 11.5、横向 Padding 10） -->
     <!-- 22 的高度是为 Border.seg 容器设计的：容器 Padding=2，2+22+2=26，正好形成"凹槽里嵌一块"的观感 -->
+    <!-- 模板元素命名表：
+         元素        类型与尺寸            被哪些选择器命中
+         Border#Bg   Border 圆角 4         没有被 /template/ 选中过：选中态由 Controls.axaml 的 Button.seg.selected 直接改控件 Background，模板用 TemplateBinding 接住
+         无名字元素  ContentPresenter        只做垂直居中，水平方向不拉伸（内容是一段短标签）
+    -->
+    <!-- 尺寸推导：22 = 3 上内距 + 3 下内距 + 11.5 号字的行高（约 16）；横向 = 10 + 文字宽 + 10 -->
+    <!-- 与容器合起来的整高：2 + 22 + 2 = 26，再加容器自身 1px 上下描边共 28，正好和普通按钮的 MinHeight 28 对齐，分段控件不会比旁边的按钮矮一截 -->
     <ControlTheme x:Key="SegButton" TargetType="Button">
       <Setter Property="Padding" Value="10,3" />
       <Setter Property="Background" Value="Transparent" />
@@ -253,6 +349,14 @@
     <!-- ============ 开关 ============ -->
     <!-- 开关：38×21 是"手指也点得准"的最小尺寸，桌面端沿用同一比例，保证和移动端截图一致 -->
     <!-- 结构只有两层：Border#Track 轨道 + Ellipse#Knob 滑块；状态切换靠换对齐方式，不做位移动画 -->
+    <!-- 模板元素命名表：
+         元素          类型与尺寸               被哪些选择器命中（都在本主题内部，命中条件是伪类而不是类名）
+         Border#Track  Border 38×21 圆角 99     ^:checked 把底色从 W14 换成 Accent
+         Ellipse#Knob  Ellipse Ø17 白色         ^:checked 把 HorizontalAlignment 从左改成右，并把 Margin 从 2,0,0,0 改成 0,0,2,0
+    -->
+    <!-- 尺寸推导（横向）：2 左留白 + 17 滑块 + 17 行程 + 2 右留白 = 38，行程正好等于滑块直径，两端才对称 -->
+    <!-- 尺寸推导（纵向）：滑块 17 + 上下各 2 = 21，正好等于 Height，于是滑块永远垂直居中、也不会撑破轨道 -->
+    <!-- 尺寸推导（两个端点）：关闭态滑块占 x 2~19，右侧余 19；开启态右留白 2，滑块占 x 19~36，左侧余 19。两端留白一致，切换时不出现"贴边"的错觉 -->
     <ControlTheme x:Key="SwitchToggle" TargetType="ToggleButton">
       <Setter Property="Width" Value="38" />
       <Setter Property="Height" Value="21" />
@@ -284,6 +388,15 @@
 
     <!-- ============ 标签块（chips）============ -->
     <!-- 标签块（chips）：一组可多选的短标签，Padding 10,4 让文字上下各留 4px；Margin 0,0,6,6 让自动换行时横竖间距都是 6 -->
+    <!-- 模板元素命名表：
+         元素        类型与尺寸            被哪些选择器命中
+         Border#Bg   Border 圆角 5 描边 1   ^:checked 把底改成 AccentSoft、描边改成 #596C8BFF
+         （控件自身）Button.Foreground       ^:checked 不带 /template/，直接把文字改成 AccentText
+         无名字元素  ContentPresenter        只做垂直居中
+    -->
+    <!-- 尺寸推导：高度不写死，= 4 上内距 + 4 下内距 + 11.5 号字的行高（约 16）+ 上下各 1 描边（约 26）；宽度 = 10 + 文字宽 + 10 -->
+    <!-- Margin 挂在控件身上而不是模板上，所以每个 chip 的外框都带右下 6px；WrapPanel 换行时横竖间距一致，不需要额外的 ItemsPanel 间距 -->
+    <!-- 被谁用：SettingsOverlay 的偏好标签行（ToggleButton 直接用 Theme="{StaticResource ChipToggle}" 挂载，没有走样式类） -->
     <ControlTheme x:Key="ChipToggle" TargetType="ToggleButton">
       <Setter Property="Padding" Value="10,4" />
       <Setter Property="Margin" Value="0,0,6,6" />
@@ -317,6 +430,21 @@
   <!-- 复选框：对齐设计稿的 15px 圆角方框 -->
   <!-- 键写成 x:Key="{x:Type CheckBox}" 而不是普通字符串：以类型作键等于声明"这是 CheckBox 的默认主题"，Avalonia 解析控件时按类型自动查找，页面里不用写 Theme= 就全局生效 -->
   <!-- 代价是它会覆盖 FluentTheme 自带的 CheckBox 主题，所有地方（表单、列表、对话框）的复选框都会变成这套外观，改之前要确认没有页面依赖默认样式 -->
+  <!-- 查找机制：控件没写 Theme 时，Avalonia 拿自身类型当资源键，沿"控件自身资源 → 父级 → Application.Resources → 样式里的资源"这条链找 ControlTheme -->
+  <!-- 本文件经 App.axaml 合并进 Application.Resources，比 FluentTheme 自带的类型主题更靠前，于是同一把键由这份胜出，页面里一个 Theme= 都不用写 -->
+  <!-- 代价之二：类型键没有"样式类"那一层退路。想局部换回 Fluent 外观，只能给那一个 CheckBox 显式写 Theme，类名改不回来 -->
+  <!-- 又因为它走的是"主题替换"而不是"样式覆盖"，这套外观里不存在选择器顺序问题；主题内部的 ^:checked 只认伪类，外部类名对它无效 -->
+  <!-- 模板元素命名表：
+       元素        类型与尺寸                        被哪些选择器命中
+       Border#Box  Border 15×15 圆角 4 描边 1        ^:checked 改成 Accent 底 + Accent 描边
+                                                    ^:pointerover 只改描边为 W14
+                                                    ^:checked:pointerover 改成 #7A96FF 底与描边
+       Path#Check  Path 9×9 描边 1.6 圆头圆角        ^:checked 把 IsVisible 置 True
+       无名字元素  ContentPresenter（第 2 列）        承载文字，Margin 左 7
+  -->
+  <!-- 尺寸推导：外框 15，1px 描边向内缩，可绘制区 13；对勾 9×9 居中后左右上下各余 2；文字左距 7 是"方框到字"的固定间隔 -->
+  <!-- 关于 Path 的 Stretch="None"：Data 里的坐标是照着 9×9 的画布手画的，保持 1:1 映射，笔画粗细才稳定在 1.6 -->
+  <!-- 若改成 Stretch="Uniform"，Path 会按几何实际边界（约 7.4×5.6）缩放到填满 9×9，对勾被放大、斜角变钝，1.6 的线宽也会跟着一起缩放 -->
   <ControlTheme x:Key="{x:Type CheckBox}" TargetType="CheckBox">
     <Setter Property="Background" Value="Transparent" />
     <!-- 文字 11.5 + Text1：复选框多出现在表单行里，比正文再弱半档，避免和字段标签抢注意力 -->
@@ -373,8 +501,19 @@
   <!-- ===================== 窗口阴影 ===================== -->
   <!-- 语法为「X偏移 Y偏移 模糊半径 扩散 颜色」；Y 偏移取正，阴影落在下方，符合"光源在上"的直觉 -->
   <!-- WindowShadow：18px 下移 + 48px 模糊，比较收敛；#CC000000 约 80% 黑，深色桌面上刚好能描出窗口边界 -->
+  <!-- 把 WindowShadow 的 0 18 48 0 #CC000000 拆成五个槽位来读：
+       槽位 1   offsetX  0          水平不偏移，阴影只朝下方落，窗口左右两端才不会出现偏色
+       槽位 2   offsetY  18         整体下移 18px，等于窗体外框以下 18px 才开始"有影子"
+       槽位 3   blur     48         模糊半径：阴影边缘从实到透过渡 48px，值越大越柔、越像悬浮
+       槽位 4   spread   0          扩散半径：0 表示阴影矩形与窗口同尺寸，不做整体放大
+       槽位 5   color    #CC000000  80% 不透明纯黑（CC = 204 / 255 ≈ 0.8），深色桌面上刚好能勾出边界又不糊成一片
+  -->
+  <!-- 四个数值互相制约：blur 48 与 spread 0 搭配，影子只在边缘晕开、中心区域被窗口自身完全盖住，所以不必担心黑色渗到窗内 -->
+  <!-- 本值被 MainWindow 外层的 Border 消费（BoxShadow 只对 Border 这类参与渲染的容器有意义），页面级弹窗改用下面的 PopShadow -->
   <BoxShadows x:Key="WindowShadow">0 18 48 0 #CC000000</BoxShadows>
   <!-- PopShadow：24px 下移 + 70px 模糊 + 约 90% 黑，比窗口阴影更远更浓，用阴影距离表达"浮层比窗口更高一层" -->
+  <!-- 同一套五槽位读法：#E6000000 里 E6 = 230 / 255 ≈ 0.9，比窗口阴影更深；offset 24 与 blur 70 一起放大，浮层离桌面更远 -->
+  <!-- 被谁用：SettingsOverlay 的面板、LoginView 的两个弹窗卡片（420 宽、圆角 14、ClipToBounds 裁掉溢出内容） -->
   <BoxShadows x:Key="PopShadow">0 24 70 0 #E6000000</BoxShadows>
 
 </ResourceDictionary>

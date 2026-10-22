@@ -9,6 +9,22 @@
      易踩坑：标题栏是自绘的，窗口拖动与双击最大化都靠 PointerPressed 手写；
            导航选中态靠 Classes.selected 这种「条件类」绑定，不是靠触发器。
      ============================================================ -->
+
+<!-- 视觉结构（可用宽度 = 1320 减去左右各 1px 描边，可用高度 = 850 减去上下各 1px）：
+     ┌──────────────────────────────────────────────────────────────┐
+     │ 标题栏 44 高 · 左 Logo + Aster / 右 最小化 · 最大化 · 关闭     │
+     ├──────┬────────────┬─────────────────────────────────────────┤
+     │ rail │ 二级导航   │ 内容区 ContentControl                   │
+     │  74  │ 260 可变宽 │ 按 ActiveView 的运行时类型匹配模板       │
+     │      │ 可整体收起 │ 页面自己滚动                            │
+     └──────┴────────────┴─────────────────────────────────────────┘
+     数据全部来自 MainWindowViewModel：
+       标题栏三枚按钮 → 走 code-behind（操作的是窗口，不是数据，所以不进 VM）；
+       rail 项      → RailTop / RailSettings，命令 SelectModuleCommand / OpenSettingsCommand；
+       二级导航     → SubNavEntries，分组标题与链接混在同一个集合里，靠两个隐式模板分开渲染；
+       内容区       → ActiveView，由隐式 DataTemplate 决定渲染成哪个页面。
+     交互回路：点导航 → 命令改 VM 的 IsSelected / ActiveView → 绑定把变化推回控件，
+     视图侧不出现任何「手动改控件属性」的代码。 -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Aster.ViewModels"
@@ -17,21 +33,51 @@
              x:Class="Aster.Views.ShellView"
              x:DataType="vm:MainWindowViewModel">
 
+  <!-- ===== 根元素属性：绑定类型提示与命名空间映射 =====
+       x:DataType="vm:MainWindowViewModel"：声明「本视图的默认数据上下文类型」，
+         用于 {Binding Xxx} 的类型推导，以及 DataTemplate 内 x:DataType 的继承起点。
+       xmlns 前缀：vm = Aster.ViewModels（供 x:DataType / DataType 引用类型），
+         views = Aster.Views（实例化页面），ctrl = Aster.Controls（Icon / LogoMark 与 Icons 常量）。
+       注意一处与直觉不符的地方：Aster.csproj 里 AvaloniaUseCompiledBindingsByDefault=false，
+       且这里没有写 x:CompileBindings="True"，所以下面所有 {Binding} 走的都是反射绑定
+       （运行期按名字查属性）。x:DataType 只是类型提示，属性名写错不会编译报错，
+       只会在运行期输出绑定错误日志（由 Program 里的 LogToTrace 写进 Trace）。
+       想升级成编译期校验，在根元素加 x:CompileBindings="True" 即可。 -->
+
   <!-- ===== 局部资源：一级导航按钮模板 =====
        放在 Resources 而不是 DataTemplates，是因为它需要 x:Key 被两处显式引用
        （顶部列表的 ItemTemplate 与底部设置项的 ContentTemplate），
        而隐式 DataTemplate 只能靠类型自动匹配、无法在两个不同容器间复用同一个实例。 -->
+  <!-- 两种「模板存放地」的分工（本文件两者都用了，理解这点是读懂整个壳的关键）：
+       Resources（键值字典）：用 {StaticResource RailTemplate} 显式取用，可被任意多个容器引用；
+         写错键名是运行期「找不到资源」。
+       DataTemplates（类型字典）：不带 x:Key，靠 DataType 自动匹配，只能被「内容是该类型」
+         的控件悄悄用上，无法被显式引用。
+       查找顺序是「先看控件自己的 Resources，再看自己的 DataTemplates，然后逐级向上找祖先，
+       最后到 Application」，所以放在 ShellView 根上的模板，对内部所有子控件都可见。 -->
   <UserControl.Resources>
 
     <!-- 一级导航 -->
-    <!-- DataType 用于编译期绑定校验（配合上方 x:DataType 的继承链）；
+    <!-- DataType 给模板内的绑定提供类型提示（与根元素 x:DataType 同源，同样不启用编译校验）；
          写成 keyed 模板而非隐式模板，是为了同一个模板能同时给
          ItemsControl.ItemTemplate 与 ContentControl.ContentTemplate 复用 -->
+    <!-- 补充两点：
+         1) 模板是「工厂」不是「控件」——同一个 DataTemplate 实例被两处共用完全安全，
+            因为每次实例化都会 Build 出一棵新的控件树，模板定义共享、控件实例各自独立；
+         2) 带 x:Key 之后，DataType 不再参与隐式匹配（有键的模板不会被自动选中），
+            剩下的作用只是给模板内的 {Binding} 提供类型提示。 -->
     <DataTemplate x:Key="RailTemplate" DataType="{x:Type vm:RailItem}">
       <!-- Classes.selected="{Binding IsSelected}"：Avalonia 的条件类，
            绑定为 true 时给按钮追加 selected 类名，样式 Button.nav.selected 才会命中
            （背景高亮 + 左侧指示条）；false 时移除类名，无需手写触发器。
            CommandParameter="{Binding}" 把整个 RailItem 传给命令，由 VM 判断点了哪一项 -->
+      <!-- 模板内五条绑定各取什么（数据源是当前这一个 RailItem）：
+           Classes.selected ← IsSelected：选中态，同一组里只可能有一项为 true（由 VM 维护）；
+           Command          ← Command：四个业务项指向 SelectModuleCommand，
+                              设置项指向 OpenSettingsCommand（在 VM 构造 RailItem 时决定）；
+           CommandParameter ← 整个 RailItem 实例，命令靠它做引用比较以定位被点的项；
+           ToolTip.Tip      ← Title：标题只有 10.5 号字且可能被裁，悬停给出完整文本；
+           Icon.Data        ← Icon：24×24 坐标系下的 SVG path，来自 Controls/Icons 常量表。 -->
       <Button Classes="nav"
               Classes.selected="{Binding IsSelected}"
               Command="{Binding Command}"
@@ -40,6 +86,12 @@
               HorizontalAlignment="Center">
         <!-- 图标在上、文字在下：74px 的 rail 宽度放不下横排，
              整体 HorizontalAlignment=Center 让不同字数的标题都居中对齐 -->
+        <!-- 尺寸换算：按钮固定 56 宽 52 高（Button.nav 样式 → NavButton 主题），
+             放进 74 宽的 rail 后左右各余 9px，这就是「居中」的物理含义。
+             Spacing=4 是图标与文字的呼吸位；Icon 19、字号 10.5 来自设计稿，
+             两者相加 19 + 4 + 约 14 = 37，仍在 52 高之内，所以按钮不需要额外 Padding。
+             文字与图标都不写 Foreground：靠属性继承从 Button 的 Foreground 拿色，
+             选中/悬停时只要样式改 Button 的前景色，内部两个子元素自动跟随。 -->
         <StackPanel Spacing="4" HorizontalAlignment="Center">
           <ctrl:Icon Data="{Binding Icon}" Width="19" Height="19" HorizontalAlignment="Center" />
           <TextBlock Text="{Binding Title}" FontSize="10.5" HorizontalAlignment="Center" />
@@ -53,11 +105,19 @@
        不写 x:Key 时 Avalonia 以 DataType 作为匹配键，ContentControl 或 ItemsControl
        在渲染每一项时会拿「数据对象的运行时类型」去查模板。
        这正是内容区能只绑定一个 ActiveView 就切换整页的原因，不需要任何 if/switch 代码。
-       根元素上声明了 x:DataType，因此这些 {Binding} 全部是编译期绑定，
-       属性名写错时是编译错误而不是运行期静默失败。 -->
+       这些模板里的 {Binding} 走的是反射绑定：项目未开启编译绑定（见根元素处的说明），
+       根元素上的 x:DataType 只提供类型提示，写错属性名不会编译报错，只会在运行期
+       输出一条绑定错误日志、对应位置显示为空。
+       模板匹配规则补充：Avalonia 不是「类型完全相等」才命中，而是
+       DataType.IsInstanceOfType(数据)；因此给基类写模板也能被派生类命中，
+       同一类型写了多个模板时按集合顺序先命中的生效。 -->
   <UserControl.DataTemplates>
     <!-- 二级导航：分组标题 -->
     <!-- 只有文字、不可点击；用 Text3 这类弱化令牌，与可点击条目在视觉上区分开 -->
+    <!-- 分组标题也是「集合里的一条数据」，所以同样需要模板；它不可点的原因是压根没有
+         Command，而不是被禁用——这里连 Button 都不用，直接一个 TextBlock 更省一层模板开销。
+         Margin 14,26,14,8 的两个纵向值有明确分工：上 26 把本组与上一组条目拉开，
+         下 8 紧贴自己的条目——利用「接近性」让标题被读成下一组条目的表头。 -->
     <DataTemplate DataType="{x:Type vm:SubNavGroupEntry}">
       <TextBlock Text="{Binding Title}"
                  FontSize="14"
@@ -69,6 +129,17 @@
     <!-- 二级导航：条目 -->
     <!-- 高度、字号、字重、是否显示图标与徽标全部由 VM 计算，
          视图只做呈现，避免在 XAML 里堆条件判断 -->
+    <!-- 数据（SubNavLinkEntry）→ 视觉的映射一览：
+         Height       ← Height：常规 38、最近会话 34，由 VM 构造时决定，模板不写死；
+         TitleFontSize← TitleFontSize：Emphasized 时 15，否则 14；
+         TitleWeight  ← TitleWeight：Emphasized 时 Medium，否则 Normal；
+         ShowIcon     ← ShowIcon：最近会话不显示图标，但文字仍保留 10px 缩进以对齐；
+         HasBadge     ← HasBadge：Badge 为空时整块徽标不占位（IsVisible=false 不参与布局）；
+         Padding=14,0 是按钮级内边距，SubNavButton 模板会把它交给内部 Border#Bg，
+         这样悬停底色才会连内边距一起染色，文字不会顶到色块边缘。
+         交互回路：点击 → Command（VM 里惰性创建的单例 SubNavCommand）
+         → CommandParameter 传回本条 → VM 改 IsSelected 与 ActiveView
+         → 绑定把选中态和内容区同时刷新。 -->
     <DataTemplate DataType="{x:Type vm:SubNavLinkEntry}">
       <Button Classes="subnav"
               Classes.selected="{Binding IsSelected}"
@@ -82,6 +153,10 @@
           <ctrl:Icon Data="{Binding Icon}" Width="16" Height="16" VerticalAlignment="Center"
                      IsVisible="{Binding ShowIcon}" />
           <!-- Margin 左侧留 10px 作为图标与文字的间距（图标隐藏时该间距当作缩进保留） -->
+          <!-- 补一个实际现象：ShowIcon=false 时 Icon 的 IsVisible 为 false，Auto 列宽归零，
+               文字整体左移 16px，只剩这 10px 边距——所以「最近会话」这类无图标条目
+               看起来比上面的条目更靠左。若要求严格对齐，应把图标列固定为 16 宽，
+               或用 Opacity=0 代替 IsVisible。 -->
           <TextBlock Grid.Column="1"
                      Text="{Binding Title}"
                      FontSize="{Binding TitleFontSize}"
@@ -92,6 +167,11 @@
           <!-- 徽标：#26F8716E 是约 15% 透明度的红色底，文字用 DynamicResource 取 Red 令牌，
                同色系叠加得到「浅底 + 亮字」的轻量提示；
                DynamicResource 用于可能整体更换的调色板，StaticResource 用于固定令牌 -->
+          <!-- 换算：#26F8716E 的 alpha 是 0x26 = 38，38/255 ≈ 14.9%，色相 F8716E 与 Theme 里的
+               Red 令牌同值；这里写死成字面量是因为「15% 红底」只此一处，没有做成令牌。
+               CornerRadius=13 不是随手取的：徽标高度由 Padding 9,3 加 11.5 号字撑出约 23px，
+               取一半即胶囊端，所以无论文字长短两端都是半圆。
+               Padding 左右 9 让数字与边缘留够呼吸位，上下 3 则把整体控制在 23 上下。 -->
           <Border Grid.Column="2"
                   IsVisible="{Binding HasBadge}"
                   CornerRadius="13"
@@ -108,6 +188,11 @@
     <!-- 主视图 -->
     <!-- ActiveView 的运行时类型 → 具体 UserControl，一个类型一个模板；
          模板只声明 DataType 与根控件，视图实例由框架在匹配时按需创建 -->
+    <!-- 四条模板对应 ActiveView 的四种可能类型，各页面的 DataContext 就是那个 VM 本身。
+         现状要留意：VM 里只有 SelectModule 一处给 ActiveView 赋值，赋的是 Admin，
+         而 Home/Markdown/Music 三个 VM 从未被 new（MusicViewModel 文件里也有同样的记录），
+         所以后三条模板目前匹配不到任何实例——不是模板写错，是数据源没接上。
+         一旦某处给 ActiveView 赋了 Home，这三行就会立刻生效，不需要改视图。 -->
     <DataTemplate DataType="{x:Type vm:HomeViewModel}">
       <views:HomeView />
     </DataTemplate>
@@ -125,11 +210,20 @@
 
   <!-- ===== 整体结构：44px 固定标题栏 + 剩余空间全部给三栏主体 =====
        标题栏高度与一级导航 rail 顶部留白对齐，视觉上形成一条连续的顶边 -->
+  <!-- 44 的来历：三枚窗口按钮高 28（ChromeButton 主题），上下各留 8 就是 44；
+       * 让三栏主体吃掉窗口剩余高度，窗口拉高时只有内容区变高，标题栏恒定。
+       两行之间没有 GridSplitter：标题栏不需要用户拖动改变高度。 -->
   <Grid RowDefinitions="44,*">
 
     <!-- ================= 标题栏 ================= -->
     <!-- 自绘标题栏：x:Name 会生成同名字段（当前 code-behind 未直接引用，保留便于调试定位）；
          PointerPressed 同时承担「拖动」与「双击最大化」，因为无边框窗口没有系统标题栏 -->
+    <!-- 这层 Border 只干三件事，各自对应的属性一目了然：
+         Background/BorderThickness → 一条 44 高的横带加一条 1px 下边线；
+         PointerPressed            → 整条横带的拖动热区（冒泡路由到本层）。
+         为什么点按钮不会顺带拖窗口：Button 在自己的 OnPointerPressed 里就把事件标记为
+         Handled，冒泡到这一层时处理器根本不会被调用；点在空白处才会走到 OnTitleBarPressed。
+         这也解释了 code-behind 里那句 e.Source 判断为何仍有必要——它是第二道防线。 -->
     <Border Grid.Row="0"
             x:Name="TitleBar"
             Background="{StaticResource Bg1}"
@@ -144,8 +238,24 @@
           <GradientStop Offset="1" Color="#00FFFFFF" />
         </LinearGradientBrush>
       </Border.Background>
+      <!-- 渐变与 Bg1 的叠加关系必须讲清，否则会以为 Background="Bg1" 白写了：
+           1) 属性元素 <Border.Background> 覆盖了上面的 Background 属性值，
+              所以这一层 Border 自己不再画 Bg1；
+           2) 它的父 Grid 是透明的，于是透出来的是窗口最外层 Border 的 Bg1（#0E1015）；
+           3) 最终画面 = Bg1 + 「顶部约 4% 白 → 完全透明」的竖向渐变。
+           观感是一条从顶边向下淡出的微光，让标题栏与内容区之间有条柔和的分界。
+           注意 #0AFFFFFF 的 alpha 是 10/255 ≈ 3.9%（不是 8%），比直觉更淡，
+           这是刻意的：再亮一点就会变成一条可见的灰带。 -->
+      <!-- 下面这层 Grid 的 Margin 左右不对称：左边 16 与三栏的内容缩进对齐，
+           右边只留 8——窗口按钮自身有 40 宽的点击区且图标居中，
+           留多了会让关闭键离窗口边缘太远，看起来「没贴住角」。
+           中间列用 * 而不是 Auto：既把按钮组推到最右，也让中间留白成为最自然的拖动区。 -->
       <!-- Auto,*,Auto：左侧品牌固定、中间留白（也是拖动热区）、右侧窗口按钮靠右 -->
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0,8,0">
+        <!-- 品牌区：22 的方形容器装下 16×16 的实际绘制区（Margin 3 是四周内缩），
+             LogoMark 用近黑 #0A0B12 在亮渐变上画花瓣，形成「挖空」的负形效果；
+             Spacing 9 是方块与文字的距离，StackPanel 自身 Margin 4,0 再内缩 4，
+             让 Logo 与下方 rail 的图标列在视觉上不贴边、也不过分靠内。 -->
         <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center" Margin="4,0">
           <!-- 22px 圆角 6 的渐变方块内缩 3px 放 LogoMark：
                容器负责底色与圆角，LogoMark 只画花瓣，PetalBrush 用近黑在亮底上形成镂空 -->
@@ -157,6 +267,15 @@
 
         <!-- 窗口按钮复用 chrome / chrome close 两个样式类，close 类只改 hover 的底色为红；
              图标用 x:Static 直接引用 C# 常量里的路径数据，避免每个按钮写一大串 Path Data -->
+        <!-- 三枚按钮的尺寸由 ChromeButton 主题固定为 40×28：点击区远大于 12×12 的图标，
+             这是「看得小、点得大」的常规做法；Spacing 2 让三个色块之间留一道细缝，
+             悬停时底色不会连成一片。
+             Icon 用 12×12 加 Thickness=1.4。换算一下：图标 path 按 24 单位坐标系绘制，
+             12px 时缩放 0.5，1.4 的描边落到屏幕上约 0.7px；作为对比，16px 图标放大 0.667 倍，
+             1.6 的描边约 1.07px——窗口按钮的线条刻意比正文图标更细，避免三个小图标显得笨重。
+             x:Static 是编译期直接把静态字段的值（一个 path 字符串）取出来写进 XAML，
+             不走绑定、不需要资源键，改图标只改 Icons 常量表。
+             三个 Click 处理器都在 ShellView.axaml.cs：分别改 WindowState 或 Close 窗口。 -->
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
           <Button Classes="chrome" Click="OnMinimize" ToolTip.Tip="最小化">
             <ctrl:Icon Data="{x:Static ctrl:Icons.Minus}" Width="12" Height="12" Thickness="1.4" />
@@ -176,17 +295,43 @@
          74 = 一级导航固定宽度（图标 + 竖排文字刚好放下）；
          Auto = 二级导航按 VM 的 SubNavWidth 取值（管理模块 260，其它 184），并随 IsVisible 收起；
          * = 内容区吃掉剩余宽度，宽屏下页面才能铺满 -->
+    <!-- 为什么第二列用 Auto 而不是写死 260：
+         二级导航的宽度来自 VM 的 SubNavWidth，收起时 IsVisible=false 会让整列宽归零，
+         内容区自动补位；写死 260 的话收起后仍留着一条空白。
+         Auto 的含义是「按子元素想要的宽度」，子 Border 的 Width 绑定了 SubNavWidth，
+         于是 VM 一改值列宽就跟着变，不需要任何代码参与布局。 -->
+    <!-- 上面那句「管理模块 260，其它 184」是设计意图，代码现状不是这样：
+         MainWindowViewModel.SubNavWidth 直接 return 260，没有任何按模块分支的逻辑，
+         所以这一列目前恒为 260。要恢复两档宽度得在 VM 里按 _moduleKey 判断。 -->
     <Grid Grid.Row="1" ColumnDefinitions="74,Auto,*">
 
       <!-- 一级导航 -->
       <!-- 底色 #2E000000 是约 18% 的纯黑，叠加在窗口底色上压暗一档；
            不用实色是为了保留外层圆角与投影带来的层次 -->
+      <!-- 换算：#2E = 46，46/255 ≈ 18%。这层黑不是为了让 rail「有色」，
+           而是为了在 Bg1(#0E1015) 上再压暗一档，让 rail 读起来比内容区更「靠后」。
+           用半透明而不是 #0B0C10 这类实色，是为了让窗口底色的细微渐变、圆角处的
+           抗锯齿与阴影层次都能透上来，深色界面的层次主要靠明度差而不是投影。
+           右侧 1px 的 Line（6.5% 白）是 rail 与二级导航之间的唯一分界。 -->
       <Border Grid.Column="0" Background="#2E000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
         <!-- Auto,*,Auto,Auto：顶部导航项 / 弹性空白 / 底部设置入口 / 头像，
              中间用 * 把设置与头像压到 rail 底部 -->
+        <!-- 四行的分工：Row0 顶部项（Auto，有几项占几项）、Row1 弹性空白（*，吃掉余量，
+             正是它把下面两行顶到底部）、Row2 设置入口、Row3 头像。
+             Margin 0,14,0,12：上 14 与标题栏的 44 高度形成视觉呼吸位，
+             下 12 让最后一个元素离窗口底边不至于贴死。 -->
         <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="0,14,0,12">
           <!-- 顶部项列表：ItemsSource 是 RailTop（当前只含「管理」）；
                ItemsPanel 换成带 6px 间距的 StackPanel，默认面板不提供间距 -->
+          <!-- ItemsControl + ItemTemplate 与 ContentControl + ContentTemplate 的区别，
+               本文件恰好两种都用了，对比着看最清楚：
+               ItemsControl：为 ItemsSource 里的每一项各实例化一次模板，产出「一列控件」；
+                 它管的是集合，所以还能替换 ItemsPanel（决定横排/竖排/间距）。
+               ContentControl：只渲染一个 Content，模板只实例化一次，产出「一个控件」；
+                 换内容就是换 Content，框架按新内容的类型重新找模板。
+               两者共用同一个 RailTemplate 并不冲突：模板是工厂，实例化次数不同而已。
+               这也解释了「设置」为什么能被单独拎到底部而外观不变——同一份模板，
+               换个容器再实例化一次即可，不用把按钮样式抄第二遍。 -->
           <ItemsControl ItemsSource="{Binding RailTop}"
                         ItemTemplate="{StaticResource RailTemplate}">
             <ItemsControl.ItemsPanel>
@@ -199,6 +344,11 @@
           <!-- 「设置」用单独的 ContentControl 而不是放进 RailTop：
                它需要固定在 rail 底部，与顶部列表解耦；
                两者共用 RailTemplate，所以外观与交互完全一致 -->
+          <!-- Content 是单个对象（RailSettings 是 RailItem，不是集合），所以这里不需要
+               ItemsControl：ContentControl 只把这一条渲染出来，ContentTemplate 显式指定
+               用哪个模板——因为 RailTemplate 带 x:Key，不会被隐式匹配自动选中。
+               HorizontalAlignment=Center 让 ContentControl 收窄到内容宽度，
+               按钮自己也是 Center 对齐，两者叠加后「设置」正好落在 rail 中轴线上。 -->
           <ContentControl Grid.Row="2"
                           Content="{Binding RailSettings}"
                           ContentTemplate="{StaticResource RailTemplate}"
@@ -206,6 +356,11 @@
 
           <!-- 头像：32px + CornerRadius=16 得到正圆；W10 的 2px 描边模拟「在线」外圈；
                只在二级导航收起时显示（IsRailAvatarVisible），避免与二级导航底部用户区重复 -->
+          <!-- 现状提醒：IsRailAvatarVisible 的实现是「!IsSubNavUserVisible」，而
+               IsSubNavUserVisible 恒为 true，所以这个头像目前永远不会出现（IsVisible=false
+               的控件连布局都不参与，不存在「占位但看不见」的问题）。
+               另外这里的首字母是写死的 "L"，与二级导航底部用 SubNavUserInitial 取到的
+               「张」不是同一个来源；真要启用这块，两处应统一绑 SubNavUserInitial。 -->
           <Border Grid.Row="3" Width="32" Height="32" CornerRadius="16"
                   IsVisible="{Binding IsRailAvatarVisible}"
                   Background="{StaticResource AvatarGrad}"
@@ -220,21 +375,41 @@
       <!-- 二级导航 -->
       <!-- 宽度由 VM 计算后绑定，Auto 列随之伸缩；整体 IsVisible 绑定 IsSubNavVisible，
            收起时列宽归零、内容区自动补位 -->
+      <!-- 层级用意：#29000000 的 alpha 是 0x29 = 41，41/255 ≈ 16%，比 rail 的 18% 浅一档。
+           由左到右：18% 黑 → 16% 黑 → 无遮罩，明度依次递增，读起来像「从墙到桌面再到纸面」。
+           这与 Theme.axaml 里 Bg0 → Bg4 越靠前越亮的规则是同一套逻辑：
+           深色界面用明度差表达层级，比投影更稳，也不会在小尺寸元素上糊成一片。
+           宽度与显隐都绑 VM，所以收起时整列宽度归零，内容区自动补位。 -->
       <Border Grid.Column="1" Width="{Binding SubNavWidth}" IsVisible="{Binding IsSubNavVisible}"
               Background="#29000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
         <!-- Auto,*,Auto：标题 / 可滚动条目 / 底部当前用户，
              中间用 * 让条目区独占滚动空间，用户卡片永远贴在底部 -->
         <Grid RowDefinitions="Auto,*,Auto">
+          <!-- 标题左边距 24 与条目文字的左边缘并不齐：条目那边是 ItemsControl 外边距 14
+               加按钮 Padding 14 共 28，所以标题看起来比条目文字靠左 4px。
+               这 4px 是否有意无法从代码判断，按现象记录；要对齐把 24 改成 28 即可。 -->
           <TextBlock Text="{Binding SubNavTitle}"
                      FontSize="11" FontWeight="Bold" Foreground="{StaticResource Text3}"
                      Margin="24,20,12,10" />
           <!-- 只允许纵向滚动：二级导航宽度是算好的，横向滚动条会破坏三栏对齐 -->
+          <!-- 这里的关键是「没有 ItemTemplate」：ItemsControl 会把每条数据的运行时类型
+               拿去 <UserControl.DataTemplates> 里找模板，SubNavGroupEntry 命中标题模板、
+               SubNavLinkEntry 命中条目模板。一个集合混装两种类型、各自渲染成不同控件，
+               靠的就是隐式模板——换作 XAML 触发器那套写法（Avalonia 没有 DataTrigger）
+               会非常笨重。这也解释了为什么那两个模板不能加 x:Key：
+               一旦有键，就不再参与自动匹配，这个 ItemsControl 会退化成「显示类型名」。
+               滚动由外层 ScrollViewer 负责，ItemsControl 只管排布，两者互不干涉；
+               ScrollBar 的细条样式来自 Styles/Controls.axaml 的 ScrollBar 选择器。 -->
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding SubNavEntries}" Margin="14,0,14,12" />
           </ScrollViewer>
 
           <!-- 底部当前用户 -->
           <!-- 仅管理模块显示（IsSubNavUserVisible）；上边框 1px 的 Line 与条目区做视觉分隔 -->
+          <!-- 内部三列：30px 头像 / 用户名（* 吃掉中间）/ 角色标签靠右。
+               头像 30 加 CornerRadius 15 得正圆，内字用近黑 #0A0B10 压在亮渐变上；
+               用户名用 Text0、角色用 Text2，靠文字明度分出主次，不加分割线。
+               现状：IsSubNavUserVisible 的实现直接 return true，所以这块始终显示。 -->
           <Border Grid.Row="2" IsVisible="{Binding IsSubNavUserVisible}"
                   BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,12">
             <Grid ColumnDefinitions="Auto,*,Auto">
@@ -256,6 +431,17 @@
            由上面的隐式 DataTemplate 决定渲染成哪个 View。
            两个 ContentAlignment 都设 Stretch，否则视图会按内容尺寸居中、四周留白；
            ClipToBounds 防止页面内部的滚动或动画内容溢出到导航栏上 -->
+      <!-- 「一个 ContentControl 换整页」的完整机制，值得单独说清：
+           1) Content 绑的是 VM 对象（ActiveView），不是控件；
+           2) ContentControl 拿到对象后，用它的运行时类型去找 DataTemplate：
+              先看自己的 ContentTemplate（这里没写），再逐级向上找祖先的 DataTemplates，
+              最后到 Application。本文件根上的那四个模板就是在第 2 步被命中的；
+           3) 命中后 Build 出对应 UserControl，那个控件的 DataContext 就是当前 VM。
+           于是「切页面」＝「换一个对象」，视图层没有一行 if/switch。
+           一个副作用要知道：ActiveView 换了类型就会重建视图，页面内部 ScrollViewer 的
+           滚动位置会回到顶部——VM 状态还在（VM 常驻），但视图是新的。
+           ClipToBounds 与两个 Stretch 的分工：Stretch 解决「别缩成一小块居中」，
+           ClipToBounds 解决「页面内容别画出内容区边界」。 -->
       <ContentControl Grid.Column="2"
                       Content="{Binding ActiveView}"
                       HorizontalContentAlignment="Stretch"

@@ -16,12 +16,31 @@
 | 主工程 | `Dome/Aster`（`Aster.csproj`） |
 | 编译 | `cd Dome/Aster && dotnet build`（本机 SDK 10.0.401 也能编译 net8.0，产物在 `bin/Debug/net8.0/`） |
 | 运行 | `dotnet run`；登录框任意非空账号密码即可进入（无后端校验） |
-| 当前模块 | 只有「管理」和「设置」两个一级入口；文档、音乐模块已在 rail 中移除，代码仍保留 |
-| 页面状态 | 管理页有 工作台 / 列表页 / 流程页 三种状态，由 `AdminViewModel.SetState` 切换 |
+| 当前模块 | 一级入口为 工作台 / 审批 / 客户 / Workflow / 设置；文档、音乐模块已在 rail 中移除，代码仍保留 |
+| 页面状态 | 工作区六个页面由 `AdminPage` 枚举 + `AdminViewModel.Go(page)` 切换，`IsWorkbench` / `IsCustomers` / `IsDetail` / `IsApproval` / `IsWorkflow` / `IsKpi` 六个派生 bool 控制显隐 |
 
 ---
 
 ## 2026-10-22
+
+### 7. 注释加深到「逐段讲解」级（第二轮）
+
+- **改动**：在上一轮基础上把 36 个源文件的注释再挖一层，新增约 5180 行注释；全工程注释占比达到 40%（14723 行文件中 5983 行注释）。**代码仍然零改动**。
+- **文件**：与第 5 条同一批文件（`Program.cs`、`App.axaml(.cs)`、`Controls/*`、`ViewModels/*`、`Views/*`、`Styles/*`）；README 未改。
+- **新增的注释形态**
+  - C#：每个方法体加「前置状态 → 步骤编号 → 后置状态 / 谁被通知」三段式；魔法数字与颜色值标出来历（如 `1080` 是内容列上限、`420ms` 是模拟登录耗时、`2` 是画刷留白阈值）；派生属性标注「哪个 XAML 绑定它」；定时器标出时序与防重入判断。
+  - XAML：每个主要区块补 ASCII 结构示意（标注固定/伸缩区域）；每条关键绑定注明来源属性与写入方；`ControlTheme` 补模板元素命名表（`Border#Bg` / `Ellipse#Knob` / `Path#Check` 谁被哪个伪类命中）；尺寸链逐个相加核算（如设置浮层 940→764→716→684→360）。
+  - `Styles/Theme.axaml` 增补令牌速查表（层级 · 键名 · 用途）与「取值优先级」说明；`Controls.axaml` 标注每个样式类的实际使用方。
+- **纠正的既有注释（本轮重点，之前写错的事实）**
+  - **编译绑定**：项目 `AvaloniaUseCompiledBindingsByDefault=false` 且没有 `x:CompileBindings="True"`，所以 `x:DataType` 只是类型提示，属性名写错不会编译报错、只在运行期留下绑定错误日志。`HomeView` / `LoginView` / `MarkdownView` / `ShellView` 四处原先写成「编译期校验」的描述已改正。
+  - `MainWindowViewModel._moduleKey` 的说明从「只有 admin 一个模块」改为实际存在的四个 key（workbench / approval / clients / workflow）。
+- **本轮记录下来的实现现状（注释里标注，未改代码）**
+  - `SubNavWidth` 恒为 260、`_moduleKey` 只写不读、`IsSubNavUserVisible` 恒 true 导致 rail 底部头像恒不可见；`SelectModule(item, bool raise)` 的 `raise` 与 `if (item.IsSettings)` 分支都已走不到。
+  - `HomeViewModel` 创建后从未赋给 `ActiveView`；`MarkdownViewModel` / `MusicViewModel` 无实例化点 —— 三个页面的模板目前是备用状态。
+  - 双写 `IsVisible`：`MarkdownView.ApplyMode` 在后台直接改 `PreviewPane.IsVisible`，与 XAML 的 `ShowPreview` 绑定争夺同一属性。
+  - `Theme.axaml` 里 `Bg0` / `Bg4` 全工程零引用；`Bg1` 才是实际窗口底色。
+- **注意**：`Dome/Aster/Controls/Icons.cs`、`Charts.cs` 在改动前工作区存在一份与 HEAD 不同的格式化差异（`Sliders` 被压成一行、using 顺序、若干冗余括号），已统一回 HEAD 的写法，功能等价；如果那份格式化是在别处手动做的，需要重新应用一次。
+- **验证**：`dotnet build` 0 warning 0 error；剥离注释后与 HEAD 逐行比对，36 个文件代码行完全一致。
 
 ### 6. 按 HR Agent 原型重构工作区界面（布局 + 内容） — `d2a2811`
 

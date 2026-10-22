@@ -11,7 +11,22 @@
   <!-- 风格约定：默认样式负责"安静"（低对比底 + 弱描边），强调只交给样式类和 .selected 状态，一屏最好只有一个 pri -->
   <!-- 新增样式：优先组合已有类；确实需要新模板时回 Theme.axaml 加 ControlTheme，不要在这里重写 Template -->
 
+  <!-- ===================== 样式生效顺序 ===================== -->
+  <!-- 一 · 加载顺序：App.axaml 的 Application.Styles 里 FluentTheme 在前、本文件在后，两者都参与匹配，同一属性后者覆盖前者 -->
+  <!-- 这就是本文件能改掉 Fluent 默认外观（按钮底色、输入框圆角、滚动条配色）的全部机制：不换模板，只覆盖属性 -->
+  <!-- 二 · 同一属性被多条 Setter 赋值时：同一条 Style 内部后写的覆盖先写的；不同的 Style 之间，后注册（文件里靠后）的覆盖靠前的 -->
+  <!-- Avalonia 不做 CSS 那样的权重打分，靠的是"有序列表 + 后者胜"，所以本文件的排列顺序本身就是语义：先通用后专用、先常态后状态 -->
+  <!-- 三 · 伪类与类名叠加：选择器里的每个条件都是"与"关系。Button.pri:pointerover 要求 pri 类与指针悬停同时成立 -->
+  <!-- 一条控件上往往同时命中多条选择器（Button、Button:pointerover、Button.pri、Button.pri:pointerover），它们全部参与，最后一条赢 -->
+  <!-- 正因如此，.pri 的悬停态必须把 Foreground 再写一遍 White，否则通用的 Button:pointerover 会把它改成 Text0 -->
+  <!-- 四 · 模板内部不算同一层：FluentTheme 把可见颜色画在模板里的 ContentPresenter / Border 上，控件的 Background 只是被 TemplateBinding 读走的数据源 -->
+  <!-- 所以想改某个状态下的可见颜色，要么改控件属性让模板跟着变，要么用 /template/ 直接命中内部元素；后者更稳，因为内部元素上可能已经压着 Fluent 自己的状态样式 -->
+  <!-- 五 · 继承：FontFamily / FontSize / Foreground 注册为 Inherits，控件自身没设值时向父级要，所以一条 Window 样式就能管全应用 -->
+  <!-- 六 · 挂 Theme 的样式类（Button.nav / .subnav / .seg / .chrome）只做一件事：把控件主题换掉；主题里的 Setter 优先级低于本文件的 Setter，于是这里能继续拧尺寸与状态色 -->
+
   <!-- ===================== 基础 ===================== -->
+  <!-- 影响范围：Window 只命中 MainWindow（全工程唯一的 Window）；其余 8 个视图都是 UserControl，挂在它下面靠属性继承拿到字体与前景色 -->
+  <!-- 被谁用：所有页面间接受影响。改这里的 FontSize，等于改全站正文基准，单个 TextBlock 想特例就在实例上写 FontSize 覆盖 -->
   <!-- Window 上设字体与字号，全应用靠继承生效：页面里不必重复声明 FontFamily，只有等宽等特例才单独覆盖 -->
   <Style Selector="Window">
     <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
@@ -20,6 +35,8 @@
   </Style>
 
   <!-- ToolTip 属于临时浮层，用 Bg3 而不是卡片的 Bg2，靠"比卡片更亮"表达它浮在内容之上 -->
+  <!-- 影响范围：全应用的 ToolTip.Tip（ShellView 的三枚窗口按钮、AdminView 的"更多"、SettingsOverlay 的各控制项等） -->
+  <!-- 为什么要整套写全（颜色、字号、内边距、圆角）：ToolTip 的内容渲染在独立的 Popup 里，继承链与窗口内容树不保证一致，指望不了从 Window 继承字号与前景色 -->
   <Style Selector="ToolTip">
     <Setter Property="Background" Value="{DynamicResource Bg3}" />
     <Setter Property="Foreground" Value="{DynamicResource Text1}" />
@@ -31,10 +48,14 @@
   </Style>
 
   <!-- ===================== 滚动条 ===================== -->
+  <!-- 影响范围：各页 ScrollViewer 的滚动条（AdminView 6、MusicView 2，ShellView / HomeView / MarkdownView / SettingsOverlay 各 1） -->
   <!-- 轨道完全透明，只留滑块：深色界面里一条常驻的轨道会显得很脏，滚动条应当"需要时才被看见" -->
   <Style Selector="ScrollBar">
     <Setter Property="Background" Value="Transparent" />
   </Style>
+  <!-- 为什么 Thumb 必须带 /template/：Thumb 是 ScrollBar 模板里的子控件，不是 ScrollBar 自身的属性；而且它没有 x:Name，只能靠类型选择器定位 -->
+  <!-- 只写 ScrollBar 的 Background 改的是滚动条自身的面板色，滑块的颜色来自 Thumb 自己那套主题，不会跟着变 -->
+  <!-- 为什么悬停条件写在 ScrollBar 上而不是 Thumb 上：指针落在 Thumb 上时，:pointerover 会同时加到祖先 ScrollBar 上，一条选择器就能覆盖整条滚动条 -->
   <!-- Thumb 在模板里，必须走 /template/；#1CFFFFFF 约 11% 白，是"能看见但不打扰"的滑轨强度 -->
   <Style Selector="ScrollBar /template/ Thumb">
     <Setter Property="Background" Value="#1CFFFFFF" />
@@ -46,6 +67,8 @@
   </Style>
 
   <!-- ===================== 通用按钮 ===================== -->
+  <!-- 影响范围：全部 Button，包括一个类都没加的（LoginView 弹窗里的"取消""关闭"、SettingsOverlay 的"更换头像""检查更新""打开"、MusicView 的"导入""新建歌单"） -->
+  <!-- 与 FluentTheme 的关系：只覆盖属性、不覆盖模板，所以按下动画、圆角裁剪、焦点环仍是 Fluent 的实现，本文件只换颜色与尺寸 -->
   <!-- 默认按钮＝次级按钮：W04 底 + Line2 描边 + Text1 文字，保证"没被强调的动作"看起来也是可点的 -->
   <Style Selector="Button">
     <Setter Property="MinHeight" Value="28" />
@@ -64,6 +87,10 @@
   <!-- 这条模板内部选择器是必须的：FluentTheme 的 Button 把底色画在 ContentPresenter#PART_ContentPresenter 上，而不是 Button 自身 -->
   <!-- 不写它的话，下面所有 :pointerover / :pressed 的背景都改不到可见的那一层；元素名 PART_ContentPresenter 是 Fluent 模板里写死的，写错会静默失效 -->
   <!-- 顺带把 CornerRadius 同步成 6：这层是真正被填色的矩形，圆角不同步就会从外框圆角里"露角" -->
+  <!-- 为什么不能只改 Button.Background：模板里那层 ContentPresenter 的 Background 虽然用 TemplateBinding 指向控件属性，但 FluentTheme 也给这个元素挂了悬停/按下的状态样式 -->
+  <!-- 那些状态样式直接压在这层元素上，优先级高于 TemplateBinding 推上来的值；所以想在悬停时换色，必须自己写一条同样带 /template/ 的选择器把值抢回来 -->
+  <!-- PART_ 前缀是 FluentTheme 模板作者与样式作者之间的约定：PART_ 表示"模板的一部分"，样式可以依赖它存在；名字写错不会报错，只会静默不生效 -->
+  <!-- 但两处 PART_ 不能混用：Button 模板里叫 ContentPresenter#PART_ContentPresenter，TextBox 模板里叫 Border#PART_BorderElement，各自对应各自的主题 -->
   <Style Selector="Button /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="CornerRadius" Value="6" />
   </Style>
@@ -82,6 +109,10 @@
 
   <!-- .pri 主按钮：一屏只放一个的主要动作（登录、保存、发送），渐变底 + 更实的描边 + 白色 Medium 字重 -->
   <!-- 白色文字在饱和渐变上需要 Medium，Regular 会显得虚；描边用 W14 而不是有色蓝，让边缘在深色背景上"收得住" -->
+  <!-- 影响范围与被谁用：LoginView 的"登录"（42 高、圆角 8）；登录流程弹窗的"发送重置链接""发送邮件"与两处"知道了"；SettingsOverlay 的"完成"；HomeView 的"继续播放" -->
+  <!-- AdminView 的六处主操作也用它：前往 Workflow / 发起核对 / 通过审批 / 开始样例核对 / 确认两条差异已复核 / 确认归档到客户空间 -->
+  <!-- 注意不是所有渐变按钮都走这里：AdminView 会话区的"发送"按钮自己写了 Background="{StaticResource PrimaryGrad}"，拿不到下面这条悬停保护 -->
+  <!-- 那个按钮悬停时会被通用 Button:pointerover 刷成 W08 灰底，正好盖在渐变上，看起来像失效；想修只需给它加 Classes="pri" -->
   <Style Selector="Button.pri">
     <Setter Property="Background" Value="{DynamicResource PrimaryGrad}" />
     <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
@@ -105,6 +136,7 @@
 
   <!-- .ghost 幽灵按钮：透明底 + 透明描边，只在悬停时给一层 W06，用工具栏图标、卡片右上角"更多"这类次要操作 -->
   <!-- 它与默认按钮的区别不是颜色而是"存在感"：默认按钮常有底色，ghost 平时完全融入背景 -->
+  <!-- 影响范围与被谁用：AdminView 的"更多"与"← 返回客户列表"、MarkdownView 的两个图标按钮与"导出"、LoginView 密码框右侧的显隐按钮 -->
   <Style Selector="Button.ghost">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="Transparent" />
@@ -114,6 +146,8 @@
   </Style>
 
   <!-- .link 文字链接：取消按钮的一切"盒感"（无底、无框、无内边距），让它在句子里像一段可点的文字 -->
+  <!-- 影响范围与被谁用：AdminView 的客户名与"查看 →""查看结果 →"，LoginView 的"忘记密码？""联系管理员" -->
+  <!-- Height="NaN" 是 Avalonia 里"自动"的字面写法：Width/Height 的类型是 double，NaN 表示不约束，由内容决定；写成 Auto 字符串会解析失败 -->
   <Style Selector="Button.link">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
@@ -135,6 +169,7 @@
   </Style>
 
   <!-- ===================== 输入框 ===================== -->
+  <!-- 影响范围与被谁用：各页的 TextBox（AdminView 4、LoginView 3、MarkdownView 2、SettingsOverlay 2），包括密码框与搜索框，全部共用这一套外观 -->
   <!-- 与按钮同一套"弱面"语言（W04 底 + Line2 描边），但圆角 7 比按钮 6 稍大，暗示这是"可以往里写字的槽" -->
   <Style Selector="TextBox">
     <Setter Property="Background" Value="{DynamicResource W04}" />
@@ -152,6 +187,9 @@
     <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
   <!-- PART_BorderElement 是 FluentTheme TextBox 模板里那层可见边框，属性必须作用在它身上才有效 -->
+  <!-- 为什么这里改控件自身的 BorderBrush 不够：TextBox 的 BorderBrush 只是被模板读走的数据源，而 Fluent 已经在这层 Border 上挂了悬停态样式，直接压值更可靠 -->
+  <!-- 一句话概括：这层 Border 是 TextBox 唯一可见的面，圆角、底色、描边全画在它身上，状态色也只能往它身上写 -->
+  <!-- 圆角不在这一层重复声明：模板用 TemplateBinding 从控件的 CornerRadius 读走，两处各写一遍反而有机会不一致 -->
   <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
     <Setter Property="Background" Value="{DynamicResource W06}" />
     <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
@@ -159,6 +197,10 @@
   <!-- 聚焦态用 BoxShadow 做 3px 外发光，而不是加粗 BorderThickness -->
   <!-- 原因：BorderThickness 变化会参与布局，输入框会整体抖动、文字位移；BoxShadow 只影响绘制，等于免费得到一圈 outline -->
   <!-- "0 0 0 3" 里前两个 0 是不偏移、第三个 0 是模糊、第四个 3 是扩散，所以光晕是硬边均匀外扩，而不是糊开的阴影 -->
+  <!-- 布局层的差别值得写清楚：BorderThickness 属于 Measure 的输入，改它会让可用内容区变窄 2px，光标、占位文字、右侧图标全部横移 -->
+  <!-- BoxShadow 只在 Render 阶段画在元素外沿，不参与任何测量，所以同一份视觉强度下它带来的布局代价是零 -->
+  <!-- 五值读法沿用 Theme.axaml 的窗口阴影：offsetX 0 / offsetY 0 不偏移，blur 0 不糊，spread 3 向外撑 3px，#246C8BFF 是 14% 蓝（24 = 36 / 255） -->
+  <!-- 焦点一共三层同色相：底 7% 蓝（#12）、描边 Accent 实色、外圈 14% 蓝光晕；亮度由内向外递减，像"亮起来的槽"而不是"加粗的框" -->
   <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
     <!-- 底色染 7% 蓝（#12），让聚焦面本身带一点主色，与描边、光晕形成三层同一色相 -->
     <Setter Property="Background" Value="#126C8BFF" />
@@ -167,6 +209,9 @@
   </Style>
 
   <!-- ===================== 下拉框 ===================== -->
+  <!-- 影响范围与被谁用：各页的 ComboBox（AdminView 的客户筛选与技能选择、SettingsOverlay 的选项行）以及它们展开后的 ComboBoxItem -->
+  <!-- 只改控件属性、不改模板：下拉弹层的阴影、圆角、动画仍由 FluentTheme 提供，这里的 W06 与 Line2 会被模板读走 -->
+  <!-- 注意 AdminView 那两个在实例上写了 Background="{DynamicResource Bg2}" / Bg3，本地值压过这里的 W06，所以 W06 实际只在 SettingsOverlay 那个上生效 -->
   <!-- ComboBox 底色用 W06（6%），比 TextBox 的 W04（4%）再实一档：它表示"已经选定的值"，视觉上比"待输入的空白"更确定 -->
   <Style Selector="ComboBox">
     <Setter Property="Background" Value="{DynamicResource W06}" />
@@ -192,6 +237,21 @@
   <!-- ===================== 文本样式类 ===================== -->
   <!-- 类名就是令牌名的缩写：t0/t1/t2 对应 Text0/Text1/Text2，数字越小越亮；页面里写 Classes="t2" 就行，不用记色值 -->
   <!-- 只开放 t0~t2 三级：最弱的 Text3 使用场景很少（禁用、极淡标注），直接引用资源键即可，避免被当成正文色滥用 -->
+  <!-- 全表速查（字号写"继承"表示不覆盖，沿用 Window 的 13；色写字体名表示换的是 FontFamily）：
+       类名        字号   字重      色/字体   当前用在哪
+       t0          继承   继承      Text0     暂无引用
+       t1          继承   继承      Text1     暂无引用
+       t2          继承   继承      Text2     暂无引用
+       accent      继承   继承      Accent    暂无引用
+       mono        11     继承      MonoFont  暂无引用（ID、时间戳、代码片段）
+       label       10.5   继承      Text2     暂无引用
+       groupTitle  10.5   SemiBold  Text2     暂无引用
+       pageTitle   18     SemiBold  Text0     暂无引用（各页自己写 FontSize，没走这个类）
+       cardTitle   12.5   SemiBold  Text0     HomeView 的四张卡片标题
+       metric      26     SemiBold  Text0     HomeView 的指标数字
+  -->
+  <!-- 上表最后一行是个好例子：HomeView 的指标文字同时有 Classes="metric" 与 Foreground="{Binding ValueBrush}"，本地绑定获胜，所以 26 号字生效、Text0 被 VM 的颜色顶掉 -->
+  <!-- 也就是说这十个别名类目前多数处于"备而未用"状态，新页面可以直接拿来用；但别假设它们已经在起作用，改之前先 grep 一次 -->
   <Style Selector="TextBlock.t0"><Setter Property="Foreground" Value="{DynamicResource Text0}" /></Style>
   <Style Selector="TextBlock.t1"><Setter Property="Foreground" Value="{DynamicResource Text1}" /></Style>
   <Style Selector="TextBlock.t2"><Setter Property="Foreground" Value="{DynamicResource Text2}" /></Style>
@@ -232,6 +292,14 @@
 
   <!-- ===================== 卡片 / 分隔 ===================== -->
   <!-- 四个 Border 类各管一种"块"，不要混用：card 是内容容器，pill 是胶囊徽标，roleTag 是元信息小标签，seg 是分段控件外壳 -->
+  <!-- 影响范围与被谁用（按 View 层实际引用统计）：
+       Border.card     HomeView 五张卡片（指标卡、最近编辑、快捷操作、继续播放、今日节奏）
+       Border.pill     HomeView 的涨幅徽标、SettingsOverlay 的权限标签
+       Border.roleTag  LoginView 的账号角色标、SettingsOverlay 的角色标
+       Border.seg      MarkdownView 的模式分段外壳（里面装 Button.seg）
+  -->
+  <!-- 为什么只有这四个类：AdminView（15 条）、MarkdownView（10 条）、MusicView（8 条）、SettingsOverlay（7 条）都在各自 UserControl.Styles 里定义了局部的 panel / trow / tag / h1 / lead / col 等类 -->
+  <!-- 局部类的选择器只在那个视图的子树里生效，同样遵循"后注册者胜"；改这里的 card 影响不到 AdminView 的 panel，想统一两处观感必须两边一起改 -->
   <!-- card：Bg2 底 + Line 细描边 + 11 圆角；ClipToBounds 让内部的图表、图片、表格不会溢出圆角（这是唯一开裁剪的类） -->
   <Style Selector="Border.card">
     <Setter Property="Background" Value="{DynamicResource Bg2}" />
@@ -265,6 +333,9 @@
   </Style>
 
   <!-- ===================== 标题栏按钮 ===================== -->
+  <!-- 影响范围与被谁用：ShellView 标题栏 3 枚（最小化/最大化/关闭）、LoginView 标题栏 3 枚 + 两个流程弹窗右上角的关闭 2 枚、SettingsOverlay 面板的关闭 1 枚 -->
+  <!-- 尺寸不在这里写死：LoginView 的三枚标题栏按钮用 Width=34 Height=26、两个弹窗的关闭用 28×28 覆盖主题，正好是"本地值压过主题 Setter"的现成例子 -->
+  <!-- ShellView 与 SettingsOverlay 则不写尺寸，直接用主题给的 40×28 -->
   <!-- Theme 属性是"挂 ControlTheme"的入口：这里不定义任何尺寸与模板，只把 Theme.axaml 里的 ChromeButton 装上 -->
   <!-- 之后所有状态色都靠 /template/ Border#Bg 改模板里那层底色，因为 ChromeButton 的模板只填这一个 Border -->
   <Style Selector="Button.chrome">
@@ -286,6 +357,11 @@
   </Style>
 
   <!-- ===================== 一级导航 ===================== -->
+  <!-- 影响范围与被谁用：只有 ShellView 的 rail（74 宽那一列），一个 DataTemplate 按 RailItems 集合生成 N 个条目；条目内容是 19 号图标 + 4 间距 + 一行 10.5 号标题 -->
+  <!-- 同一份 RailTemplate 还被底部的设置项复用（那里是 ContentControl 的 ContentTemplate），所以 rail 的上下两组在视觉上完全一致 -->
+  <!-- 命中规则（本文件最绕的一处）：一个被选中且正被悬停的条目会同时满足 Button、Button.nav、Button:pointerover、Button.nav.selected 四条选择器 -->
+  <!-- 它们全部参与，最后一条赢；所以 .selected 的三条必须排在 :pointerover 之后，否则悬停会把选中底色顶回 W04 灰、文字顶回 Text1 -->
+  <!-- 这里的"赢"靠的是注册顺序，不是"条件多者胜"：Button.nav.selected 只有类名，不因为多写一个类就自动获得更高权重 -->
   <Style Selector="Button.nav">
     <Setter Property="Theme" Value="{StaticResource NavButton}" />
     <!-- 尺寸与 ControlTheme 里的默认值重复：样式类的优先级高于 ControlTheme，这里写一遍等于把"可调参数"提到样式层，改单处即可覆盖主题 -->
@@ -320,6 +396,7 @@
   </Style>
 
   <!-- ===================== 二级导航 ===================== -->
+  <!-- 影响范围与被谁用：ShellView 侧栏的二级目录（184 或 260 宽，随模块变化），同样是 DataTemplate 生成；高度与字号由 VM 的 SubNavLinkEntry 算好传进来 -->
   <!-- 与一级导航同构，只是更轻：文字用提亮的 AccentText、选中描边 #336C8BFF（20% 蓝）比一级的 23% 更淡，用强度差表达层级 -->
   <Style Selector="Button.subnav">
     <Setter Property="Theme" Value="{StaticResource SubNavButton}" />
@@ -343,6 +420,8 @@
   </Style>
 
   <!-- ===================== 分段项 ===================== -->
+  <!-- 影响范围与被谁用：只有 MarkdownView 顶部那个模式分段（编辑 / 预览 / 分屏），一个 DataTemplate 生成三个分段项 -->
+  <!-- 选中态为什么不带 /template/：SegButton 模板里的 Border#Bg 用 TemplateBinding 接控件的 Background，改控件属性就能透到可见层，不需要进模板 -->
   <!-- Button.seg 必须和 Border.seg 一起用：容器负责凹槽（W04 底 + 2px 内边距），按钮只负责内容与选中块 -->
   <Style Selector="Button.seg">
     <Setter Property="Theme" Value="{StaticResource SegButton}" />

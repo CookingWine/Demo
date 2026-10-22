@@ -9,12 +9,35 @@
   <!-- ==========================================================================
        Markdown 文档模块视图：三栏结构
        左「文件树」212px 固定 / 中「编辑区」自适应 / 右「预览区」420px 固定
-       数据来源：MarkdownViewModel，已声明 x:DataType，所有绑定均为编译期校验的类型化绑定
+       数据来源：MarkdownViewModel，根元素声明了 x:DataType；注意本项目未开启编译绑定
+                 （csproj 里 AvaloniaUseCompiledBindingsByDefault=false），
+                 所以这里的 {Binding} 仍是运行期反射绑定，写错属性名不会编译报错
        启用状态：该模块当前已从一级导航移除、未在大厅启用，视图与 VM 一并保留待恢复
        易踩的坑：三列宽度在这里只是初始值，运行时由 MarkdownView.axaml.cs 的 ApplyMode 覆写；
                  行号栏 Gutter 的 RenderTransform 也不在此声明，而是后台代码注入的
        ========================================================================== -->
+  <!-- ==========================================================================
+       三栏结构示意（宽度单位 DIP，数值取自本文件的初始列宽）：
+       ┌───────────┬──────────────────────────────────┬────────────────┐
+       │ 文件树    │ 编辑区                           │ 预览区         │
+       │ 列 0      │ 列 1                             │ 列 2           │
+       │ 212 固定  │ * 星号（吃掉全部剩余）           │ Auto → 420     │
+       │ 42 标题   │ 42 标签栏 · 38 工具条 · * 编辑器 │ 38 标题 · * 渲染│
+       └───────────┴──────────────────────────────────┴────────────────┘
+       三列在三种模式下的取值（覆写者是 MarkdownView.axaml.cs 的 ApplyMode）：
+         编辑：列 0 = 212 · 列 1 = 1* · 列 2 = 0（预览 Border 同时 IsVisible=false）
+         分栏：列 0 = 212 · 列 1 = 3* · 列 2 = Auto（预览 Border Width=420）
+         预览：列 0 = 212 · 列 1 = 0 · 列 2 = 1*（预览 Border Width=NaN，随列撑满）
+       「列宽」与「可见性」是两条独立通路：可见性走本文件的 IsVisible 绑定（ShowEditor /
+       ShowPreview），列宽与预览栏 Width 只能走后台代码 —— 绑定表达不了「改 Grid 列定义」。
+       两条通路必须同时生效，否则会出现「列宽归零但控件仍可见」的空白条。
+       ========================================================================== -->
   <UserControl.Styles>
+    <!-- 使用者：文件树里「分组标题」那层 Button（DataTemplate 匹配 DocGroup 时写 Classes="tgroup"）。
+         视觉：无底无框、左右铺满 212 宽的侧栏、字号 11.5（比文件名的 12 小一号）、
+         上边距 4 只用来分隔相邻分组，左右为 0 —— 左右留白由外层 ItemsControl 的 Margin 统一给。
+         它只覆盖属性、不设 Theme，所以 Button 的默认模板没被换掉，改的只是模板里的底色与内边距。
+         分组标题比文件节点「更淡更小」是刻意的层级表达：同一列里越靠近内容的东西越亮。 -->
     <!-- 分组标题按钮：铺满宽度、无边框，仅悬停时给一层淡背景 -->
     <Style Selector="Button.tgroup">
       <Setter Property="Background" Value="Transparent" />
@@ -31,6 +54,12 @@
       <Setter Property="Background" Value="{DynamicResource W04}" />
     </Style>
 
+    <!-- 使用者：文件树里单个文档节点（DataTemplate 匹配 DocItem，Classes="tfile"）。
+         与 .tgroup 的差别：字号 12（正文级）、多了圆角 5、上下都留 5 的内边距；
+         圆角只为「悬停 / 选中」时那块底色看起来像一张可点的卡片，标题行整行铺满不需要形状感。
+         MinHeight=0 是必须的：全局 Button 样式（Controls.axaml 里那条不带类的 Button）给了 MinHeight=28 与 Padding=12,0，
+         不清零的话每个文件节点都会被撑到 28 高、左右各多出 12 的内边距，13 条堆起来条目间距就失去节奏。
+         这些覆盖之所以能生效，是因为「类选择器优先级高于类型选择器」，而不是靠定义顺序。 -->
     <!-- 文件节点按钮：比分组标题略高，圆角 5，选中态由 Classes.selected 叠加下面那条样式 -->
     <Style Selector="Button.tfile">
       <Setter Property="Background" Value="Transparent" />
@@ -48,11 +77,25 @@
       <Setter Property="Foreground" Value="{DynamicResource Text0}" />
     </Style>
     <!-- 文件节点选中态：淡蓝底 + 强调色文字；由 DocItem.IsSelected 通过 Classes.selected 触发 -->
+    <!-- 选择器 Button.tfile.selected 是「类名叠加」：要求 tfile 与 selected 两个类同时存在才命中，
+         不是父子关系、也不是伪类（对比 Button.tfile:pointerover 里的冒号，那是伪类 :pointerover）。
+         模板里写 Classes.selected="{Binding IsSelected}"，Avalonia 会按布尔值动态增删这个类，
+         于是「选中」完全由数据驱动，样式层连 :checked 都不需要。
+         #246C8BFF 是 8 位 ARGB：0x24 = 36/255 ≈ 14% 不透明的蓝，叠在深色侧栏上形成淡蓝块；
+         文字换成 AccentText（#C7D3FF）而不是 Accent，因为浅底上纯 Accent 的对比度不够。
+         位置说明：这条写在 :pointerover 之后，同优先级下后定义者生效，
+         于是「选中 + 悬停」时仍是选中底色，不会闪回悬停的 W04 灰。 -->
     <Style Selector="Button.tfile.selected">
       <Setter Property="Background" Value="#246C8BFF" />
       <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
     </Style>
 
+    <!-- 使用者：编辑区标签栏里的页签（DataTemplate 匹配 EditorTab，Classes="tab"）。
+         视觉：高 30、圆角 6、左右内边距 11；未选中透明底 + Text2 次要色，选中后换 Bg1 底 + Text0 正文色。
+         高度 30 与标签栏总高 42 配合：ItemsControl 在 Border 里 VerticalAlignment=Bottom，
+         于是页签贴底、上方留 12 的呼吸区，看起来像常见编辑器的「页签坐在分隔线上」。
+         .selected 同样靠 Classes.selected="{Binding IsSelected}" 动态挂类；
+         它排在 :pointerover 之后，所以选中页签被悬停时不会退回灰底。 -->
     <!-- 编辑区标签页：高 30，未选中用次要文字色，选中后换成更亮的底色与正文色 -->
     <Style Selector="Button.tab">
       <Setter Property="Background" Value="Transparent" />
@@ -72,6 +115,11 @@
       <Setter Property="Foreground" Value="{DynamicResource Text0}" />
     </Style>
 
+    <!-- 使用者：标签页右侧那颗 × 关闭按钮（Classes="docaction"）。
+         视觉：样式里给 22 见方的默认值、零内边距、无底无框，悬停才提亮到 W08；
+         但使用处又写了 Width=16 Height=18 —— 本地值优先级高于样式，
+         所以这颗按钮实际是 16×18，22 只是给别处复用本类时的默认尺寸。
+         这也解释了 StyledProperty 的优先级：本地值 > 样式 > 继承 > 默认值。 -->
     <!-- 标签页内的小图标按钮（关闭 × 等）：固定 22 见方、零内边距，只在悬停时提亮 -->
     <Style Selector="Button.docaction">
       <Setter Property="Background" Value="Transparent" />
@@ -91,6 +139,15 @@
   <!-- 根容器：三列分别对应文件树 / 编辑区 / 预览区。
        x:Name 供 code-behind 取 ColumnDefinitions 做运行时的列宽改写（ApplyMode）。
        这里的宽度只是「编辑模式」下的初始形态，程序启动后一旦收到 Mode 变化就会被覆写。 -->
+  <!-- 三列初始值与 ApplyMode 的改写对照（列号从 0 起）：
+       列 0 · 212 Absolute · 三种模式都不碰 → 侧栏宽度恒定，切模式时内容不会横向跳动；
+       列 1 · * Star · 初值对应「编辑」形态 → 分栏改 3*，预览改 0（整列塌陷）；
+       列 2 · Auto · 初值对应「分栏」形态（宽度由预览 Border 的 Width=420 撑出来）
+              → 编辑改 0，预览改 1*（并把 Border.Width 设成 NaN，让星号列真正说了算）。
+       为什么列 2 用 Auto 而不是直接写 420：分栏时希望「预览固定 420、窗口变宽多出来的全给编辑区」，
+       而 Auto 的语义正是「列宽跟随子元素尺寸」，子元素写死 420 就能得到这个效果；
+       若把列宽写成 420，预览栏自身再改宽就会被列定义卡住。
+       改宽度前先看 MarkdownView.axaml.cs 的 ApplyMode，别在这里调参 —— 运行时会被覆盖。 -->
   <Grid x:Name="RootGrid">
     <Grid.ColumnDefinitions>
       <!-- 0：文件树，固定 212，不参与模式切换 -->
@@ -98,16 +155,39 @@
       <!-- 1：编辑区，默认吃满剩余空间；分栏时被改成 3 份星号、预览模式下被改成 0 -->
       <ColumnDefinition Width="*" />
       <!-- 2：预览区，默认 Auto（由右侧 Border 自身的 Width 决定）；预览模式会被改成 1 份星号 -->
+      <!-- Auto 的精确含义：列宽 = 子元素的期望宽度（Border.Width 的 420 加上左边界那 1px）。
+           好处是「预览宽度」只有一处真源（那个 Border.Width），列定义只负责跟随；
+           坏处是预览模式必须先把 Border.Width 清成 NaN，否则 420 会把星号列压回 420。 -->
       <ColumnDefinition Width="Auto" />
     </Grid.ColumnDefinitions>
 
     <!-- ==================== 文件树 ==================== -->
+    <!-- 数据来源与交互闭环：
+         Groups（VM，ObservableCollection<DocGroup>）→ 分组模板 → Items（DocGroup）→ 文件节点模板；
+         点分组标题 → ToggleCommand → DocGroup.IsExpanded 翻转 → 子级 ItemsControl 的 IsVisible 变化；
+         点文件节点 → Command（DocItem.Command，即 VM 的 SelectDocCommand）→ SelectDoc；
+         搜索框 → Search 双向绑定 → VM 里 RebuildTree 整树重建 → 集合通知回来重绘。
+         本区块不产生任何写操作，全部是「读 VM 状态 + 发命令」。 -->
     <!-- 左侧栏：半透明加深底色 + 右侧 1px 分隔线，与编辑区形成层次
          行结构固定为 42(标题) / Auto(搜索框) / *(可滚动树) / Auto(底部状态) -->
+    <!-- 42 / Auto / * / Auto 这套行高不是随手写的：
+         42 与编辑区标签栏同高，两栏顶边因此对齐；
+         第 1 行 Auto 让搜索框自己撑（内部 Border 高 27 + 上下 Margin 10 = 47）；
+         第 2 行 * 是唯一的弹性行，窗口变高时多出来的空间全给文件树，底栏始终贴底；
+         底部 Auto 的行高由 Padding 与字号决定，约 30。 -->
+    <!-- 配色说明：Background="#24000000" 是 8 位 ARGB，alpha 0x24 ≈ 14% 的纯黑，
+         叠在窗口底色上把侧栏压暗一档，与编辑区的纯色块形成「凹陷的导航区」这种感觉；
+         BorderThickness="0,0,1,0" 只留右边框，于是两栏之间只有一条 1px 线，
+         不会出现「两边各画一条」导致的 2px 粗线。
+         本栏没有设 Width：列宽 212 由 RootGrid 的列 0 决定，Border 自动铺满整列。 -->
     <Border Background="#24000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="42,Auto,*,Auto">
 
         <!-- 第 0 行：区块标题「工作区」与右侧的新建按钮 -->
+        <!-- Margin="16,0,10,0" 左右不对称：左边 16 只是缩进，右边 10 更小是因为加号按钮本身 22 宽、
+             右边再留 10 后视觉重心与下方搜索框（左边 12）大致齐平。
+             列定义是「* 在左、Auto 在右」：左列星号把加号按钮推到最右，右列 Auto 按按钮自身宽度收。
+             标题行高度 42 由外层 Grid 的 RowDefinitions 决定，这里不再重复设 Height。 -->
         <Grid ColumnDefinitions="*,Auto" Margin="16,0,10,0">
           <TextBlock Text="工作区" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Text2}"
                      VerticalAlignment="Center" />
@@ -120,6 +200,13 @@
         <Border Grid.Row="0" Height="1" Background="{StaticResource Line}" VerticalAlignment="Bottom" />
 
         <!-- 第 1 行：搜索框。Text 双向绑定 Search，每次输入都会触发 VM 里的 RebuildTree -->
+        <!-- 尺寸来历：Border 高 27（比默认输入框矮，紧凑侧栏里的常见密度），
+             上下 Margin 10 撑出行距；左右 12 略小于树节点文字的左边界（列表 Margin 8 加条目内边距 7 = 15），
+             于是搜索框看起来是把整列内容「框」在里面，而不是和文字左对齐后右边界参差。
+             CornerRadius 6 与标签页一致；Padding 9,0 只留左右内边距，纵向靠 VerticalContentAlignment 居中。
+             内部 TextBox 的 MinHeight=0 很关键：Avalonia 的 TextBox 默认有 32 左右的最小高度，
+             不清零就会把 27 高的凹槽顶高，圆角与底色之间立刻露出缝。
+             图标 12 见方 + TextBox Padding 7,0 就是「放大镜与文字之间那 7px」。 -->
         <Border Grid.Row="1" Height="27" Margin="12,10" CornerRadius="6"
                 Background="{StaticResource W04}" BorderBrush="{StaticResource Line}" BorderThickness="1"
                 Padding="9,0">
@@ -133,14 +220,29 @@
         </Border>
 
         <!-- 第 2 行：分组树。只允许竖向滚动，横向禁用以免长文件名把布局撑破 -->
+        <!-- 横向禁用的两道保险：外层 ScrollViewer 的 HorizontalScrollBarVisibility=Disabled，
+             内层文件名的 TextTrimming=CharacterEllipsis —— 前者不让出现横向滚动条，
+             后者让超长名字自己收成省略号，两者缺一个都会让 212 宽的侧栏被内容顶宽。 -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <!-- 分组列表。ItemsSource 绑 Groups，VM 每次筛选都是整组 Clear + Add，这里靠集合通知重建 -->
           <ItemsControl ItemsSource="{Binding Groups}" Margin="8,2,8,14">
             <ItemsControl.ItemTemplate>
               <!-- 单个分组：一行标题按钮 + 一个可折叠的文档项列表 -->
+              <!-- 这是「隐式模板」：没有 x:Key，只声明 DataType，ItemsControl 会拿每个数据项的实际类型
+                   来匹配它（此处元素类型是 DocGroup）。对照写法是 keyed 模板（x:Key 命名 + 显式指定），
+                   本文件全部使用隐式匹配，省掉 ItemTemplate 里的 key 引用。
+                   模板内所有 Binding 的 DataContext 都是当前这个 DocGroup：
+                     ToggleCommand / CommandParameter={Binding} → 折叠命令 + 条目自身
+                     ChevronTransform → 折角旋转；FolderBrush → 文件夹着色
+                     Name → 标题文字；Count → 右侧计数
+                     Items → 子级 ItemsControl 的数据源；IsExpanded → 子级 ItemsControl 的 IsVisible -->
               <DataTemplate DataType="{x:Type vm:DocGroup}">
                 <StackPanel>
                   <!-- 分组标题行：命令参数传自身，VM 里翻转 IsExpanded -->
+                  <!-- 四列 Auto,Auto,*,Auto 的分工：折角 12 · 文件夹 12（左边距 6）·
+                       标题文字（星号列，吃掉全部剩余宽度，因此短标题不会把计数顶到中间）·
+                       右侧计数（Auto，靠右贴边，字号 10 比标题小一号）。
+                       星号放第 3 列而不是最后一列，是「左对齐内容、右对齐元信息」的标准做法。 -->
                   <Button Classes="tgroup" Command="{Binding ToggleCommand}" CommandParameter="{Binding}">
                     <Grid ColumnDefinitions="Auto,Auto,*,Auto">
                       <!-- 折角图标：Data 固定为一条折线，方向靠 ChevronTransform 旋转。
@@ -159,10 +261,20 @@
                   </Button>
 
                   <!-- 分组内的文档列表：折叠时不销毁，只靠 IsVisible 隐藏，展开后无需重建 -->
+                  <!-- IsVisible 与 ItemsSource 的分工要分清：
+                       IsVisible 只影响「画不画、占不占位」，子项容器照样保留在内存里，
+                       所以反复折叠展开既不会丢滚动位置也不会重新生成模板，代价是内存一直占着；
+                       真正会销毁重建的是 ItemsSource 换内容（VM 里 Groups 被 Clear + Add 时）。 -->
                   <ItemsControl ItemsSource="{Binding Items}" IsVisible="{Binding IsExpanded}">
                     <ItemsControl.ItemTemplate>
                       <!-- 单个文档节点 -->
                       <DataTemplate DataType="{x:Type vm:DocItem}">
+                        <!-- 三条 Binding 的来源与去向：
+                             Classes.selected ← DocItem.IsSelected，由 SelectDoc 保证「只有一个为 true」，
+                                                决定 .tfile.selected 那条淡蓝底是否生效
+                             Command ← DocItem.Command，即构造期注入的 VM.SelectDocCommand
+                             CommandParameter={Binding} ← 节点自身，VM 侧靠 o is DocItem 还原
+                             组内 Grid 三列 Auto,*,Auto = 图标 12 / 文件名（星号列吃满）/ 脏标记 4。 -->
                         <!-- Classes.selected 是条件类名：IsSelected 为 true 时才套用 .selected 样式 -->
                         <Button Classes="tfile" Classes.selected="{Binding IsSelected}"
                                 Command="{Binding Command}" CommandParameter="{Binding}">
@@ -170,9 +282,15 @@
                             <ctrl:Icon Data="{x:Static ctrl:Icons.Doc}" Width="12" Height="12"
                                        Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
                             <!-- 文件名：超长时省略号截断，避免撑破 212px 的侧栏 -->
+                            <!-- 绑的是 Name 而不是 DocItem.DisplayName：后者存在但两个分支返回同一值，见 VM 那边说明。
+                                 Margin 左边 7 是图标（12 宽）与文字之间的间距，右侧不留白由星号列自然吃满。 -->
                             <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="7,0,0,0"
                                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                             <!-- 未保存标记：4px 见方、圆角 2（即正圆），琥珀色；IsDirty 为 false 时整块隐藏 -->
+                            <!-- 圆角 2 配 4 见方就是正圆（半径 = 边长的一半），这是不引入 Ellipse 就画出圆点的惯用写法。
+                                 绑的是 DocItem.IsDirty（假数据里构造时就定死，只读），不是 VM 那个运行态脏标记，
+                                 所以这个点永远不会因为用户编辑而亮起或熄灭。
+                                 宽度 4 是「在 12px 图标旁还能被看见」的下限，再小在深色底上就糊掉了。 -->
                             <Border Grid.Column="2" Width="4" Height="4" CornerRadius="2"
                                     Background="{StaticResource Amber}" VerticalAlignment="Center"
                                     IsVisible="{Binding IsDirty}" />
@@ -188,6 +306,11 @@
         </ScrollViewer>
 
         <!-- 第 3 行：底部状态条。左侧文档总数（假数据固定值），右侧同步状态（当前写死） -->
+        <!-- Padding 14,9 与左侧栏的缩进节奏一致；BorderThickness="0,1,0,0" 只画上边线，
+             把「状态区」与上面可滚动的列表分开，滚动条滚到底时也不会和文字黏在一起。
+             「已同步」是写死的字符串，与 VM 的 SaveState 毫无关系 —— 一个是常亮的假状态灯，
+             一个是真正会被编辑改写的保存文案，别把两处当成同一件事。
+             两列 * 与 Auto 的分工：左边贴左、右边贴右，中间空出来的部分留给将来放按钮。 -->
         <Border Grid.Row="3" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,9">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="{Binding DocCountText}" FontSize="10.5" Foreground="{StaticResource Text2}" />
@@ -198,12 +321,24 @@
     </Border>
 
     <!-- ==================== 编辑区 ==================== -->
+    <!-- 本区块自上而下三层，行高固定为 42 / 38 / *：
+         42 标签栏（与左侧「工作区」标题同高，两栏顶边对齐）→ 38 工具条（面包屑 / 保存状态 / 模式段 / 导出）
+         → * 编辑器（行号栏 46 + 正文）。
+         数据来源：Tabs（标签）、CurrentGroup + CurrentName（面包屑）、SaveState（保存文案）、
+         Modes（模式段）、Text + LineNumbers（编辑器与行号）。
+         交互全部走命令：切标签 → SelectTabCommand；关标签 → CloseTabCommand；切模式 → ModeCommand；
+         正文输入 → Text 双向绑定回 VM。本区块没有任何 Background 铺满的容器，
+         底色由外层窗口透下来，只有编辑器那条带自己上了色。 -->
     <!-- 第 1 列：行结构 42(标签栏) / 38(工具条) / *(编辑器本体)
          ClipToBounds=True 很关键：模式切换时列宽会瞬间变化，裁剪掉溢出内容才不会闪出半截控件 -->
     <Grid Grid.Column="1" x:Name="EditorPane" RowDefinitions="42,38,*" ClipToBounds="True">
 
       <!-- 标签页 -->
       <!-- 标签页栏：底部贴一条分隔线，标签本身垂直靠底对齐，模拟常见编辑器的页签形态 -->
+      <!-- 结构：Border（底边线 + 内边距 12,0）→ ItemsControl（Horizontal StackPanel、间距 2、贴底）。
+           背景 #1A000000 是 alpha 0x1A ≈ 10% 的黑，比编辑区正文的底色亮一档，
+           于是「标签栏 / 工具条 / 正文」三层从上到下逐渐变暗，层次不靠分割线也读得出来。
+           Padding 左右 12 让第一个标签与工具条的面包屑左边缘大致对齐。 -->
       <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Background="#1A000000" Padding="12,0">
         <ItemsControl ItemsSource="{Binding Tabs}" VerticalAlignment="Bottom">
           <!-- 横向 StackPanel + 2px 间距，标签按打开顺序自左向右排列 -->
@@ -215,6 +350,12 @@
           <ItemsControl.ItemTemplate>
             <!-- 单个标签：左侧是主按钮（点它切文档），右侧叠一个 × 关闭按钮 -->
             <DataTemplate DataType="{x:Type vm:EditorTab}">
+              <!-- 这个 Grid 的两列都是 Auto：列 0 是标签主体，列 1 是关闭按钮。
+                   关闭按钮用了负的左边距（-18），把自身「拉回」到列 0 的宽度范围里，
+                   于是视觉上它压在标签文字右侧，但布局上仍算在列 1 —— 属于纯视觉叠放，
+                   不改 Grid 列结构，也不会让标签主体被挤窄。
+                   代价是标签自身必须把右内边距收窄到 6（见下面实例上的 Padding="11,0,6,0"），
+                   否则文字会顶到那颗叠上来的按钮底下。 -->
               <Grid ColumnDefinitions="Auto,Auto">
                 <!-- Padding 右侧收窄到 6，给叠上来的关闭按钮留出视觉空间 -->
                 <Button Classes="tab" Classes.selected="{Binding IsSelected}"
@@ -240,9 +381,19 @@
       <!-- 工具条 -->
       <!-- 工具条：面包屑（分组 / 文件名）· 保存状态 · 模式分段 · 导出按钮
            5 列依次为：面包屑 Auto / 弹性空隙 * / 保存状态 Auto / 分段 Auto / 导出 Auto -->
+      <!-- 第 2 列那个 * 是纯粹的「弹簧」：它不吃任何内容，作用是把后面三组 Auto 全部推到右侧。
+           注意 Auto 列不会因为空间不够而自己收缩 —— 面包屑名字过长时，被压到 0 的是这个星号列，
+           压缩顺序是「先弹簧、后溢出」，最终由外层 EditorPane 的 ClipToBounds=True 裁掉露出来的部分。
+           行高 38 与左侧搜索区（27 + 上下 10）不同，是刻意的：工具条比搜索框更紧凑，
+           两栏的视觉重心才不会打架。Padding 14,0 让面包屑的左边缘与上方标签栏的 12 左右接近，
+           而下面编辑器是从 0 开始的（行号栏贴边），三层的缩进并不严格对齐。 -->
       <Border Grid.Row="1" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,0">
         <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
           <!-- 面包屑：两个只读文本靠 VM 的 CurrentGroup / CurrentName 派生属性驱动 -->
+          <!-- CurrentGroup / CurrentName 都是 Current 的派生属性：Current 一变，
+               VM 的 setter 会补发这两条通知，于是面包屑跟着切文档自动换。
+               没有选中文档时回落到「未打开文档」与「Notes」两个占位值，不会显示空白。
+               中间的斜杠是写死的视觉分隔符，不属于数据。 -->
           <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
             <TextBlock Text="{Binding CurrentGroup}" FontSize="11.5" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
             <TextBlock Text="/" FontSize="11.5" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
@@ -250,12 +401,22 @@
           </StackPanel>
 
           <!-- 保存状态：绿色小圆点（5px、圆角 3 即正圆）+ SaveState 文案 -->
+          <!-- 这颗点是「常亮」的状态灯：颜色写死 Green，不会随「已保存 / 未保存」变色，
+               真正表达状态的只有右边的文字。文案由两处驱动：Text 的 setter（改成「未保存」）
+               与 SelectDoc（按 doc.IsDirty 复位成「已保存 / 未保存」）。
+               Margin 右边 14 是与右侧模式段之间留的距离。 -->
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" Margin="0,0,14,0">
             <Border Width="5" Height="5" CornerRadius="3" Background="{StaticResource Green}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding SaveState}" FontSize="11" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
           </StackPanel>
 
           <!-- 模式分段控件：外层 Border 负责胶囊底，内层 ItemsControl 铺三个 SegmentItem 按钮 -->
+          <!-- 两层同名类，分工不同：Border.seg 画凹槽（W04 底 + 1px 线 + 2 的内边距，2 是给选中块留的缝），
+               Button.seg 只负责内容与选中块，且它的 Theme 被样式表换成了 SegButton，
+               因此这里只写 Classes 不写模板 —— 样式类（Classes）是「一组属性覆盖」，
+               ControlTheme 才是「整套模板」，两者可以叠加使用。
+               三个按钮共用 VM 的 ModeCommand，靠 CommandParameter="{Binding}" 回传条目自身，
+               VM 再读 s.Label 决定切哪一档。命令侧没有类型分派，全靠 Label 这个隐式约定。 -->
           <Border Grid.Column="3" Classes="seg" VerticalAlignment="Center">
             <ItemsControl ItemsSource="{Binding Modes}">
               <ItemsControl.ItemsPanel>
@@ -274,6 +435,9 @@
           </Border>
 
           <!-- 导出按钮：尚未实现，纯装饰 -->
+          <!-- Classes="ghost" 来自全局样式表：透明底 + 无边框 + 悬停时给 ContentPresenter 一层 W06。
+               没有 Command，点下去不会有任何反应 —— 这是本轮注释要提醒的「视觉占位」，
+               不是绑定写漏了。高度 24 与分段控件齐平，Margin 左边 14 与模式段拉开距离。 -->
           <Button Grid.Column="4" Classes="ghost" Content="导出" Height="24" Padding="8,0" Margin="14,0,0,0"
                   VerticalAlignment="Center" FontSize="11.5" />
         </Grid>
@@ -282,11 +446,34 @@
       <!-- 编辑器 -->
       <!-- 编辑器：46px 行号栏 + 自适应文本区。整块 IsVisible 绑 ShowEditor，
            预览模式下隐藏；同时 RootGrid 会把本列宽度压到 0，双保险避免残留占位 -->
+      <!-- 46 + * 两列的取值理由：
+           左列 46 完全固定 —— 等宽字体 12.2 下一位数字约 7.4 宽，四位行号约 30，加上右内边距 14 正好 44 左右；
+           右列星号吃掉剩余宽度，于是「行号栏宽度恒定、正文换行位置只随窗口变化」。
+           若把行号栏也写成星号，窗口一拉宽行号就会飘到离正文很远的地方。
+           IsVisible 与列宽是两件独立的事，这一点最容易混：
+             绑定（ShowEditor）只决定「画不画」，RootGrid 列 1 是否归零由后台代码决定；
+             预览模式下两者同时生效（列 1 → 0 且 IsVisible=false），所以看不到残留像素；
+             只做一件就会露馅 —— 只隐藏不改列宽会留一块空白，只改列宽不隐藏则控件被压成 0 宽但仍参与布局。 -->
       <Grid Grid.Row="2" ColumnDefinitions="46,*" IsVisible="{Binding ShowEditor}">
         <!-- 行号栏容器：ClipToBounds 必须开，否则行号文本滚动偏移时会溢出到工具条或标签栏上。
              Gutter 的 RenderTransform 不在这里声明 —— 由 MarkdownView.axaml.cs 在 Loaded 时
              注入一个 TranslateTransform，随编辑器 ScrollViewer 的 Offset.Y 反向平移，做出同步滚动 -->
+        <!-- 为什么用 Panel 而不是 Border：这里只要「裁剪 + 底色」两件事。
+             ClipToBounds=True 是行号方案成立的前提 —— 行号 TextBlock 会被整体上移一段负距离，
+             不裁剪的话上面几行会画到工具条上、下面会溢出到底边之外。
+             底色 #12000000 是 8 位 ARGB，alpha 0x12 ≈ 7% 的黑，在窗口底色上压出一层很轻的暗色，
+             作用只是让「行号带」与「正文带」能靠色差分开，不承担对比度。 -->
         <Panel ClipToBounds="True" Background="#12000000">
+          <!-- 逐个属性说明（这一组值必须与右侧 TextBox 逐项配对，错一项就整列逐行错位）：
+               x:Name=Gutter       后台用 FindControl 取它，并把 TranslateTransform 挂到 RenderTransform 上
+               Text                绑 VM.LineNumbers，一整段「1\n2\n3…」的多行字符串（不是集合，见 VM 的说明）
+               FontFamily=MonoFont 等宽，数字宽度一致，行号才不会「1 窄 8 宽」地左右抖
+               FontSize=12.2       与文本框同值，字形高度一致
+               LineHeight=21       对齐的命门：21 / 12.2 ≈ 1.72 倍行距，两边同值时第 N 行行号才能落在第 N 行文字的基线上
+               TextAlignment=Right 右对齐，个位数与三位数共享同一条右边界
+               Padding=0,10,14,0   上 10 与文本框的上 10 对齐（第一行基线一致）；右 14 是行号与正文之间的空隙
+               Margin=0            不允许有任何额外偏移，非零值会直接破坏上面这套对齐
+               Foreground=#3A4152  比正文暗两档的灰蓝：行号是辅助信息，不能抢正文的注意力 -->
           <TextBlock x:Name="Gutter"
                      Text="{Binding LineNumbers}"
                      FontFamily="{StaticResource MonoFont}"
@@ -301,6 +488,18 @@
         <!-- 文本编辑区：Text 双向绑定 VM.Text（setter 会重算行号并置脏）。
              LineHeight 必须与 Gutter 的 21 严格一致，否则滚动时行号与正文会逐行错位。
              外层 Padding 底部留 40，让最后几行可以滚到视口中间，而不是被底边卡住 -->
+        <!-- 逐条说明：
+             x:Name=Editor          后台靠它沿视觉树找内部 ScrollViewer，订阅 ScrollChanged
+             Text 双向              键入回写 VM.Text → setter 重算行号 + 置脏，行号栏与工具条由绑定自己刷新
+             AcceptsReturn/AcceptsTab 允许回车换行、允许 Tab 插入制表符（而不是把焦点移走）
+             TextWrapping=NoWrap    不自动折行：一行就是一「行」，行号与文本才有一一对应；
+                                    一旦发生软换行，一个逻辑行会占多行高度，行号立刻错位
+             Padding=0,10,24,40     上 10 与行号栏对齐；左 0 让文字紧贴行号栏；右 24 给竖向滚动条留位置；
+                                    下 40 让最后几行能滚到视口中间，而不是被底边卡住
+             Background=#0C0E12     正文区底色（近黑），比行号带更暗，形成「纸面」感
+             ScrollViewer.* 两个附加属性  可见性属于模板里的 ScrollViewer，TextBox 自身只是转发：
+                                    Vertical=Auto 内容超高才出现滚动条（也是行号同步的触发源），
+                                    Horizontal=Hidden 不横滚 —— NoWrap 已保证不折行，长行直接裁掉 -->
         <TextBox Grid.Column="1" x:Name="Editor"
                  Text="{Binding Text, Mode=TwoWay}"
                  AcceptsReturn="True"
@@ -322,6 +521,13 @@
     <!-- 第 2 列：初始 Width=420 决定 RootGrid 第三列（Auto）的宽度；分栏模式下保持 420。
          切到「预览」模式时，code-behind 会把它改成 double.NaN（即 Auto，由内容撑满）并把列宽设为星号，
          于是整块右栏占满窗口；切回分栏时再还原成 420。IsVisible 绑 ShowPreview 负责纯编辑模式下的隐藏 -->
+    <!-- 内部结构：38 标题栏（眼睛图标 + 「实时预览」+ 右侧渲染风格标注）+ * 渲染器。
+         数据只有一条来源：Markdown 属性绑的就是 VM.Text（与编辑器同一个属性），
+         所以「输入即刷新」——没有额外事件、没有定时器、也没有节流：
+         每次键入 → Text setter → 绑定通知 → MarkdownPreview 清空并重建控件树。
+         420 是设计稿定的「能放下 Markdown 正文又不太抢编辑区」的临界宽度；
+         窗口变宽时它稳定保持 420，多出来的宽度全给编辑区（这正是列 2 用 Auto 的目的）。
+         IsVisible 绑 ShowPreview：编辑模式下整块不画，同时 code-behind 把列 2 压成 0。 -->
     <Border Grid.Column="2" x:Name="PreviewPane" Width="420"
             Background="#1F000000" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0"
             IsVisible="{Binding ShowPreview}">
@@ -341,6 +547,9 @@
 
         <!-- 渲染器本体：纯控件树实现的轻量 Markdown 渲染，直接复用编辑器同一个 Text，
              因此输入即刷新，没有额外的事件或定时器参与 -->
+        <!-- Markdown="{Binding Text}" 的去向：MarkdownPreview 的 StyledProperty（注册时挂了 AffectsRender），
+             OnPropertyChanged 里会把 Content 这个 StackPanel 清空后整棵重建；
+             所以这里既不需要 Command、也不需要事件转发，绑定本身就是刷新信号。 -->
         <ctrl:MarkdownPreview Grid.Row="1" Markdown="{Binding Text}" />
       </Grid>
     </Border>

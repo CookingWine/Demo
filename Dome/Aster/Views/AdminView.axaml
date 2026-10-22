@@ -11,7 +11,21 @@
              x:Class="Aster.Views.AdminView"
              x:DataType="vm:AdminViewModel">
 
+  <!-- ===== 视图总览（第二轮补充） =====
+       根 Grid 只有两行：64 高的顶栏 + 剩余全部给内容区。内容区是一个 Panel，
+       六个页面（工作台 / 客户列表 / 客户详情 / 协作与审批 / Workflow / KPI）全部叠在同一格里，
+       靠 IsVisible 绑定 VM 的六个 bool 互斥：IsVisible=false 的控件不参与 Measure/Arrange，
+       所以同一时刻只有一块占位，不需要额外容器或页面导航。
+       六块里只有工作台做了高度分配（RowDefinitions="*,Auto"：对话区可伸缩、输入卡按内容高）；
+       其余五块都是「ScrollViewer 包一个居中的 StackPanel」，高度自适应、超出滚动。
+       内容列宽度统一由 code-behind 的 OnContentSizeChanged 赋值（min(1080, 可视宽 - 96)）。 -->
+
   <UserControl.Styles>
+    <!-- ===== 局部样式：全部是样式类（Classes），不是 ControlTheme =====
+         这里只改外观、不换模板，所以用 Style + Selector 即可；
+         Selector 里的 .panel / .trow 是类选择器，命中 Classes="panel" 的控件。
+         与 ControlTheme 的区别：ControlTheme 会替换控件模板（重写整个视觉树），
+         样式类只是叠加属性值，优先级低于控件本地值。 -->
     <Style Selector="Border.panel">
       <Setter Property="Background" Value="{DynamicResource Bg2}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
@@ -20,6 +34,8 @@
       <Setter Property="Padding" Value="20,18" />
     </Style>
 
+    <!-- 表格行：只用一条 4% 白的下边线分隔，不做整框，鼠标悬停再叠 3% 白。
+         内边距 18,14 与表头的 18,12 左对齐，保证表头文字和单元格起点一致。 -->
     <Style Selector="Border.trow">
       <Setter Property="BorderBrush" Value="#0AFFFFFF" />
       <Setter Property="BorderThickness" Value="0,0,0,1" />
@@ -56,6 +72,9 @@
       <Setter Property="Foreground" Value="#6E788C" />
     </Style>
 
+    <!-- 页签：透明底 + 2px 下边框当指示条；未选中时边框也占 2px（只是透明），
+         这样切页签时行高不会因边框有无而跳动。
+         .selected 是条件类，由下方 Classes.selected="{Binding IsTabXxx}" 动态加/删。 -->
     <Style Selector="Button.tab">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0,0,0,2" />
@@ -85,6 +104,8 @@
     </Style>
 
     <!-- 筛选 / 分段按钮 -->
+    <!-- 胶囊按钮：未选中透明 + 1px 12% 白边；选中叠 12% 品牌蓝底、30% 蓝边、浅蓝字。
+         selected 由 IsTaskPending / IsTaskAll 这类绑定驱动，不需要手写点击切换样式。 -->
     <Style Selector="Button.chip">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="#1FFFFFFF" />
@@ -105,6 +126,8 @@
   <Grid RowDefinitions="64,*">
 
     <!-- ============ 顶部条 ============ -->
+    <!-- 左标题右状态：标题绑 TopBarTitle（Go 里手动发通知的计算属性），
+         右侧「本机演示状态」与「交互原型 V3」是纯静态文案，不参与任何交互。 -->
     <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="30,0">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Text="{Binding TopBarTitle}" FontSize="16.5" FontWeight="Bold"
@@ -122,19 +145,41 @@
       </Grid>
     </Border>
 
+    <!-- 内容区：六个页面平级叠放，同格重叠，靠 IsVisible 互斥。
+         所有页面都写在同一个 Panel 里而不是做成 UserControl 集合，
+         是为了让它们共享同一个 DataContext、共享这里的样式，也省掉一层视图容器。 -->
     <Panel Grid.Row="1">
 
       <!-- ============================================================ -->
       <!-- 1. 工作台                                                    -->
       <!-- ============================================================ -->
+      <!-- 视觉结构（高度 = 内容区高度）：
+           ┌──────────────────────────────────────────────┐
+           │ ScrollViewer  行 *：唯一可伸缩的区域          │
+           │   内容列宽 = min(1080, 可视宽 - 96)，水平居中 │
+           │   标题 + 引导语 + 三张快捷卡 + 「会话」列表    │
+           ├──────────────────────────────────────────────┤
+           │ WorkbenchComposer  行 Auto：按内容定高        │
+           └──────────────────────────────────────────────┘
+           两块宽度由 code-behind 同时赋值，否则输入卡会和内容列左右错位。
+           IsWorkbench 来自 AdminViewModel.IsWorkbench，Go 里发通知；为 false 时整块不参与布局。 -->
       <Grid RowDefinitions="*,Auto" IsVisible="{Binding IsWorkbench}" SizeChanged="OnContentSizeChanged">
+        <!-- x:Name="ChatScroll"：code-behind 在消息集合变化后用 FindControl 按这个名字查找并 ScrollToEnd。
+             名字是字符串约定，改了这里不同步改 code-behind 不会有编译错误，只会静默失去自动滚动。 -->
         <ScrollViewer x:Name="ChatScroll" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
           <Grid>
+            <!-- x:Name="WorkbenchContent"：宽度由 OnContentSizeChanged 赋值（初始为 NaN，即按内容自适应）。
+                 HorizontalAlignment=Center 让窗口比内容列宽时左右均匀留白。 -->
             <StackPanel x:Name="WorkbenchContent" HorizontalAlignment="Center" Margin="0,30,0,10">
               <TextBlock Text="今日工作台" Classes="h1" />
               <TextBlock Text="从常用入口开始，也可以直接在下方对话中交办工作。" Classes="lead" />
 
+              <!-- 快捷卡区：UniformGrid Columns=3 把宽度均分，和 Cards 的 3 条数据强绑定
+                   （多一条会换行，少一条右侧留空，两个数字必须一起改）。
+                   外层的 Margin 右边 -18 是在抵消每张卡自身的 0,0,18,0：
+                   容器多让出 18px、每张卡再让回 18px，第三张卡的右边缘才能和下面的文字对齐。
+                   Grid / UniformGrid 没有 gap 属性，这是最常见的「负边距配对」写法。 -->
               <ItemsControl ItemsSource="{Binding Cards}" Margin="0,26,-18,0">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
@@ -142,6 +187,11 @@
                   </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
+                  <!-- WorkbenchCard → 一整张可点卡片。外层 Button 负责点击与命中区域，
+                       内层 Border 负责背景/描边/圆角/内边距；Button 把 Padding、BorderThickness、
+                       MinHeight 全部清零，是为了抹掉按钮默认外观，否则卡片里会多一圈内边距。
+                       Command 绑定卡片自己的 Command（构造时注入同一个 CardCommand），
+                       CommandParameter="{Binding}" 把整张卡传回命令，由命令按 Title 分派页面。 -->
                   <DataTemplate DataType="{x:Type vm:WorkbenchCard}">
                     <Button Background="Transparent" BorderThickness="0" Padding="0" MinHeight="0"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
@@ -150,6 +200,8 @@
                       <Border Background="{DynamicResource Bg2}" BorderBrush="{DynamicResource Line}"
                               BorderThickness="1" CornerRadius="14" Padding="18,17" MinHeight="134">
                         <StackPanel>
+                          <!-- Chip 胶囊：底色与字色由 Tone 计算（green / red / 默认 accent），
+                               两个属性都是 VM 里的 switch 表达式，不在 XAML 里写条件。 -->
                           <Border CornerRadius="22" Padding="11,4" HorizontalAlignment="Left"
                                   Background="{Binding ChipBackground}">
                             <TextBlock Text="{Binding Chip}" FontSize="11.5" FontWeight="Medium"
@@ -167,6 +219,10 @@
               </ItemsControl>
 
               <TextBlock Text="会话" Classes="eyebrow" Margin="0,34,0,4" />
+              <!-- 消息列表：绑 Messages（ObservableCollection），Add 时靠集合变更事件自动追加一行。
+                   模板按 ChatMessage 匹配，同一条数据渲染两份互斥布局：
+                   IsAgent 为 true 走左侧无气泡（MaxWidth 720），IsUser 为 true 走右侧蓝气泡（MaxWidth 600）。
+                   两个布尔由 IsUser 取反得到，所以永远只会显示一份。 -->
               <ItemsControl ItemsSource="{Binding Messages}" Margin="0,8,0,0">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type vm:ChatMessage}">
@@ -195,11 +251,18 @@
           </Grid>
         </ScrollViewer>
 
+        <!-- 输入卡：和内容列同宽（x:Name 供 code-behind 赋值）。所在行是 Auto，
+             高度由内部「草稿框 + 工具行」决定；其中 TextBox 最高 120，再长就在框内滚动，
+             因此整张卡最多涨到 120 加工具行的高度，不会把上面对话区越挤越扁。 -->
         <Border x:Name="WorkbenchComposer" Grid.Row="1" HorizontalAlignment="Center" Margin="0,10,0,20"
                 CornerRadius="18" Background="{DynamicResource Bg2}"
                 BorderBrush="{StaticResource Line2}" BorderThickness="1"
                 Padding="22,18,18,14">
           <Grid RowDefinitions="Auto,Auto">
+            <!-- 草稿框：Text 双向绑 Draft，所以发送逻辑只认 VM 的 Draft，不直接读控件。
+                 AcceptsReturn=True 是让 TextBox 允许换行（默认 Enter 会插入换行符），
+                 正因为如此才需要 KeyDown 拦截：Enter 发送、Shift+Enter 换行，见 OnComposerKeyDown。
+                 样式上把背景/边框清空、内边距归零，让它看起来像卡片里的一块文字而不是输入框。 -->
             <TextBox x:Name="Composer"
                      Text="{Binding Draft, Mode=TwoWay}"
                      Watermark="输入业务指令，或 @ 同事发起协作请求"
@@ -223,6 +286,9 @@
                 <ctrl:Icon Data="{x:Static ctrl:Icons.ChevronDown}" Width="11" Height="11"
                            Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
               </StackPanel>
+              <!-- 右侧工具行：+ 附件、权限标签、模型名都是静态装饰，只有最后的按钮可点。
+                   发送按钮绑 SendCommand，和 Enter 键走同一个入口；命令没有 CanExecute，
+                   空草稿由 Send 内部早退兜住，所以按钮始终可点。 -->
               <Button Grid.Column="4" Width="42" Height="36" Padding="0" CornerRadius="8"
                       Background="{StaticResource PrimaryGrad}" BorderThickness="0"
                       Command="{Binding SendCommand}" ToolTip.Tip="发送（Enter）">
@@ -237,6 +303,16 @@
       <!-- ============================================================ -->
       <!-- 2. 客户工作空间（列表）                                        -->
       <!-- ============================================================ -->
+      <!-- 视觉结构：
+           ┌────────────────────────────────────────────────┐
+           │ CustomersHost（ScrollViewer，整页滚动）         │
+           │   标题 + 右侧「新建 / 前往 Workflow」            │
+           │   note 提示条                                    │
+           │   搜索框 260 · 筛选框 150 · 右侧客户计数         │
+           │   表格：8 列，表头 18,12，数据行 18,14           │
+           └────────────────────────────────────────────────┘
+           表头的 ColumnDefinitions 与行模板里那份是各写一遍的，改列宽必须两处同时改，
+           否则表头和数据会错位；比例用的是 * 权重而非固定像素，窗口变宽时按比例拉伸。 -->
       <ScrollViewer x:Name="CustomersHost" IsVisible="{Binding IsCustomers}"
                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     SizeChanged="OnContentSizeChanged">
@@ -250,6 +326,8 @@
                 <TextBlock Text="按客户查看已保存的数据、核对记录与交付文件。" Classes="lead" />
               </StackPanel>
               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                <!-- 「＋ 新建客户项目」只是再调一次 Select("clients")，并没有新建表单，
+                     属于演示占位；右侧按钮走 GoWorkflowCommand 直接进 Workflow。 -->
                 <Button Content="＋ 新建客户项目" Height="36" Padding="14,0"
                         Command="{Binding SelectCommand}" CommandParameter="clients" />
                 <Button Classes="pri" Content="前往 Workflow ↗" Height="36" Padding="14,0"
@@ -266,6 +344,9 @@
               </StackPanel>
             </Border>
 
+            <!-- 筛选行：搜索框固定 260、筛选框固定 150，最后一列 * 吃掉剩余空间让计数靠右。
+                 两者都是 TwoWay：Query 每次击键、Filter 每次选择都会触发 RefreshCustomers，
+                 列表重建后 CustomerCount 手发通知更新。Filters 是普通 string[]，只读、不变化。 -->
             <Grid ColumnDefinitions="Auto,Auto,*" Margin="0,18,0,0">
               <Border Background="{DynamicResource Bg2}" BorderBrush="{DynamicResource Line}"
                       BorderThickness="1" CornerRadius="8" Width="260" Height="36" Padding="11,0">
@@ -287,6 +368,9 @@
             <Border Background="{DynamicResource Bg2}" BorderBrush="{DynamicResource Line}"
                     BorderThickness="1" CornerRadius="14" Margin="0,12,0,0" ClipToBounds="True">
               <StackPanel>
+                <!-- 表头：8 列权重之和是 9（2.3+1.1+0.9+1+1.1+0.8+1.1+0.7），
+                     所以每个 * 的实际宽度 = 内容宽 × 权重 / 9。
+                     第 8 列（0.7）是「查看 →」按钮，表头故意不写标题，留白与内容对齐。 -->
                 <Border Background="#0BFFFFFF" Padding="18,12" BorderBrush="#0AFFFFFF" BorderThickness="0,0,0,1">
                   <Grid ColumnDefinitions="2.3*,1.1*,0.9*,1*,1.1*,0.8*,1.1*,0.7*">
                     <TextBlock Text="客户名称 / 编号" Classes="col" />
@@ -301,6 +385,13 @@
 
                 <ItemsControl ItemsSource="{Binding Customers}">
                   <ItemsControl.ItemTemplate>
+                    <!-- CustomerItem → 一行客户。绑定逐项对应：
+                         名称 Button：Command=OpenCommand、Parameter=整行，点名字即可下钻；
+                         Code 单独一行弱化（客户编号比名称次要）；
+                         Type / PeopleText / Owner / Date 都是只读格式化字符串；
+                         State：Background 与 Foreground 成对取 StateBackground / StateBrush；
+                         待处理列：两个 TextBlock 叠在同一格，PendingText 与「—」按 HasPending 互斥；
+                         最后一列「查看 →」与名称按钮共用 OpenCommand，把点击面积扩到整行右侧。 -->
                     <DataTemplate DataType="{x:Type vm:CustomerItem}">
                       <Border Classes="trow">
                         <Grid ColumnDefinitions="2.3*,1.1*,0.9*,1*,1.1*,0.8*,1.1*,0.7*">
@@ -352,12 +443,24 @@
       <!-- ============================================================ -->
       <!-- 3. 客户详情                                                  -->
       <!-- ============================================================ -->
+      <!-- 视觉结构（整页滚动，高度全自适应）：
+           ┌────────────────────────────────────────────────┐
+           │ ← 返回客户列表（BackCommand → Go(Customers)）   │
+           │ 头像 44 + 客户名 28 + 元信息                    │
+           │ 四个页签（Button.tab，底部 2px 指示条）          │
+           │ 页签内容：基础资料两栏 / 人员 / 核对 / 文件      │
+           └────────────────────────────────────────────────┘
+           页签不做页面切换：_page 一直是 Detail，只换 _detailTab，
+           因此四块内容用 IsVisible 互斥，标题与顶栏保持不变。
+           IsDetail 来自 AdminViewModel.IsDetail（_page == Detail），由 Go 发通知。 -->
       <ScrollViewer x:Name="DetailHost" IsVisible="{Binding IsDetail}"
                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     SizeChanged="OnContentSizeChanged">
         <Grid>
           <StackPanel x:Name="DetailContent" HorizontalAlignment="Center" Margin="0,22,0,30">
 
+            <!-- 返回按钮走 BackCommand，固定回到客户列表（不是浏览器式的「上一页」，
+                 也没有历史栈：从哪个页面进来都回列表）。 -->
             <Button Classes="ghost" Content="← 返回客户列表" HorizontalAlignment="Left" Padding="0"
                     FontSize="12.5" Foreground="{StaticResource Text2}" Command="{Binding BackCommand}" />
 
@@ -380,6 +483,8 @@
                 </StackPanel>
               </StackPanel>
               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                <!-- 「让 Agent 更新资料」实际只是 Select("workflow") 跳到交叉验证页，
+                     并不存在资料更新流程；文案与行为不一致，属于演示占位。 -->
                 <Button Content="让 Agent 更新资料" Height="36" Padding="14,0"
                         Command="{Binding SelectCommand}" CommandParameter="workflow" />
                 <Button Classes="pri" Content="发起核对 ↗" Height="36" Padding="14,0"
@@ -387,6 +492,11 @@
               </StackPanel>
             </Grid>
 
+            <!-- 页签栏：四个 Button.tab，各自把 Classes.selected 绑到一个 IsTabXxx。
+                 Avalonia 的条件类机制：绑定为 true 时给控件追加 selected 类名，
+                 命中上面 Button.tab.selected 的样式（白字 + 品牌蓝 2px 下边框）；
+                 为 false 时移除类名，全程没有触发器，也没有手写的选中态。
+                 CommandParameter 的四个字符串必须和 SelectTab 里比较的值完全一致。 -->
             <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Margin="0,22,0,0">
               <StackPanel Orientation="Horizontal">
                 <Button Classes="tab" Classes.selected="{Binding IsTabBase}" Content="基础资料"
@@ -401,6 +511,9 @@
             </Border>
 
             <!-- 页签 1：基础资料 -->
+            <!-- 两栏 1.35* : 1*：左边档案字段多、右边只有三条动态，按内容量分配权重。
+                 标签用 .col 弱化，值用 13.5 常规字色；字段网格 2 列 × 4 行，
+                 最后一行只放「当前资料版本」，右格空着（静态文案 V2 · 2026-10-17）。 -->
             <Grid ColumnDefinitions="1.35*,1*" IsVisible="{Binding IsTabBase}" Margin="0,20,0,0">
               <Border Classes="panel">
                 <StackPanel>
@@ -463,6 +576,8 @@
             </Grid>
 
             <!-- 页签 2：人员记录 -->
+            <!-- 整块是 panel，但 Padding=0：表头和数据行各自控内边距，才能让 18px 的左缩进从上到下一致。
+                 数据来自 PeopleRows，固定 3 条匿名样例，和客户真实人数无关。 -->
             <Border Classes="panel" IsVisible="{Binding IsTabPeople}" Margin="0,20,0,0" Padding="0">
               <StackPanel>
                 <StackPanel Margin="20,18,20,14">
@@ -507,6 +622,9 @@
             </Border>
 
             <!-- 页签 3：核对记录 -->
+            <!-- 表头与空状态互斥：HasRunRows 为 true 才显示表头，为 false 显示底部提示。
+                 HasRunRows 是计算属性（RunRows.Count > 0），集合变动不会自动通知，
+                 由 FillDetail 在重建 RunRows 后手动补发，否则切换客户时提示不会显隐。 -->
             <Border Classes="panel" IsVisible="{Binding IsTabRuns}" Margin="0,20,0,0" Padding="0">
               <StackPanel>
                 <StackPanel Margin="20,18,20,14">
@@ -546,6 +664,10 @@
                                      Foreground="{StaticResource Amber}" VerticalAlignment="Center" />
                           <TextBlock Grid.Column="5" Text="{Binding Date}" FontSize="12"
                                      Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                          <!-- 跨模板取命令：这一行的 DataContext 是 RunRow，它身上没有 GoWorkflowCommand，
+                               所以沿视觉树往上找最近的 ItemsControl，取它的 DataContext（AdminViewModel）
+                               再强转成 vm:AdminViewModel 取命令。$parent[ItemsControl] 只找祖先、不含自身；
+                               没有这层写法就只能给每个 RunRow 也注入一份命令。 -->
                           <Button Grid.Column="6" Classes="link" Content="查看结果 →" FontSize="12"
                                   HorizontalAlignment="Right" VerticalAlignment="Center" Padding="0"
                                   Command="{Binding $parent[ItemsControl].((vm:AdminViewModel)DataContext).GoWorkflowCommand}" />
@@ -561,6 +683,9 @@
             </Border>
 
             <!-- 页签 4：文件与产出 -->
+            <!-- FileRows 至少一条（原始材料），跑过核对才多一条 Excel 产出。
+                 用途标签的底色/字色来自 PurposeBackground / PurposeBrush，Tone=ok 时借
+                 StatusPalette 的「已完成」配色转绿，否则走灰色兜底。 -->
             <Border Classes="panel" IsVisible="{Binding IsTabFiles}" Margin="0,20,0,0" Padding="0">
               <StackPanel>
                 <StackPanel Margin="20,18,20,14">
@@ -604,6 +729,15 @@
       <!-- ============================================================ -->
       <!-- 4. 协作与审批                                                -->
       <!-- ============================================================ -->
+      <!-- 视觉结构：
+           ┌────────────────────────────────────────────────┐
+           │ 标题 + note 提示                                │
+           │ 两枚胶囊：待处理 / 全部记录（TaskFilterCommand）│
+           │ 卡片式任务列表（一列，纵向堆叠，不设上限）      │
+           └────────────────────────────────────────────────┘
+           每张任务卡右侧的「退回 / 通过」只在 IsPending 时出现，
+           处理完那条会立刻从「待处理」视图消失（Decide 里重建 Tasks）。
+           IsApproval 来自 AdminViewModel.IsApproval（_page == Approval）。 -->
       <ScrollViewer x:Name="ApprovalHost" IsVisible="{Binding IsApproval}"
                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     SizeChanged="OnContentSizeChanged">
@@ -614,11 +748,16 @@
             <TextBlock Text="通过、退回及原因会同步到待办记录；这里只演示审批交互。" Classes="lead" />
 
             <Border Classes="note" Margin="0,20,0,0">
+              <!-- 这句承诺「退回会追加一条补材料待办」，但 Decide 只写了 Note，
+                   并没有真的新增 TaskItem，文案与实现不一致。 -->
               <TextBlock Text="审批动作不触发真实业务写入；退回会追加一条补材料待办。"
                          FontSize="12.5" Foreground="#A9BAFF" TextWrapping="Wrap" />
             </Border>
 
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,18,0,4">
+              <!-- 两枚筛选胶囊共用 TaskFilterCommand，靠 CommandParameter 传目标值（"待处理" / "全部"）。
+                   selected 条件类绑的是 IsTaskPending / IsTaskAll —— 这两个是计算属性，
+                   所以 TaskFilter 的 setter 里必须补发通知，否则胶囊高亮不会跟着走。 -->
               <Button Classes="chip" Classes.selected="{Binding IsTaskPending}" Content="待处理"
                       Height="32" Padding="14,0" FontSize="12.5"
                       Command="{Binding TaskFilterCommand}" CommandParameter="待处理" />
@@ -631,6 +770,12 @@
 
             <ItemsControl ItemsSource="{Binding Tasks}" Margin="0,10,0,0">
               <ItemsControl.ItemTemplate>
+                <!-- TaskItem → 一张任务卡。左侧：标题 + 状态标签（成对取色）、
+                     客户/类型/期限用三个 Run 拼成一行、Note 仅在 HasNote 为 true 时显示；
+                     右侧：退回 / 通过两个按钮，整组仅在 IsPending 为 true 时出现。
+                     两个命令由 BuildTasks 按实例注入，模板不用向上找父级 DataContext。
+                     Note 与 HasNote 都是不发通知的普通属性，能显示靠的是 Decide 之后
+                     RefreshTasks 重建行容器、绑定重新求值这一副作用。 -->
                 <DataTemplate DataType="{x:Type vm:TaskItem}">
                   <Border Background="{DynamicResource Bg2}" BorderBrush="{DynamicResource Line}"
                           BorderThickness="1" CornerRadius="12" Padding="18,15" Margin="0,0,0,10">
@@ -672,6 +817,18 @@
       <!-- ============================================================ -->
       <!-- 5. Workflow（三步）                                          -->
       <!-- ============================================================ -->
+      <!-- 视觉结构：
+           ┌────────────────────────────────────────────────┐
+           │ 标题 + 三枚步骤胶囊（StepBg0..2 / StepFg0..2）  │
+           │ 第 0 步：范围表单（IsWfStep0）                   │
+           │ 第 1 步：差异表 + 复核说明（IsWfStep1）          │
+           │ 第 2 步：完成态 + 重新开始 / 归档（IsWfStep2）   │
+           └────────────────────────────────────────────────┘
+           三个 panel 始终都存在，只是 IsVisible 互斥；三枚胶囊也永远都在，
+           靠底色与字色表达「当前是第几步」，所以胶囊本身不做显隐。
+           WfStep 每次变化会发 9 条通知（3 个 bool + 6 个画刷），见 VM 的 setter。
+           IsWorkflow 来自 AdminViewModel.IsWorkflow（_page == Workflow），与三个 IsWfStepX 是两层状态：
+           前者决定「整页显不显示」，后者决定「页内第几步」。 -->
       <ScrollViewer x:Name="WorkflowHost" IsVisible="{Binding IsWorkflow}"
                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     SizeChanged="OnContentSizeChanged">
@@ -682,6 +839,9 @@
             <TextBlock Text="确认范围与材料 → 复核差异 → 归档到客户工作空间。" Classes="lead" />
 
             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,22,0,0">
+              <!-- 三枚步骤胶囊：底 Background、字 Foreground 各绑一个画刷，两两成对。
+                   当前步是 16% 品牌蓝底 + 浅蓝字，其余是 7% 白底 + 灰字 ——
+                   弱到不抢主体，但仍能看出「后面还有两步」；圆角 20、内边距 12,6 让它像标签而不是按钮。 -->
               <Border CornerRadius="20" Padding="12,6" Background="{Binding StepBg0}">
                 <TextBlock Text="01 确认范围与材料" FontSize="12" Foreground="{Binding StepFg0}" />
               </Border>
@@ -693,6 +853,10 @@
               </Border>
             </StackPanel>
 
+            <!-- 第 0 步：核对范围。关联客户是只读展示（WfCustomerName 取 Current.Name，没有选择器）；
+                 板块下拉绑 Skills（固定四项）与 WfSkill，所属期是可编辑文本框（默认 2026-08）；
+                 勾选框双向绑 WfAccepted，是 StartRun 放行的前置条件；
+                 红字同时绑 Text=WfError 与 IsVisible=HasWfError，空串时整行不占高度。 -->
             <Border Classes="panel" IsVisible="{Binding IsWfStep0}" Margin="0,18,0,0">
               <StackPanel>
                 <TextBlock Text="核对范围" FontSize="16" FontWeight="Bold" Margin="0,0,0,16" />
@@ -734,6 +898,11 @@
               </StackPanel>
             </Border>
 
+            <!-- 第 1 步：复核差异 -->
+            <!-- 表格六列：人员 / 业务侧 / 系统侧 / 差额 / 结果 / 状态。
+                 金额用 StringFormat={}{0:0.00} 固定两位小数；差额列绑 DiffText，
+                 颜色绑 DiffBrush（有差异红、无差异灰）；状态标签照旧成对取色。
+                 下方 WfNote 是必填说明，WfResolveCommand 里空值会被拦下并写 WfError。 -->
             <Border Classes="panel" IsVisible="{Binding IsWfStep1}" Margin="0,18,0,0" Padding="0">
               <StackPanel>
                 <StackPanel Margin="20,18,20,14">
@@ -788,6 +957,9 @@
               </StackPanel>
             </Border>
 
+            <!-- 第 2 步：完成态。只有说明文字和两个按钮：
+                 「重新开始」复位向导（WfRestartCommand），「确认归档」只跳回客户列表（WfArchiveCommand）。
+                 归档并不会真的往客户详情里写记录 —— 演示范围内没有回写逻辑。 -->
             <Border Classes="panel" IsVisible="{Binding IsWfStep2}" Margin="0,18,0,0">
               <StackPanel>
                 <Border Width="44" Height="44" CornerRadius="22" Background="#213DDC97"
@@ -812,6 +984,10 @@
       <!-- ============================================================ -->
       <!-- 6. KPI 与考勤                                                -->
       <!-- ============================================================ -->
+      <!-- 视觉结构：标题 + 一个 panel 内三条指标行 + 一条 note。
+           每行 Grid "*,Auto"：左边标题与说明、右边 18 号加粗数值，行与行之间用 .trow 的下边线分隔。
+           Metrics 在构造函数里一次性灌 3 条，是固定演示值，不随审批结果变化。
+           IsKpi 来自 AdminViewModel.IsKpi（_page == Kpi）。 -->
       <ScrollViewer x:Name="KpiHost" IsVisible="{Binding IsKpi}"
                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     SizeChanged="OnContentSizeChanged">

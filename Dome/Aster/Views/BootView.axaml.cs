@@ -17,6 +17,14 @@ public partial class BootView : UserControl
     /// <summary>
     /// 加载 BootView.axaml；动画在 XAML 加载时即开始，无需在此启动。
     /// </summary>
+    // 谁调用：MainWindow.axaml 里 <views:BootView IsVisible="{Binding IsBoot}" /> ——
+    //         MainWindow 的 InitializeComponent 解析 XAML 时就实例化了它，
+    //         也就是「应用启动那一刻」，此时窗口还没 Show、DataContext 还没赋值。
+    // 为什么这里什么都不做：进度条动画由 XAML 里的样式动画驱动，时钟随「挂上视觉树」自动开始；
+    //   阶段切换由 MainWindowViewModel 的 2 秒 DispatcherTimer 负责。
+    //   一旦在这里再写一份启动逻辑，就会和 VM 的时序形成两套真相，早晚不同步。
+    // 补一句时序：IsVisible 绑定 IsBoot，构造时 DataContext 还是 null，绑定取不到值；
+    //   等 App 赋完 DataContext，绑定求值得到 true，这个页面才真正显示出来。
     public BootView()
     {
         InitializeComponent();

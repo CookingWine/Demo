@@ -12,25 +12,76 @@
   <!-- 坑：外层 Grid 的 PointerPressed 负责拖窗，必须排除输入控件，见 code-behind。 -->
   <!-- =========================================================================== -->
 
+  <!-- 视觉结构（窗口默认 1320×850，整页没有系统标题栏）：
+       ┌───────────────────────────────────────────────────────────────┐
+       │ ┌─────────────────────────┐ │ ┌─────────────────────────────┐ │
+       │ │ 品牌区  42%             │ │ │ 表单区  58%                 │ │
+       │ │ · 线性渐变铺底（4 段）  │ │ │ · 右上角三枚窗口按钮        │ │
+       │ │ · 径向光晕叠在上面      │ │ │ · 350 宽表单，双方向居中     │ │
+       │ │ · Logo / 两行标语 / 版本│ │ │ · 账号 / 密码 / 记住我      │ │
+       │ │                         │ │ │ · 登录按钮 + 错误文案        │ │
+       │ │                         │ │ │ · 底部「联系管理员」入口     │ │
+       │ └─────────────────────────┘ │ └─────────────────────────────┘ │
+       └───────────────────────────────────────────────────────────────┘
+       叠层关系（根 Panel 的直接子节点，后声明者盖在前者之上）：
+         ① Grid          左右两栏的页面主体，挂 PointerPressed 负责拖窗
+         ② Panel         忘记密码遮罩（IsVisible ← IsForgotDialog）
+         ③ Panel         联系管理员遮罩（IsVisible ← IsContactDialog）
+       之所以是「兄弟层」而不是把弹窗塞进 Grid：弹窗需要覆盖整页（含品牌区），
+       而且拖窗处理器挂在 Grid 上，两个弹窗不在它的祖先链里，点弹窗就不会触发拖窗。
+       数据源：DataContext 是 MainWindowViewModel，根元素声明了 x:DataType 作为绑定上下文提示；
+       但本项目未开启编译绑定（csproj 里 AvaloniaUseCompiledBindingsByDefault=false，
+       这里也没有 x:CompileBindings="True"），属性名写错不会编译失败，
+       只会在运行期输出绑定错误日志、对应控件显示为空。 -->
+
   <!-- ==================== 局部样式 ==================== -->
   <!-- 只作用于本页，不改全局主题：所有输入框共用「Border.field 包住 TextBox」这一套视觉 -->
+  <!-- 为什么写在 UserControl.Styles 而不是 Styles/Theme.axaml：
+       这套组合只服务登录页的三个输入框（账号、密码、弹窗邮箱），
+       放进全局主题会波及 AdminView 等页面里直接用全局 W04 样式的输入框。
+       UserControl.Styles 的作用域是本控件及其子树，视图卸载时随之失效，不会泄漏到别处。 -->
   <UserControl.Styles>
+    <!-- 选择器 Border.field 的含义：命中「类名包含 field 的 Border」。
+         类名来自标签上的 Classes="field"（可写多个，空格分隔），
+         这是 Avalonia 的条件样式机制，不是 ControlTheme —— 后者用于整块替换控件模板，
+         这里只是给既有 Border 覆盖几条属性。
+         属性优先级：本地值（XAML 直接写在该控件上）> 样式 > 继承 > 默认值，
+         所以任何在 Border 身上直接写的 Height/Background 都会盖掉这里的设置。 -->
     <!-- 输入框外壳：42 高、8 圆角、1px 描边、左右各 12 内边距；浅底把输入区从页面底色里分离出来 -->
     <Style Selector="Border.field">
+      <!-- 42 是设计稿里单行输入框的标准高度：比全局 TextBox 的 MinHeight=30 更高，
+           因为这里要去掉内框边框、由外框独立承担视觉，需要更多留白才不显扁。 -->
       <Setter Property="Height" Value="42" />
+      <!-- 8 比全局输入框的圆角 7 略大：外框面积更大，圆角同比放大观感才一致。 -->
       <Setter Property="CornerRadius" Value="8" />
+      <!-- W04 = 4% 半透明白（见 Theme.axaml），在深色底上形成「略亮一档的凹槽」。
+           DynamicResource 而不是 StaticResource：调色板令牌可能在运行期被整体替换。 -->
       <Setter Property="Background" Value="{DynamicResource W04}" />
+      <!-- Line2 = 12% 半透明白的 1px 线，是「需要明确边界」档的描边令牌。 -->
       <Setter Property="BorderBrush" Value="{DynamicResource Line2}" />
       <Setter Property="BorderThickness" Value="1" />
+      <!-- 左右各 12：图标左边缘到外框的距离，与文字基线共用同一条内边距，所以图标和文字天然对齐。 -->
       <Setter Property="Padding" Value="12,0" />
     </Style>
     <!-- 悬停只提亮描边（W04 → W14），不改尺寸与底色，避免鼠标移入时布局抖动 -->
+    <!-- :pointerover 是伪类选择器：指针位于该控件或其后代元素之上时命中。
+         所以指针落在内部的 TextBox 上时，外层 Border 也会一起提亮 —— 观感是
+         「整个输入槽被激活」，而不是只有一条内框线在变。
+         只改 BorderBrush：Height/Padding 都没动 → 不触发重新测量 → 布局零抖动。 -->
     <Style Selector="Border.field:pointerover">
       <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
     </Style>
     <!-- 内层 TextBox 全部「去样式化」：背景透明、零边框、零内边距、不占最小高度。
          描边与圆角只由外层 Border 提供，焦点态不会出现内外双框；
          图标与文字也因为 Border 的内边距而自然水平对齐、垂直居中 -->
+    <!-- 选择器 "Border.field TextBox" 是后代选择器：命中 field 类 Border 内部的任意 TextBox，
+         不要求直接父子（这里中间还隔着一层 Grid）。逐条 Setter 的目的：
+           Background=Transparent   让外层的 W04 透出来，避免两层半透明叠成两种灰；
+           BorderThickness=0        去掉 TextBox 自带描边，否则与外框的 1px 描边形成双框；
+           Padding=0                内边距全交给外框，图标与文字才共享同一条左基线；
+           MinHeight=0              全局样式给了 30 的最小高度，不清零会在 42 里多出一段空隙；
+           FontSize=12.5            比全局 12 略大：登录页字少，稍大更好读；
+           VerticalContentAlignment=Center  文字在 42 高的外框里垂直居中。 -->
     <Style Selector="Border.field TextBox">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -39,18 +90,45 @@
       <Setter Property="FontSize" Value="12.5" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+    <!-- 聚焦态这里没有写，交给全局样式 TextBox:focus /template/ Border#PART_BorderElement
+         （品牌色描边 + 3px 硬边外发光）。由于本页把 BorderThickness 置 0，
+         描边本身不可见，聚焦时能看到的实际上是那圈发光，范围限于内层 TextBox 的矩形。
+         若设计要求「整个 42 高的外框一起高亮」，正确做法是给 Border.field 补一条
+         :focus-within 样式（当前没有写），而不是去改内层 TextBox 的属性。 -->
   </UserControl.Styles>
 
   <!-- 页面最底层：左右分栏共用的深色底 -->
+  <!-- 为什么用 Panel 而不是 Grid：Panel 是最简单的「叠层」容器，不划分行列，
+       子元素各自铺满或按对齐方式摆放；这里它的作用只是垫一层 Bg1 底色，
+       并充当两个弹窗遮罩的父级（遮罩因此能盖住整页，包括品牌区）。
+       Bg1 = #0E1015，是全局「第一层内容面」色，与 ShellView 的底色一致，切页时不会闪色。 -->
   <Panel Background="{StaticResource Bg1}">
 
     <!-- 42*,58* 是按比例分配的左右分栏（不是固定像素）：品牌区稍窄、表单区稍宽，
          窗口缩放时两侧同比伸缩。PointerPressed 挂在整块 Grid 上，
          在空白处按下时事件冒泡到这里，由 code-behind 调 BeginMoveDrag 拖窗 -->
+    <!-- 比例的来历：42:58 ≈ 0.72，取的是「品牌区占四成出头」这个视觉平衡点。
+       1320 宽（窗口初始值，也是 MinWidth）下两块约 554 / 764：
+         · 品牌区 554 减左右 Margin 38×2 = 478 可用，放得下 37px 的两行标语与 272 宽的副标题；
+         · 表单区 764 里放 350 宽的表单，两侧各余约 207，居中后左右留白充足、不显局促。
+       用星号（比例）而不是固定像素：窗口放大时两栏同比伸展，不会出现「一边变宽一边不动」。
+       与 Auto 的取舍：Auto 会按内容宽度算，品牌区的渐变背景没有固有宽度，撑不开整列，
+       所以这里必须用星号分配剩余空间。
+       PointerPressed 是冒泡事件：点在任何子元素上，只要没人标记 Handled，都会冒泡到这块 Grid，
+       于是「拖窗」只需在根容器上挂一个处理器；它内部再用 e.Source 判断该不该拖（见 code-behind）。 -->
     <Grid ColumnDefinitions="42*,58*" PointerPressed="OnDragPressed">
 
       <!-- ==================== 品牌区 ==================== -->
+      <!-- 这一列没有写 Width/Height：Grid 的列默认把子元素拉伸填满，
+           所以 Border 自动等于「42% 宽 × 整页高」，两栏因此永远等高。 -->
       <!-- 第一层背景：4 段线性渐变（左上 → 右下），走「深蓝 → 蓝紫 → 紫 → 深蓝」的氛围色 -->
+      <!-- 叠加顺序很重要：这一层在 Border 的 Background 上，属于最底层；
+           下面的径向光晕画在内层 Panel 上，覆盖在它之上（后绘制的在上）。
+           两层都参与 alpha 合成，所以最终颜色不是简单替换，而是「底渐变 + 25% 紫光」。
+           Offset 0 / 0.4 / 0.74 / 1 的分布不是均匀的：中段偏紫的区间（0.4~0.74）被刻意拉宽，
+           让紫色停留在视觉中心，两端深蓝只做收边。
+           起点 #0C1022 与终点 #0B1122 刻意不完全相同：对角渐变的首尾若完全相同，
+           方形区域的对角两端会出现一条可辨的等值线。 -->
       <Border>
         <Border.Background>
           <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
@@ -63,6 +141,16 @@
 
         <!-- 第二层背景：叠一个径向渐变光晕（光源在 30%,65%，向外淡出到全透明）。
              两层叠加的作用是让紫色光感偏左下、边缘回落，避免单层线性渐变显得平板 -->
+        <!-- 这个 Panel 自己不写任何布局属性：铺满外层 Border，唯一职责是承载第二层背景。
+             RadialGradientBrush 三个坐标参数的含义：
+               Center          渐变圆的圆心（按控件包围盒的百分比）；
+               GradientOrigin  渐变的起点，也就是 Offset=0 那个颜色出现的位置；
+               两者取相同值 → 对称的圆形光晕；若不同，光晕会偏向 GradientOrigin、呈偏心/锥形效果。
+               RadiusX/RadiusY 取 90% 而不是 100%：圆略小于区域，保证四角已经淡到全透明，
+                               不会在边缘出现一圈突然被截断的色带。
+             #408060D8 是 8 位十六进制 #AARRGGBB：A=0x40=64/255≈25%（很淡），RGB=#8060D8（紫）。
+             外圈 #00000000 是同一个紫但 alpha=0，也就是「只淡出、不变色相」，
+             这样叠在底层线性渐变上不会把底色染灰。 -->
         <Panel>
           <Panel.Background>
             <RadialGradientBrush Center="30%,65%" GradientOrigin="30%,65%" RadiusX="90%" RadiusY="90%">
@@ -72,19 +160,37 @@
           </Panel.Background>
 
           <!-- Auto,*,Auto：顶部 Logo、中间标语（吃掉剩余空间并垂直居中）、底部版本信息 -->
+          <!-- 三行的分工：第 0 行按 Logo 高度自适应、第 2 行按页脚高度自适应，
+               第 1 行的 * 吸收全部剩余高度；配合子元素的 VerticalAlignment=Center，
+               得到的不是「整页垂直居中」而是「在 Logo 与页脚之间的区域里居中」——
+               视觉上更稳，因为上下两块固定内容不会把标语挤偏。
+               Margin 38,34：左右 38 与表单区的 40 略有差别，避免两栏留白看起来完全对称而显得呆板。 -->
           <Grid RowDefinitions="Auto,*,Auto" Margin="38,34">
             <!-- Logo：渐变小方块 + 深色花瓣图形，形成反白效果 -->
+            <!-- 28 见方 + 圆角 8：圆角约为边长的 28%，视觉接近「超椭圆」而不是圆角矩形。
+                 LogoMark 用 Margin=3.5 内缩，实际花瓣区约 21×21；PetalBrush 取近黑 #0A0B12，
+                 让花瓣从渐变底上「镂空」出来，而不是叠加另一种颜色。 -->
             <StackPanel Orientation="Horizontal" Spacing="10">
               <Border Width="28" Height="28" CornerRadius="8" Background="{StaticResource LogoGrad}">
                 <ctrl:LogoMark Margin="3.5" PetalBrush="#0A0B12" />
               </Border>
+              <!-- 13.5 比正文 12.5 略大、比标题小，作为「品牌字标」介于两者之间。 -->
               <TextBlock Text="Aster" FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center" />
             </StackPanel>
 
             <!-- 主标语：Foreground 也可以用画刷，所以两行文字各挂一段线性渐变；
                  两行的色标完全一致，看起来像整句共用的横向高光 -->
+            <!-- 为什么必须写两段而不是一段：Foreground 是单个控件上的属性，一个画刷不能跨控件共享；
+                 所以每行各挂一段。由于两行都是 4 个字、字号相同、宽度恰好一致，
+                 各自的 0%→100% 在视觉上拼成一条连续的渐变。
+                 若将来改成两行不等长，这个「看起来连续」的前提就失效了 ——
+                 渐变会按各自宽度重新分布，交界处会出现色差。
+                 37px 字号配 LineHeight=46：行高约为字号的 1.24 倍，两行之间不拥挤也不松散。 -->
             <StackPanel Grid.Row="1" VerticalAlignment="Center">
               <TextBlock Text="把数据" FontSize="37" FontWeight="SemiBold" LineHeight="46">
+                <!-- 三个色标：#F2F5FF（近白）→ #BCC8FF（0.46 处，浅蓝）→ #A78BFA（品牌紫）。
+                     中间那个色标不是 0.5 而是 0.46，让浅蓝区略微提前结束、紫色更早介入，
+                     整句读起来重心偏右，与「变成决策」这一行的语义重音位置一致。 -->
                 <TextBlock.Foreground>
                   <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
                     <GradientStop Offset="0" Color="#F2F5FF" />
@@ -103,12 +209,22 @@
                 </TextBlock.Foreground>
               </TextBlock>
               <!-- 副标题：限宽 272 并允许换行，避免窄窗口时被拉到过长的一行 -->
+              <!-- 272 的来历：约等于 18~20 个 12.5px 汉字，是舒适的单行阅读长度；
+                   它明显小于品牌区可用宽度（约 478），所以「限宽」永远有效，不依赖窗口宽度。
+                   注意 TextWrapping="Wrap" 必须与 MaxWidth 同时存在：只有 MaxWidth 而无换行，
+                   超出的文字会被直接裁掉而不是折行。
+                   #9BA5C2 是品牌区专用的浅蓝灰：全局 Text2（#626A7D）压在紫色渐变上对比度不够。
+                   Margin 顶部 16 与上面两行标语拉开一个呼吸距离。 -->
               <TextBlock Text="成员、订单与增长指标集中在一处，随时掌握业务的真实状态。"
                          FontSize="12.5" Foreground="#9BA5C2" LineHeight="22" MaxWidth="272"
                          TextWrapping="Wrap" Margin="0,16,0,0" />
             </StackPanel>
 
             <!-- 页脚：*,Auto 让版权信息占左、版本号贴右 -->
+            <!-- 左列用 * 吃掉剩余宽度，所以版权信息自然贴左；右列 Auto 只占文字宽度，版本号因此贴右。
+                 10.5 是全页最小字号：再小在高分屏上会糊。两者都用 #4E5670，
+                 在深底上属于「能看见但不该被读」的一档，只提供背景信息。
+                 版权年份与版本号都是硬编码文案，不来自 VM —— 它们与业务状态无关。 -->
             <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
               <TextBlock Text="© 2026 Aster" FontSize="10.5" Foreground="#4E5670" />
               <TextBlock Grid.Column="1" Text="v1.4.2" FontSize="10.5" Foreground="#4E5670" />
@@ -120,8 +236,19 @@
       <!-- ==================== 表单区 ==================== -->
       <!-- 两行布局：第 0 行只放窗口按钮（Auto 高），第 1 行是登录表单并吃掉剩余高度；
            ColumnDefinitions="*,Auto" 配合 ColumnSpan=2，让按钮能贴右上角、表单能相对整块居中 -->
+      <!-- Grid.Column="1"：整块表单区落在 58% 那一列里。
+           ColumnDefinitions="*,Auto" 的两列用途不同：第 0 列是弹性空白（同时是拖窗热区），
+           第 1 列 Auto 只需容纳三枚按钮的宽度，所以按钮贴右、又不会把表单区挤宽。
+           RowDefinitions="Auto,*"：第 0 行高度由按钮撑开（约 26+10 的上边距），
+           第 1 行的 * 吃掉剩余高度，表单再用 VerticalAlignment=Center 在这块区域里居中。 -->
       <Grid Grid.Column="1" ColumnDefinitions="*,Auto" RowDefinitions="Auto,*">
         <!-- 自绘窗口按钮（应用无系统标题栏）：Classes="chrome" 走全局样式，close 变体是红色悬停 -->
+        <!-- 三枚按钮都只有 Click 事件、没有 Command：最小化/最大化/关闭是「窗口级」操作，
+             不该进 ViewModel（VM 不应依赖 Window），所以交给 code-behind 直接调 Window API。
+             Classes="chrome" 是样式类，命中 Theme.axaml 里的 Button.chrome 样式；
+             第三个额外加了 close 类，只改悬停底色为红。
+             Width=34 / Height=26 是设计稿的窗口按钮尺寸：34 宽接近系统标题栏按钮的点击区宽度，
+             26 高与标题栏 44 的留白比例协调；图标 12px、线宽 1.4 让细线在深底上不发虚。 -->
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="0,10,10,0">
           <Button Classes="chrome" Width="34" Height="26" Click="OnMinimize">
             <ctrl:Icon Data="{x:Static ctrl:Icons.Minus}" Width="12" Height="12" Thickness="1.4" />
@@ -135,20 +262,39 @@
         </StackPanel>
 
         <!-- 表单容器：固定 350 宽 + 双居中；跨两列是为了在「按钮列」之外仍保持视觉居中 -->
+        <!-- 350 的理由：两个输入框 + 主按钮的舒适宽度。再宽则「账号」与右侧眼睛按钮之间
+             视线跨度太大，再窄则输入框内文字可用宽度不足（350 减左右 Padding 12×2 再减图标 15+9）。
+             为什么必须 ColumnSpan="2"：如果只放在第 0 列，居中基准是第 0 列而不是整个表单区，
+             而第 0 列（*）与第 1 列（Auto）宽度不等，表单会明显偏左。
+             Margin="40,0"：窄窗口时左右各留 40，保证表单不贴边（窗口有 MinWidth=1320，正常不会触发）。 -->
         <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Width="350" VerticalAlignment="Center"
                     HorizontalAlignment="Center" Margin="40,0">
           <!-- 标题与副标题 -->
+          <!-- 22 是页面级标题字号（与弹窗里的 14 形成两个层级）；副标题 12 + Text2（#626A7D）
+               弱一档，底部 Margin 24 是「标题区」与「表单区」之间的分段距离，比字段间 15 大一档。 -->
           <TextBlock Text="欢迎回来" FontSize="22" FontWeight="SemiBold" />
           <TextBlock Text="登录你的账户以继续" FontSize="12" Foreground="{StaticResource Text2}" Margin="0,7,0,24" />
 
           <!-- 账号：外层 Border.field 负责描边/圆角/内边距，内层 Grid 为「图标 Auto + 输入框 *」，
                图标宽度固定、输入框吃掉剩余空间，二者因此基线对齐 -->
+          <!-- Margin 底部 15 是字段之间的标准间距；标签 11.5 + Text1（#9BA3B7）比正文弱一档，
+               与输入框内 12.5 的输入文字形成「标签 < 内容」的层级。
+               结构上是三层：StackPanel（字段组）> Border.field（视觉外壳）> Grid（图标 + 输入）。
+               这就是前面样式里说的「外壳与输入分离」——Border 提供 42 高度与描边，
+               内部 TextBox 只剩一个纯文本区，因此点击外框内边距也能聚焦输入。 -->
           <StackPanel Margin="0,0,0,15">
             <TextBlock Text="账号" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
             <Border Classes="field">
+              <!-- Auto,*：图标按内容宽（15）固定，输入框吃掉剩余宽度。
+                   VerticalAlignment=Center 让 15px 图标在 42 高的外框里垂直居中，与文字基线一致。 -->
               <Grid ColumnDefinitions="Auto,*">
                 <ctrl:Icon Data="{x:Static ctrl:Icons.User}" Width="15" Height="15"
                            Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                <!-- {Binding UserName, Mode=TwoWay}：来源是 MainWindowViewModel.UserName，
+                     去向是这个 TextBox 的 Text；用户每敲一个字符就写回 VM 一次。
+                     Mode=TwoWay 在 TextBox.Text 上是默认值，写出来是为了让数据流方向一目了然。
+                     Margin 左 9 是图标与文字的间距（图标 15 之后留 9，视觉上约等于一个字符宽）。
+                     Watermark 只是空值时的灰色提示，不会写进 Text，因此不会污染 VM。 -->
                 <TextBox Grid.Column="1" Text="{Binding UserName, Mode=TwoWay}" Margin="9,0,0,0"
                          Watermark="name@aster.io" />
               </Grid>
@@ -156,6 +302,8 @@
           </StackPanel>
 
           <!-- 密码：三列布局——图标 / 输入框 / 右侧的「显示密码」按钮 -->
+          <!-- 与账号行的差别只在第三列多了眼睛按钮，因此输入框的可用宽度要再减掉 24。
+               Grid 的列宽都是 Auto,*,Auto，眼睛按钮不会因为文字变长而被推走。 -->
           <StackPanel Margin="0,0,0,15">
             <TextBlock Text="密码" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
             <Border Classes="field">
@@ -165,9 +313,21 @@
                 <!-- PasswordChar 固定为圆点；RevealPassword 绑 ShowPassword，
                      为 true 时 TextBox 直接回显明文（不是换一个字符），
                      眼睛按钮通过 TogglePasswordCommand 翻转 ShowPassword -->
+                <!-- 两者配合的机制要分清：
+                       PasswordChar="●"       只管「遮罩时用什么字符」，是静态的；
+                       RevealPassword=bool    才是「要不要遮罩」的开关，由 VM 决定。
+                     也就是说显隐完全由 RevealPassword 控制，PasswordChar 永远不需要改 ——
+                     这正是 VM 里 PasswordChar / PasswordRevealChar 两个属性没人使用的原因
+                     （它们想表达「由 VM 决定遮罩字符」，而视图侧选择了更直接的方案）。
+                     补充：RevealPassword=true 时 Avalonia 会把遮罩整体去掉、直接显示 Text 原文，
+                     不会出现「换了另一种字符」的中间态。 -->
                 <TextBox Grid.Column="1" Text="{Binding Password, Mode=TwoWay}" Margin="9,0,0,0"
                          Watermark="请输入密码"
                          PasswordChar="●" RevealPassword="{Binding ShowPassword}" />
+                <!-- 眼睛按钮：24×24 的正方形点击区、Padding=0 消除默认内边距，
+                     让 15px 图标居中且不撑大整行高度。
+                     Classes="ghost" 是透明底的无边框按钮样式；ToolTip.Tip 提示文案不随状态变化
+                     （显示密码 / 隐藏密码 都写「显示密码」，属于文案未做状态切换的小瑕疵）。 -->
                 <Button Grid.Column="2" Classes="ghost" Width="24" Height="24" Padding="0"
                         Command="{Binding TogglePasswordCommand}" ToolTip.Tip="显示密码">
                   <ctrl:Icon Data="{x:Static ctrl:Icons.Eye}" Width="15" Height="15"
@@ -178,6 +338,11 @@
           </StackPanel>
 
           <!-- 辅助行：*,Auto 让「记住我」占左、「忘记密码？」贴右，后者打开第一个弹窗 -->
+          <!-- CheckBox 的 IsChecked 是 bool?，绑定到 VM 的 bool 属性时由绑定引擎自动折算；
+               这里勾不勾都没有任何后续逻辑（Remember 没有消费者），属于界面占位。
+               Classes="link" 是「看起来像链接的按钮」样式：无底色、无边框、悬停只变文字色，
+               语义上仍是 Button，所以键盘可达、点击区域也比纯 TextBlock 大。
+               Margin 底部 20 比字段间距 15 大：辅助行与主按钮之间需要更明显的分段。 -->
           <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,20">
             <CheckBox Content="记住我" IsChecked="{Binding Remember, Mode=TwoWay}"
                       Foreground="{StaticResource Text1}" VerticalAlignment="Center" />
@@ -189,14 +354,28 @@
                CanExecuteChanged 才会重新查询；而 RelayCommand 没有实现自动重查，
                所以登录中的 420ms 内按钮实际不会变灰。若要真正禁用，需在 IsBusy 变化时
                调用 LoginCommand.RaiseCanExecuteChanged()，或把 IsEnabled 直接绑到 !IsBusy。 -->
+          <!-- 42 高与上面的输入框完全一致：主按钮与字段同高，视觉上是一条连续的节奏线。
+               CornerRadius=8 同理，与 Border.field 的圆角保持一致。
+               HorizontalAlignment="Stretch" 让它占满 350 的表单宽（默认 Stretch 也会这样，
+               写出来是为了与「需要居中的小按钮」形成对比）。
+               Click 不写在 XAML 里：Button 挂了 Command，点击时由 ICommand.Execute 触发，
+               所以这里的入口是 LoginCommand → Login()，不是 code-behind。 -->
           <Button Classes="pri" Height="42" CornerRadius="8" FontSize="13" Content="登录"
                   Command="{Binding LoginCommand}" HorizontalAlignment="Stretch" />
 
           <!-- 错误提示：文案来自 LoginError；为空时文字为空，但仍占一行高度，不会引起布局跳动 -->
+          <!-- 设计意图是「预留一行高度防止跳动」。实际是否真的占位取决于 TextBlock 对空字符串的
+               测量结果（本轮只读代码、未运行验证）；若发现错误出现时整块表单上移，
+               给这个 TextBlock 补一个 MinHeight 即可稳定布局，而不必改 VM。
+               Foreground 用 Red 令牌（#F8716E 一档），与 KpiItem 的负向色同源；
+               Margin 顶部 10 让它与主按钮保持一个呼吸距离。 -->
           <TextBlock Text="{Binding LoginError}" FontSize="11.5" Foreground="{StaticResource Red}"
                      HorizontalAlignment="Center" Margin="0,10,0,0" />
 
           <!-- 底部入口：打开第二个弹窗（联系管理员） -->
+          <!-- Spacing 6 是「说明文字」与「链接按钮」之间的贴近距离：两者读起来是一句话，
+               所以间距远小于字段间距；整组 HorizontalAlignment=Center 水平居中。
+               Margin 顶部 22 把这一组从表单主体里分出来，作为页脚式入口。 -->
           <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" Margin="0,22,0,0">
             <TextBlock Text="还没有账号？" FontSize="11.5" Foreground="{StaticResource Text2}"
                        VerticalAlignment="Center" />
@@ -212,15 +391,41 @@
          不产生额外任务栏窗口与焦点抢占，能直接复用本页 DataContext 与资源（画刷/阴影/样式），
          也不需要为弹窗再写一套关闭逻辑。代价是遮罩只覆盖本页区域。
          背景 #B8030407 = alpha 0xB8 的近黑，用来压暗底层内容 -->
+    <!-- 遮罩色的分解：#B8 03 04 07 → A=0xB8=184，184/255≈72%，R/G/B 是 #030407（近黑微蓝）。
+         为什么用 72% 而不是全黑：半透明能让人看出「底下还有页面」，明确这是浮层而不是新页面；
+         同时 72% 已足够把底层文字压到看不清，保证弹窗内容成为唯一焦点。
+         为什么底色带一点蓝（#030407 而非 #000000）：与全局 Bg1(#0E1015) 同色相，
+         叠上去是「同色系变暗」，不会像纯黑那样把画面压出一块死黑。
+         为什么要写 Background：Avalonia 中 Background 为 null 的控件不参与命中测试，
+         于是点击遮罩会穿透到下面的登录表单（甚至冒泡到 Grid 触发拖窗）。
+         有了这层不透明度的底色，遮罩自己就能吃掉点击。
+         IsVisible ← IsForgotDialog（Dialog 为 ForgotStep1 或 ForgotStep2 时为真），
+         所以「哪一步」不影响遮罩是否出现，只影响卡片内显示哪段内容。 -->
     <Panel IsVisible="{Binding IsForgotDialog}" Background="#B8030407">
       <!-- 卡片：固定 420 宽、居中、14 圆角、带 PopShadow；ClipToBounds 保证子元素不溢出圆角 -->
+      <!-- 420 比登录表单的 350 宽：弹窗里有一行较长的说明文字（“输入账号绑定的邮箱…”），
+           350 会折成三行，420 刚好两行。固定宽度而不是 MaxWidth，避免不同步骤时卡片左右跳动。
+           14 与主窗口外框的 CornerRadius=14 一致，暗示「同一套层级语言」。
+           PopShadow 是 Theme.axaml 里的 0 24 70 #E6000000（下移 24、模糊 70），
+           比窗口阴影更远更浓，用阴影距离表达「浮在窗口之上」。
+           ClipToBounds=True 只裁剪内容与描边（BoxShadow 画在元素外部，不受影响）。 -->
       <Border Width="420" VerticalAlignment="Center" HorizontalAlignment="Center"
               Background="{StaticResource Bg1}" BorderBrush="{StaticResource Line2}" BorderThickness="1"
               CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
         <StackPanel>
+          <!-- 外层这个 StackPanel 竖向堆三块：标题栏 + 第 1 步 + 第 2 步。
+               后两块各自绑一个 IsVisible，且因为状态来自同一个 Dialog 枚举，天然互斥；
+               IsVisible=false 的子元素不参与测量与布局，所以卡片高度会自动贴合当前步骤，
+               不需要手写「两步等高」之类的约束。 -->
           <!-- 标题栏：*,Auto 让标题占左、关闭按钮贴右；关闭只是把 Dialog 置回 None -->
+          <!-- Margin 左 20 / 上 16 / 右 14：右侧比左侧小 6，因为 28 宽的 chrome 按钮内部还有空白，
+               按视觉对齐（而不是几何对齐）取值；底部 0 是让下面的步骤块自己带上边距。
+               关闭按钮 28×28、图标 13、线宽 1.8：比主窗口的 34×26 更方，因为它在卡片里、
+               四个方向都要留白；线宽加粗到 1.8 是为了在小尺寸下仍然清晰。 -->
           <Grid ColumnDefinitions="*,Auto" Margin="20,16,14,0">
             <TextBlock Text="重置密码" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <!-- Command 直接绑 CloseDialogCommand（Dialog=None）：
+                 因为第 2 步（成功态）也共用这个标题栏，所以关闭按钮在两步里都可用。 -->
             <Button Grid.Column="1" Classes="chrome" Width="28" Height="28"
                     Command="{Binding CloseDialogCommand}">
               <ctrl:Icon Data="{x:Static ctrl:Icons.Close}" Width="13" Height="13" Thickness="1.8" />
@@ -228,12 +433,21 @@
           </Grid>
 
           <!-- 第 1 步：填邮箱。IsVisible 绑 IsForgotStep1，与第 2 步互斥（同一个 Dialog 枚举保证） -->
+          <!-- Margin 20,14,20,0：左右 20 与标题栏对齐，上 14 承接标题栏的间距，下 0 由内部按钮块的
+               18 提供底部留白。说明文案 LineHeight=20 约为 11.5 字号的 1.7 倍：
+               这段要折成两行，行距不放宽会显得挤；TextWrapping=Wrap 是必需的，否则 420 宽装不下。
+               文案里「30 分钟内有效」是产品约定，纯文案、代码里没有任何超时逻辑。 -->
           <StackPanel IsVisible="{Binding IsForgotStep1}" Margin="20,14,20,0">
             <TextBlock Text="输入账号绑定的邮箱，我们会发送一封包含重置链接的邮件，链接在 30 分钟内有效。"
                        FontSize="11.5" Foreground="{StaticResource Text2}" LineHeight="20"
                        TextWrapping="Wrap" Margin="0,0,0,16" />
             <TextBlock Text="账号邮箱" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
             <!-- 复用同一套 Border.field 外壳；ForgotEmail 是 UserName 的别名，与登录框共享取值 -->
+            <!-- 这里能复用样式，正因为样式写在 UserControl.Styles 而不是绑死在某个具体控件上：
+                 只要类名同样是 field，无论出现在页面里还是弹窗里都命中同一套规则。
+                 图标换成 Mail，其余结构（Auto,* 两列 + Margin 9）与登录页账号框完全一致。
+                 双向绑定到 ForgotEmail：实际读写的是 VM 的 UserName，所以登录框里填的账号
+                 会自动出现在这里；反过来在这里改，登录框也同步变。 -->
             <Border Classes="field">
               <Grid ColumnDefinitions="Auto,*">
                 <ctrl:Icon Data="{x:Static ctrl:Icons.Mail}" Width="15" Height="15"
@@ -242,6 +456,10 @@
               </Grid>
             </Border>
             <!-- 底部按钮：取消（关闭）与发送（Dialog → ForgotStep2） -->
+            <!-- 右对齐 + Spacing 8：对话框里「取消在左、主操作在右」是桌面端的惯例。
+                 「取消」没有 Classes="pri"，走全局 Button 的次级样式（W04 底 + 细描边）；
+                 「发送重置链接」带 pri 类，是品牌色实心主按钮，强调这是这一步的正向操作。
+                 两者都只做状态切换：取消 → Dialog=None；发送 → Dialog=ForgotStep2（不发请求）。 -->
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,16,0,18">
               <Button Content="取消" Height="34" Padding="16,0" Command="{Binding CloseDialogCommand}" />
               <Button Classes="pri" Content="发送重置链接" Height="34" Padding="16,0"
@@ -250,6 +468,11 @@
           </StackPanel>
 
           <!-- 第 2 步：成功态。圆底对勾用同色系的低透明底 + 描边（#21/#3D 是 alpha） -->
+          <!-- 46×46 + CornerRadius 23 = 正圆（圆角取边长一半）。两个色值的 alpha 不同：
+               #213DDC97 的 A=0x21=33≈13%（填充，很淡的绿）、#3D3DDC97 的 A=0x3D=61≈24%（描边，稍实），
+               这样圆形有「边界感」但不抢对勾的注意力；RGB 都是 GreenColor #3DDC97，与语义色同源。
+               上边距 24 比第 1 步的 14 更大：成功态没有输入框，留白太少会让卡片显得局促。
+               标题 14 与弹窗标题同级，说明文字 11.5 + 居中 + Wrap：窄卡片里居中折行更整齐。 -->
           <StackPanel IsVisible="{Binding IsForgotStep2}" Margin="20,24,20,0">
             <Border Width="46" Height="46" CornerRadius="23" Background="#213DDC97" BorderBrush="#3D3DDC97"
                     BorderThickness="1" HorizontalAlignment="Center">
@@ -260,6 +483,8 @@
                        HorizontalAlignment="Center" Margin="0,14,0,8" />
             <TextBlock Text="请点击邮件中的链接完成密码重置" FontSize="11.5" Foreground="{StaticResource Text2}"
                        HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+            <!-- 唯一的操作是关闭：成功态没有「返回上一步」的入口，因为上一步已经无意义。
+                 Padding 20,0 比取消按钮的 16,0 略宽，让单按钮的胶囊形不至于太瘦。 -->
             <Button Classes="pri" Content="知道了" Height="34" Padding="20,0" HorizontalAlignment="Right"
                     Margin="0,20,0,18" Command="{Binding CloseDialogCommand}" />
           </StackPanel>
@@ -270,12 +495,21 @@
     <!-- ==================== 联系管理员 ==================== -->
     <!-- 与上一个弹窗同构：Panel 遮罩 + IsVisible 绑 IsContactDialog，两步内容是同一卡片里的两段 StackPanel。
          两个弹窗互斥由 DialogKind 保证，所以这里不需要再写「关掉另一个」的逻辑 -->
+    <!-- 两个遮罩 Panel 是兄弟节点，按声明顺序前者在下、后者在上；
+         但因为 IsContactDialog 与 IsForgotDialog 永不同时为真，Z 序实际上不会被观察到 ——
+         这也是「用一个枚举代替两个 bool」带来的额外好处：连层叠顺序都不用操心。
+         遮罩色、卡片尺寸、圆角、阴影与上一个弹窗完全相同（复制而非共享资源），
+         目的是让两个弹窗看起来是同一套组件的两个实例。 -->
     <Panel IsVisible="{Binding IsContactDialog}" Background="#B8030407">
       <Border Width="420" VerticalAlignment="Center" HorizontalAlignment="Center"
               Background="{StaticResource Bg1}" BorderBrush="{StaticResource Line2}" BorderThickness="1"
               CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
         <StackPanel>
+          <!-- 三层结构与上一个弹窗完全一致：标题栏 + 第 1 步 + 第 2 步；
+               后两块靠 IsContactStep1 / IsContactStep2 互斥显隐，卡片高度随之自适应。 -->
           <!-- 标题栏（同样式，关闭走 CloseDialogCommand） -->
+          <!-- 28×28 的关闭按钮、图标 13、线宽 1.8 —— 与「重置密码」卡片逐像素相同，
+               差别只有标题文案与下面的内容；这类重复是刻意的，避免为两个弹窗再抽一层模板。 -->
           <Grid ColumnDefinitions="*,Auto" Margin="20,16,14,0">
             <TextBlock Text="联系管理员" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
             <Button Grid.Column="1" Classes="chrome" Width="28" Height="28"
@@ -285,22 +519,38 @@
           </Grid>
 
           <!-- 第 1 步：说明 + 管理员名片 + 操作按钮 -->
+          <!-- Margin 与「重置密码」第 1 步一致（20,14,20,0），两个弹窗的正文起点因此完全对齐。 -->
           <StackPanel IsVisible="{Binding IsContactStep1}" Margin="20,14,20,0">
             <TextBlock Text="如果账号被停用、绑定邮箱已失效，或无法完成密码重置，请联系管理员协助处理。"
                        FontSize="11.5" Foreground="{StaticResource Text2}" LineHeight="20"
                        TextWrapping="Wrap" Margin="0,0,0,16" />
             <!-- 管理员名片：比页面底色略深一层的 Bg2 + 细描边，形成「卡片里的卡片」层级 -->
+            <!-- 更正上面「略深」的说法：Bg2 = #13161D，Bg1 = #0E1015，Bg2 比弹窗底色略亮。
+                 实际观感是「卡片从弹窗底上浮起一档」（更亮 = 更靠前），而不是更深；
+                 再加上 1px 的 Line 描边与 9 的圆角，才形成嵌套层级。
+                 Padding 13,12：左右 13 比常规 16 略小，因为名片本身已在 20 的内边距之内，
+                 双重内边距叠加会让头像离卡片边太远。 -->
             <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
                     CornerRadius="9" Padding="13,12">
               <!-- Auto,*,Auto：头像、信息（占满剩余宽度）、复制按钮 -->
+              <!-- 中间列用 * 而不是 Auto：邮箱那行可能较长，让它吃掉剩余宽度并靠左排，
+                   右侧的复制按钮因此永远贴在名片右边缘。 -->
               <Grid ColumnDefinitions="Auto,*,Auto">
                 <!-- 圆形头像：38x38 + 19 圆角（正好半个边长）+ 渐变底，用姓氏首字代替图片 -->
+                <!-- 头像 38 比二级导航里的 30 大一档：名片是弹窗里的独立信息块，可以更醒目。
+                     字色 #0A0B10 是近黑：AvatarGrad 是青→蓝的亮渐变，深字才看得清（反白会糊）。 -->
                 <Border Width="38" Height="38" CornerRadius="19" Background="{StaticResource AvatarGrad}">
                   <TextBlock Text="陈" FontSize="14" FontWeight="SemiBold" Foreground="#0A0B10"
                              HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
+                <!-- Margin 11 是头像与文字块的间距；VerticalAlignment=Center 让两行文字整体与头像垂直居中。 -->
                 <StackPanel Grid.Column="1" Margin="11,0,0,0" VerticalAlignment="Center">
                   <!-- 姓名 + 角色标签（Tags 用同色低透明底 + 描边） -->
+                  <!-- Spacing 7 是姓名与角色标签之间的间距：两者读作一组，所以比常规间距小。
+                       roleTag 是全局样式类，负责圆角/内边距/9.5 的字号；
+                       这里再覆盖底色与描边：#266C8BFF 的 A=0x26=38≈15%（品牌蓝的淡底），
+                       #3D6C8BFF 的 A=0x3D=61≈24%（同色描边），文字用更亮的 #A9BAFF 保证可读。
+                       三个色值同属品牌蓝，所以标签整体是「一块蓝」而不是三种颜色的拼贴。 -->
                   <StackPanel Orientation="Horizontal" Spacing="7">
                     <TextBlock Text="陈墨" FontSize="12.5" FontWeight="SemiBold" />
                     <Border Classes="roleTag" Background="#266C8BFF" BorderBrush="#3D6C8BFF" VerticalAlignment="Center">
@@ -311,13 +561,24 @@
                 </StackPanel>
                 <!-- 复制按钮：Content 绑 AdminCopyText（"复制"/"已复制"），
                      状态由 IsAdminCopied 决定，关闭弹窗时会被复位 -->
+                <!-- 注意这条绑定的副作用：按钮宽度由文案撑开，而它所在的列是 Auto，
+                     「复制」变「已复制」会让按钮变宽、中间列被压缩（文字本身靠左，不会跑位）。
+                     按钮不写 Width 是刻意的 —— 让文案决定宽度，避免「已复制」被裁。
+                     点一次之后文案不会再变（CopyAdminCommand 只置 true，不翻转），
+                     直到关闭弹窗由 Dialog setter 复位，所以视觉上是个一次性的确认反馈。 -->
                 <Button Grid.Column="2" Content="{Binding AdminCopyText}" Height="28" Padding="12,0"
                         Command="{Binding CopyAdminCommand}" VerticalAlignment="Center" />
               </Grid>
             </Border>
+            <!-- 「2 小时内回复」也是纯文案：没有真实的服务时效数据，只用于降低用户的等待焦虑。
+                 10.5 是全页最小字号，居中对齐让它读起来像名片的附注而不是正文。 -->
             <TextBlock Text="工作日通常在 2 小时内回复" FontSize="10.5" Foreground="{StaticResource Text2}"
                        HorizontalAlignment="Center" Margin="0,11,0,0" />
             <!-- 底部操作：关闭 / 发送邮件（Dialog → ContactStep2） -->
+            <!-- 结构与「重置密码」第 1 步的按钮行完全一致（右对齐、Spacing 8、Height 34），
+                 只是把「取消/发送重置链接」换成「关闭/发送邮件」。
+                 「关闭」= CloseDialogCommand（Dialog=None）；「发送邮件」= SendMailCommand（ContactStep2），
+                 同样不发任何真实请求。 -->
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,16,0,18">
               <Button Content="关闭" Height="34" Padding="16,0" Command="{Binding CloseDialogCommand}" />
               <Button Classes="pri" Content="发送邮件" Height="34" Padding="16,0" Command="{Binding SendMailCommand}" />
@@ -325,6 +586,9 @@
           </StackPanel>
 
           <!-- 第 2 步：发送成功态，结构与忘记密码的成功页一致，保持两个弹窗的视觉统一 -->
+          <!-- 逐项对齐「重置邮件已发送」那一页：46 正圆 + 淡绿底 + 更实的绿描边、14 的标题、
+               11.5 的居中说明、右对齐的「知道了」。唯一的差别是说明文案更长（含管理员姓名与邮箱），
+               所以这里 TextWrapping + TextAlignment=Center 两件都不能少。 -->
           <StackPanel IsVisible="{Binding IsContactStep2}" Margin="20,24,20,0">
             <Border Width="46" Height="46" CornerRadius="23" Background="#213DDC97" BorderBrush="#3D3DDC97"
                     BorderThickness="1" HorizontalAlignment="Center">
@@ -333,6 +597,9 @@
             </Border>
             <TextBlock Text="邮件已发送" FontSize="14" FontWeight="SemiBold"
                        HorizontalAlignment="Center" Margin="0,14,0,8" />
+            <!-- 文案里写死了「陈墨 / chenmo@aster.io」，与上面名片里的数据是两份独立的硬编码，
+                 没有共用数据源 —— 改管理员信息时两处都要改，否则会出现「名片上一个邮箱、
+                 成功提示里另一个邮箱」的不一致。 -->
             <TextBlock Text="我们已向管理员 陈墨 发送协助申请，请留意 chenmo@aster.io 的回复"
                        FontSize="11.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
                        TextAlignment="Center" HorizontalAlignment="Center" />
