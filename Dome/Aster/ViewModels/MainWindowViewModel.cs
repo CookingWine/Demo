@@ -101,16 +101,19 @@ public sealed class MainWindowViewModel : ObservableObject
         Admin = new AdminViewModel();
         Settings = new SettingsViewModel(LogoutCommand);
 
-        // 文档 / 音乐模块暂时关闭，只保留管理与设置
+        // 工作区四个一级入口 + 设置，对齐 HR Agent 原型的侧栏结构
         RailItems = new ObservableCollection<RailItem>
         {
-            new("admin", "管理", Controls.Icons.Bars, SelectModuleCommand),
+            new("workbench", "工作台", Controls.Icons.Grid, SelectModuleCommand),
+            new("approval", "审批", Controls.Icons.List, SelectModuleCommand),
+            new("clients", "客户", Controls.Icons.Users, SelectModuleCommand),
+            new("workflow", "Workflow", Controls.Icons.Trend, SelectModuleCommand),
             new("settings", "设置", Controls.Icons.Sliders, OpenSettingsCommand)
         };
 
         // RailTop 与 RailSettings 是同一批数据的两种取法：上方渲染 RailTop，底部单独摆设置入口。
-        RailTop = new ObservableCollection<RailItem>(RailItems.Take(1));
-        RailSettings = RailItems[1];
+        RailTop = new ObservableCollection<RailItem>(RailItems.Take(4));
+        RailSettings = RailItems[4];
 
         // 二级导航集合只建一次，之后每次切模块都是 Clear 再重新填充（见 SelectModule）。
         SubNavEntries = new ObservableCollection<SubNavEntry>();
@@ -185,13 +188,13 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 二级栏宽度跟着模块走：admin 底部要放用户卡片，所以 260；其它模块收窄到 184。
+    /// 二级栏宽度：现在只剩工作区一个模块（四个页面共用同一条侧栏），固定 260 保证项目/会话/用户卡片放得下。
     /// 注意它是计算属性，_moduleKey 改动后必须手动 OnPropertyChanged（在 SelectModule 里做）。
     /// </summary>
-    public double SubNavWidth => _moduleKey == "admin" ? 260 : 184;
+    public double SubNavWidth => 260;
 
-    /// <summary>是否在二级栏底部展示「当前用户」卡片，仅 admin 模块为 true。</summary>
-    public bool IsSubNavUserVisible => _moduleKey == "admin";
+    /// <summary>二级栏底部始终展示「当前用户」卡片。</summary>
+    public bool IsSubNavUserVisible => true;
 
     /// <summary>
     /// 与 IsSubNavUserVisible 恰好互斥：二级栏里已有用户卡片时，rail 底部不再重复显示头像；
@@ -388,28 +391,30 @@ public sealed class MainWindowViewModel : ObservableObject
 
         switch (item.Key)
         {
-            // 目前只保留 admin 一个业务模块，因此用 default 兜底而不用 case "admin"。
             default:
                 SubNavTitle = "工作区";
                 // ActiveView 换成 AdminViewModel，ShellView 的 DataTemplate 会按类型匹配到 AdminView。
                 ActiveView = Admin;
-                // 前六项是常规入口，最后一个参数是右侧徽标数字（只有工作台有）。
+                // 四个页面入口与一级导航一一对应，点击侧栏与点击 rail 的效果一致。
                 AddSubNav("workbench", "工作台", Controls.Icons.Grid, "12");
-                AddSubNav("clients", "客户工作空间", Controls.Icons.Users, null);
-                AddSubNav("import", "信息导入中心", Controls.Icons.Download, null);
-                AddSubNav("settlement", "基础结算", Controls.Icons.Currency, null);
                 AddSubNav("approval", "协作与审批", Controls.Icons.List, null);
-                AddSubNav("account", "账号与权限", Controls.Icons.Lock, null);
+                AddSubNav("clients", "客户工作空间", Controls.Icons.Users, null);
+                AddSubNav("workflow", "Workflow", Controls.Icons.Trend, null);
                 // 分组标题与链接混装：模板用 DataTemplate 区分渲染，分组不可点击。
                 SubNavEntries.Add(new SubNavGroupEntry("项目"));
-                // 这里 emphasized 传 true，让「河南省中医院」以更大的字号字重突出显示。
-                SubNavEntries.Add(new SubNavLinkEntry("project", "河南省中医院", Controls.Icons.Folder, SubNavCommand, null, true, true));
-                SubNavEntries.Add(new SubNavGroupEntry("最近"));
-                AddRecent("recent-1", "清远电子 首月结算");
-                AddRecent("recent-2", "恒川制造 员工增减");
-                AddRecent("recent-3", "远航科技 政策审核");
-                // 重建完成后恢复选中态：默认落在「工作台」。
-                SelectSubNav("workbench");
+                // emphasized 传 true，让当前项目以更大的字号字重突出显示。
+                SubNavEntries.Add(new SubNavLinkEntry("customer-qinghe", "青禾 · 月度核对",
+                    Controls.Icons.Folder, SubNavCommand, null, true, true));
+                AddRecent("thread-tax", "8 月个税交叉验证");
+                SubNavEntries.Add(new SubNavLinkEntry("thread-new", "＋ 项目内新会话",
+                    Controls.Icons.Plus, SubNavCommand, null, showIcon: false, emphasized: false, height: 34));
+                SubNavEntries.Add(new SubNavGroupEntry("最近会话"));
+                AddRecent("recent-1", "新的工作会话");
+                AddRecent("recent-2", "新的工作会话");
+                AddRecent("recent-3", "新的工作会话");
+                AddRecent("recent-tax", "8 月个税交叉验证");
+                // 重建完成后恢复选中态：与被点击的一级导航保持一致。
+                SelectSubNav(item.Key);
                 break;
         }
     }
@@ -447,8 +452,24 @@ public sealed class MainWindowViewModel : ObservableObject
         foreach (var entry in SubNavEntries.OfType<SubNavLinkEntry>())
             entry.IsSelected = entry.Key == key;
 
+        SyncRailSelection(key);
+
         // 具体内容由 AdminViewModel 自己按 key 切换，壳层不参与。
         Admin.Select(key);
+    }
+
+    /// <summary>让一级 rail 的高亮跟随当前页面：点侧栏入口或「项目 / 最近会话」时也要同步。</summary>
+    private void SyncRailSelection(string key)
+    {
+        var railKey = key switch
+        {
+            "approval" => "approval",
+            "workflow" => "workflow",
+            "clients" or "customers" or "customer-qinghe" or "thread-tax" or "thread-new" => "clients",
+            _ => "workbench"
+        };
+
+        foreach (var item in RailTop) item.IsSelected = item.Key == railKey;
     }
 
     // ===================== 登录动作 =====================
