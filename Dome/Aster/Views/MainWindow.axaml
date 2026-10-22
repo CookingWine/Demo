@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================
+     MainWindow.axaml —— 无边框透明主窗口，整棵视觉树的根
+     职责：只搭外壳：一个圆角 14 的 Border 承载全部页面，外加 8 个透明热区做缩放。
+     位置：App.OnFrameworkInitializationCompleted 中创建，DataContext 为 MainWindowViewModel。
+     叠层：Border > Panel > ShellView / LoginView / BootView / SettingsOverlay / 热区 Grid。
+           用 Panel 叠层而不是切页面，是为了让各视图常驻、只切 IsVisible，
+           避免反复重建丢状态，同时天然得到「后声明者在上」的 Z 序。
+     坑：SystemDecorations=None + TransparencyLevelHint=Transparent 去掉系统边框，
+         拖动、最大化与缩放都得自己实现（标题栏见 ShellView，四边四角见下方热区）。
+     坑：MinWidth/MinHeight 与初始 Width/Height 同为 1320x850，三栏布局按此宽度设计，
+         再窄会把内容区挤坏，所以最小尺寸不允许更小。
+     ============================================================ -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Aster.ViewModels"
@@ -17,27 +29,43 @@
         Background="Transparent"
         ExtendClientAreaToDecorationsHint="False">
 
+  <!-- ===== 窗口级样式：仅服务于自绘缩放热区 ===== -->
   <Window.Styles>
     <!-- 无边框窗口没有系统边框，靠透明热区自己接住鼠标 -->
+    <!-- 热区必须显式给透明背景：Avalonia 中 Background=null 的控件不参与命中测试，
+         那样鼠标会穿透到下面的页面，缩放就永远触发不了 -->
     <Style Selector="Border.grip">
       <Setter Property="Background" Value="Transparent" />
     </Style>
   </Window.Styles>
 
+  <!-- ===== 外壳：圆角 + 描边 + 投影 =====
+       TransparencyLevelHint=Transparent 让窗口自身背景全透明，真正的「窗体」是这一层 Border。
+       ClipToBounds 保证内部视图不会溢出圆角；BoxShadow 需要窗口透明才看得见，
+       这也是不用 SystemDecorations 的代价与收益：圆角与外阴影换来自绘边框的全部工作。 -->
   <Border CornerRadius="14"
           Background="{StaticResource Bg1}"
           BorderBrush="{StaticResource Line2}"
           BorderThickness="1"
           BoxShadow="{StaticResource WindowShadow}"
           ClipToBounds="True">
+    <!-- 叠层容器：四个视图共享同一块矩形区域，靠 IsVisible 互斥显隐；
+         子元素按声明顺序叠放，越靠后越靠上，所以 SettingsOverlay 必须在页面之后、
+         缩放热区之前：设置浮层要盖住页面，但不能盖住热区。 -->
     <Panel>
+      <!-- Shell 在 code-behind 里会生成同名字段，便于调试时定位主线视图；
+           实际显隐完全由 VM 的 IsApp（AppStage.App）驱动 -->
       <views:ShellView x:Name="Shell" IsVisible="{Binding IsApp}" />
       <views:LoginView IsVisible="{Binding IsLogin}" />
       <views:BootView IsVisible="{Binding IsBoot}" />
       <views:SettingsOverlay IsVisible="{Binding IsSettingsOpen}" />
 
       <!-- ================= 缩放手柄：四边 + 四角 ================= -->
+      <!-- 外层 Grid 不做行列划分，八个 Border 各自用对齐方式贴边，互不干扰布局 -->
+      <!-- 四边：厚 6px，因为太厚会盖住页面边缘的点击，太薄则不易命中 -->
       <Grid>
+        <!-- Tag 与 WindowEdge 枚举名一一对应（North/South/West/East/NorthWest...），
+             code-behind 里直接 Enum.TryParse 转成系统枚举，省掉 8 个重复处理器 -->
         <Border Classes="grip" Height="6" VerticalAlignment="Top"
                 Cursor="SizeNorthSouth" Tag="North" PointerPressed="OnResizePressed" />
         <Border Classes="grip" Height="6" VerticalAlignment="Bottom"
@@ -48,6 +76,8 @@
                 Cursor="SizeWestEast" Tag="East" PointerPressed="OnResizePressed" />
 
         <!-- 四角覆盖在四边之上，保证角落优先命中 -->
+        <!-- 四角取 14px 见方，比 6px 的边条更宽，保证落在角落时先命中角而不是相邻的边 -->
+        <!-- 光标用 TopLeftCorner 等角标样式，与系统窗口的视觉预期保持一致 -->
         <Border Classes="grip" Width="14" Height="14" HorizontalAlignment="Left" VerticalAlignment="Top"
                 Cursor="TopLeftCorner" Tag="NorthWest" PointerPressed="OnResizePressed" />
         <Border Classes="grip" Width="14" Height="14" HorizontalAlignment="Right" VerticalAlignment="Top"

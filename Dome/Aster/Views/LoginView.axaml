@@ -5,8 +5,17 @@
              xmlns:ctrl="using:Aster.Controls"
              x:Class="Aster.Views.LoginView"
              x:DataType="vm:MainWindowViewModel">
+  <!-- =========================================================================== -->
+  <!-- LoginView.axaml —— 登录页：左侧品牌渐变区(42*) + 右侧表单区(58*)             -->
+  <!-- 属于 MainWindowViewModel 的 Login 阶段，由 Stage 派生出的 IsLogin 控制显隐。  -->
+  <!-- 两个弹窗（忘记密码 / 联系管理员）用 Panel 叠层实现，不另开窗口。             -->
+  <!-- 坑：外层 Grid 的 PointerPressed 负责拖窗，必须排除输入控件，见 code-behind。 -->
+  <!-- =========================================================================== -->
 
+  <!-- ==================== 局部样式 ==================== -->
+  <!-- 只作用于本页，不改全局主题：所有输入框共用「Border.field 包住 TextBox」这一套视觉 -->
   <UserControl.Styles>
+    <!-- 输入框外壳：42 高、8 圆角、1px 描边、左右各 12 内边距；浅底把输入区从页面底色里分离出来 -->
     <Style Selector="Border.field">
       <Setter Property="Height" Value="42" />
       <Setter Property="CornerRadius" Value="8" />
@@ -15,9 +24,13 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Padding" Value="12,0" />
     </Style>
+    <!-- 悬停只提亮描边（W04 → W14），不改尺寸与底色，避免鼠标移入时布局抖动 -->
     <Style Selector="Border.field:pointerover">
       <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
     </Style>
+    <!-- 内层 TextBox 全部「去样式化」：背景透明、零边框、零内边距、不占最小高度。
+         描边与圆角只由外层 Border 提供，焦点态不会出现内外双框；
+         图标与文字也因为 Border 的内边距而自然水平对齐、垂直居中 -->
     <Style Selector="Border.field TextBox">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -28,11 +41,16 @@
     </Style>
   </UserControl.Styles>
 
+  <!-- 页面最底层：左右分栏共用的深色底 -->
   <Panel Background="{StaticResource Bg1}">
 
+    <!-- 42*,58* 是按比例分配的左右分栏（不是固定像素）：品牌区稍窄、表单区稍宽，
+         窗口缩放时两侧同比伸缩。PointerPressed 挂在整块 Grid 上，
+         在空白处按下时事件冒泡到这里，由 code-behind 调 BeginMoveDrag 拖窗 -->
     <Grid ColumnDefinitions="42*,58*" PointerPressed="OnDragPressed">
 
       <!-- ==================== 品牌区 ==================== -->
+      <!-- 第一层背景：4 段线性渐变（左上 → 右下），走「深蓝 → 蓝紫 → 紫 → 深蓝」的氛围色 -->
       <Border>
         <Border.Background>
           <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
@@ -43,6 +61,8 @@
           </LinearGradientBrush>
         </Border.Background>
 
+        <!-- 第二层背景：叠一个径向渐变光晕（光源在 30%,65%，向外淡出到全透明）。
+             两层叠加的作用是让紫色光感偏左下、边缘回落，避免单层线性渐变显得平板 -->
         <Panel>
           <Panel.Background>
             <RadialGradientBrush Center="30%,65%" GradientOrigin="30%,65%" RadiusX="90%" RadiusY="90%">
@@ -51,7 +71,9 @@
             </RadialGradientBrush>
           </Panel.Background>
 
+          <!-- Auto,*,Auto：顶部 Logo、中间标语（吃掉剩余空间并垂直居中）、底部版本信息 -->
           <Grid RowDefinitions="Auto,*,Auto" Margin="38,34">
+            <!-- Logo：渐变小方块 + 深色花瓣图形，形成反白效果 -->
             <StackPanel Orientation="Horizontal" Spacing="10">
               <Border Width="28" Height="28" CornerRadius="8" Background="{StaticResource LogoGrad}">
                 <ctrl:LogoMark Margin="3.5" PetalBrush="#0A0B12" />
@@ -59,6 +81,8 @@
               <TextBlock Text="Aster" FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center" />
             </StackPanel>
 
+            <!-- 主标语：Foreground 也可以用画刷，所以两行文字各挂一段线性渐变；
+                 两行的色标完全一致，看起来像整句共用的横向高光 -->
             <StackPanel Grid.Row="1" VerticalAlignment="Center">
               <TextBlock Text="把数据" FontSize="37" FontWeight="SemiBold" LineHeight="46">
                 <TextBlock.Foreground>
@@ -78,11 +102,13 @@
                   </LinearGradientBrush>
                 </TextBlock.Foreground>
               </TextBlock>
+              <!-- 副标题：限宽 272 并允许换行，避免窄窗口时被拉到过长的一行 -->
               <TextBlock Text="成员、订单与增长指标集中在一处，随时掌握业务的真实状态。"
                          FontSize="12.5" Foreground="#9BA5C2" LineHeight="22" MaxWidth="272"
                          TextWrapping="Wrap" Margin="0,16,0,0" />
             </StackPanel>
 
+            <!-- 页脚：*,Auto 让版权信息占左、版本号贴右 -->
             <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
               <TextBlock Text="© 2026 Aster" FontSize="10.5" Foreground="#4E5670" />
               <TextBlock Grid.Column="1" Text="v1.4.2" FontSize="10.5" Foreground="#4E5670" />
@@ -92,7 +118,10 @@
       </Border>
 
       <!-- ==================== 表单区 ==================== -->
+      <!-- 两行布局：第 0 行只放窗口按钮（Auto 高），第 1 行是登录表单并吃掉剩余高度；
+           ColumnDefinitions="*,Auto" 配合 ColumnSpan=2，让按钮能贴右上角、表单能相对整块居中 -->
       <Grid Grid.Column="1" ColumnDefinitions="*,Auto" RowDefinitions="Auto,*">
+        <!-- 自绘窗口按钮（应用无系统标题栏）：Classes="chrome" 走全局样式，close 变体是红色悬停 -->
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="0,10,10,0">
           <Button Classes="chrome" Width="34" Height="26" Click="OnMinimize">
             <ctrl:Icon Data="{x:Static ctrl:Icons.Minus}" Width="12" Height="12" Thickness="1.4" />
@@ -105,11 +134,15 @@
           </Button>
         </StackPanel>
 
+        <!-- 表单容器：固定 350 宽 + 双居中；跨两列是为了在「按钮列」之外仍保持视觉居中 -->
         <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Width="350" VerticalAlignment="Center"
                     HorizontalAlignment="Center" Margin="40,0">
+          <!-- 标题与副标题 -->
           <TextBlock Text="欢迎回来" FontSize="22" FontWeight="SemiBold" />
           <TextBlock Text="登录你的账户以继续" FontSize="12" Foreground="{StaticResource Text2}" Margin="0,7,0,24" />
 
+          <!-- 账号：外层 Border.field 负责描边/圆角/内边距，内层 Grid 为「图标 Auto + 输入框 *」，
+               图标宽度固定、输入框吃掉剩余空间，二者因此基线对齐 -->
           <StackPanel Margin="0,0,0,15">
             <TextBlock Text="账号" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
             <Border Classes="field">
@@ -122,12 +155,16 @@
             </Border>
           </StackPanel>
 
+          <!-- 密码：三列布局——图标 / 输入框 / 右侧的「显示密码」按钮 -->
           <StackPanel Margin="0,0,0,15">
             <TextBlock Text="密码" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
             <Border Classes="field">
               <Grid ColumnDefinitions="Auto,*,Auto">
                 <ctrl:Icon Data="{x:Static ctrl:Icons.Lock}" Width="15" Height="15"
                            Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+                <!-- PasswordChar 固定为圆点；RevealPassword 绑 ShowPassword，
+                     为 true 时 TextBox 直接回显明文（不是换一个字符），
+                     眼睛按钮通过 TogglePasswordCommand 翻转 ShowPassword -->
                 <TextBox Grid.Column="1" Text="{Binding Password, Mode=TwoWay}" Margin="9,0,0,0"
                          Watermark="请输入密码"
                          PasswordChar="●" RevealPassword="{Binding ShowPassword}" />
@@ -140,18 +177,26 @@
             </Border>
           </StackPanel>
 
+          <!-- 辅助行：*,Auto 让「记住我」占左、「忘记密码？」贴右，后者打开第一个弹窗 -->
           <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,20">
             <CheckBox Content="记住我" IsChecked="{Binding Remember, Mode=TwoWay}"
                       Foreground="{StaticResource Text1}" VerticalAlignment="Center" />
             <Button Grid.Column="1" Classes="link" Content="忘记密码？" Command="{Binding OpenForgotCommand}" />
           </Grid>
 
+          <!-- 主按钮：Command 绑 LoginCommand（其 CanExecute 为 !IsBusy）。
+               注意：Button 只在挂上 Command 的那一刻查询一次 CanExecute，之后依赖命令触发
+               CanExecuteChanged 才会重新查询；而 RelayCommand 没有实现自动重查，
+               所以登录中的 420ms 内按钮实际不会变灰。若要真正禁用，需在 IsBusy 变化时
+               调用 LoginCommand.RaiseCanExecuteChanged()，或把 IsEnabled 直接绑到 !IsBusy。 -->
           <Button Classes="pri" Height="42" CornerRadius="8" FontSize="13" Content="登录"
                   Command="{Binding LoginCommand}" HorizontalAlignment="Stretch" />
 
+          <!-- 错误提示：文案来自 LoginError；为空时文字为空，但仍占一行高度，不会引起布局跳动 -->
           <TextBlock Text="{Binding LoginError}" FontSize="11.5" Foreground="{StaticResource Red}"
                      HorizontalAlignment="Center" Margin="0,10,0,0" />
 
+          <!-- 底部入口：打开第二个弹窗（联系管理员） -->
           <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" Margin="0,22,0,0">
             <TextBlock Text="还没有账号？" FontSize="11.5" Foreground="{StaticResource Text2}"
                        VerticalAlignment="Center" />
@@ -163,11 +208,17 @@
     </Grid>
 
     <!-- ==================== 忘记密码 ==================== -->
+    <!-- 弹窗用 Panel 叠在本页最上层、靠 IsVisible 切换，而不是新开 Window：
+         不产生额外任务栏窗口与焦点抢占，能直接复用本页 DataContext 与资源（画刷/阴影/样式），
+         也不需要为弹窗再写一套关闭逻辑。代价是遮罩只覆盖本页区域。
+         背景 #B8030407 = alpha 0xB8 的近黑，用来压暗底层内容 -->
     <Panel IsVisible="{Binding IsForgotDialog}" Background="#B8030407">
+      <!-- 卡片：固定 420 宽、居中、14 圆角、带 PopShadow；ClipToBounds 保证子元素不溢出圆角 -->
       <Border Width="420" VerticalAlignment="Center" HorizontalAlignment="Center"
               Background="{StaticResource Bg1}" BorderBrush="{StaticResource Line2}" BorderThickness="1"
               CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
         <StackPanel>
+          <!-- 标题栏：*,Auto 让标题占左、关闭按钮贴右；关闭只是把 Dialog 置回 None -->
           <Grid ColumnDefinitions="*,Auto" Margin="20,16,14,0">
             <TextBlock Text="重置密码" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
             <Button Grid.Column="1" Classes="chrome" Width="28" Height="28"
@@ -176,11 +227,13 @@
             </Button>
           </Grid>
 
+          <!-- 第 1 步：填邮箱。IsVisible 绑 IsForgotStep1，与第 2 步互斥（同一个 Dialog 枚举保证） -->
           <StackPanel IsVisible="{Binding IsForgotStep1}" Margin="20,14,20,0">
             <TextBlock Text="输入账号绑定的邮箱，我们会发送一封包含重置链接的邮件，链接在 30 分钟内有效。"
                        FontSize="11.5" Foreground="{StaticResource Text2}" LineHeight="20"
                        TextWrapping="Wrap" Margin="0,0,0,16" />
             <TextBlock Text="账号邮箱" FontSize="11.5" Foreground="{StaticResource Text1}" Margin="0,0,0,7" />
+            <!-- 复用同一套 Border.field 外壳；ForgotEmail 是 UserName 的别名，与登录框共享取值 -->
             <Border Classes="field">
               <Grid ColumnDefinitions="Auto,*">
                 <ctrl:Icon Data="{x:Static ctrl:Icons.Mail}" Width="15" Height="15"
@@ -188,6 +241,7 @@
                 <TextBox Grid.Column="1" Text="{Binding ForgotEmail, Mode=TwoWay}" Margin="9,0,0,0" />
               </Grid>
             </Border>
+            <!-- 底部按钮：取消（关闭）与发送（Dialog → ForgotStep2） -->
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,16,0,18">
               <Button Content="取消" Height="34" Padding="16,0" Command="{Binding CloseDialogCommand}" />
               <Button Classes="pri" Content="发送重置链接" Height="34" Padding="16,0"
@@ -195,6 +249,7 @@
             </StackPanel>
           </StackPanel>
 
+          <!-- 第 2 步：成功态。圆底对勾用同色系的低透明底 + 描边（#21/#3D 是 alpha） -->
           <StackPanel IsVisible="{Binding IsForgotStep2}" Margin="20,24,20,0">
             <Border Width="46" Height="46" CornerRadius="23" Background="#213DDC97" BorderBrush="#3D3DDC97"
                     BorderThickness="1" HorizontalAlignment="Center">
@@ -213,11 +268,14 @@
     </Panel>
 
     <!-- ==================== 联系管理员 ==================== -->
+    <!-- 与上一个弹窗同构：Panel 遮罩 + IsVisible 绑 IsContactDialog，两步内容是同一卡片里的两段 StackPanel。
+         两个弹窗互斥由 DialogKind 保证，所以这里不需要再写「关掉另一个」的逻辑 -->
     <Panel IsVisible="{Binding IsContactDialog}" Background="#B8030407">
       <Border Width="420" VerticalAlignment="Center" HorizontalAlignment="Center"
               Background="{StaticResource Bg1}" BorderBrush="{StaticResource Line2}" BorderThickness="1"
               CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
         <StackPanel>
+          <!-- 标题栏（同样式，关闭走 CloseDialogCommand） -->
           <Grid ColumnDefinitions="*,Auto" Margin="20,16,14,0">
             <TextBlock Text="联系管理员" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
             <Button Grid.Column="1" Classes="chrome" Width="28" Height="28"
@@ -226,18 +284,23 @@
             </Button>
           </Grid>
 
+          <!-- 第 1 步：说明 + 管理员名片 + 操作按钮 -->
           <StackPanel IsVisible="{Binding IsContactStep1}" Margin="20,14,20,0">
             <TextBlock Text="如果账号被停用、绑定邮箱已失效，或无法完成密码重置，请联系管理员协助处理。"
                        FontSize="11.5" Foreground="{StaticResource Text2}" LineHeight="20"
                        TextWrapping="Wrap" Margin="0,0,0,16" />
+            <!-- 管理员名片：比页面底色略深一层的 Bg2 + 细描边，形成「卡片里的卡片」层级 -->
             <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
                     CornerRadius="9" Padding="13,12">
+              <!-- Auto,*,Auto：头像、信息（占满剩余宽度）、复制按钮 -->
               <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- 圆形头像：38x38 + 19 圆角（正好半个边长）+ 渐变底，用姓氏首字代替图片 -->
                 <Border Width="38" Height="38" CornerRadius="19" Background="{StaticResource AvatarGrad}">
                   <TextBlock Text="陈" FontSize="14" FontWeight="SemiBold" Foreground="#0A0B10"
                              HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel Grid.Column="1" Margin="11,0,0,0" VerticalAlignment="Center">
+                  <!-- 姓名 + 角色标签（Tags 用同色低透明底 + 描边） -->
                   <StackPanel Orientation="Horizontal" Spacing="7">
                     <TextBlock Text="陈墨" FontSize="12.5" FontWeight="SemiBold" />
                     <Border Classes="roleTag" Background="#266C8BFF" BorderBrush="#3D6C8BFF" VerticalAlignment="Center">
@@ -246,18 +309,22 @@
                   </StackPanel>
                   <TextBlock Text="chenmo@aster.io" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,2,0,0" />
                 </StackPanel>
+                <!-- 复制按钮：Content 绑 AdminCopyText（"复制"/"已复制"），
+                     状态由 IsAdminCopied 决定，关闭弹窗时会被复位 -->
                 <Button Grid.Column="2" Content="{Binding AdminCopyText}" Height="28" Padding="12,0"
                         Command="{Binding CopyAdminCommand}" VerticalAlignment="Center" />
               </Grid>
             </Border>
             <TextBlock Text="工作日通常在 2 小时内回复" FontSize="10.5" Foreground="{StaticResource Text2}"
                        HorizontalAlignment="Center" Margin="0,11,0,0" />
+            <!-- 底部操作：关闭 / 发送邮件（Dialog → ContactStep2） -->
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,16,0,18">
               <Button Content="关闭" Height="34" Padding="16,0" Command="{Binding CloseDialogCommand}" />
               <Button Classes="pri" Content="发送邮件" Height="34" Padding="16,0" Command="{Binding SendMailCommand}" />
             </StackPanel>
           </StackPanel>
 
+          <!-- 第 2 步：发送成功态，结构与忘记密码的成功页一致，保持两个弹窗的视觉统一 -->
           <StackPanel IsVisible="{Binding IsContactStep2}" Margin="20,24,20,0">
             <Border Width="46" Height="46" CornerRadius="23" Background="#213DDC97" BorderBrush="#3D3DDC97"
                     BorderThickness="1" HorizontalAlignment="Center">

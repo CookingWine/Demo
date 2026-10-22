@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ==========================================================================
+     MusicView.axaml —— 音乐播放器：左曲库 / 中唱片与控制 / 右可视化与队列，三栏布局
+     位置：ShellView 有 MusicViewModel 到 MusicView 的 DataTemplate，但一级导航只有「管理 / 设置」，
+           本页当前未挂到一级导航，属于未启用的保留模块。
+     数据：全部来自 MusicViewModel（假播放），页面里没有任何真实音频控件。
+     坑：本页样式写在 UserControl.Styles 里，只对本页生效；改模板名 Border#Bg 会同时打断悬停/选中选择器。
+     坑："!IsPlaying" 这类取反绑定是 Avalonia 语法，不是 C# 运算符，删掉感叹号会编译失败。
+     ========================================================================== -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Aster.ViewModels"
@@ -6,7 +14,12 @@
              x:Class="Aster.Views.MusicView"
              x:DataType="vm:MusicViewModel">
 
+  <!-- 本页样式全部内联在 UserControl.Styles：只作用于 MusicView，不污染全局 Styles/Controls.axaml。 -->
   <UserControl.Styles>
+    <!-- Button.song：曲库行。默认 Button 模板的内容层自带 padding、居中与圆角背景， -->
+    <!-- 既不能保证「整行可点」，也无法让背景随选中态整体变色，所以换成自定义 ControlTemplate： -->
+    <!-- 内容包进具名 Border#Bg，Padding 用 TemplateBinding 接回按钮自身的 Padding，内容横向拉伸撑满 286 栏宽。 -->
+    <!-- 背景改由 #Bg 控制后，下面的 :pointerover / .selected 选择器就能用 /template/ 语法直接改写它。 -->
     <Style Selector="Button.song">
       <Setter Property="Padding" Value="9,7" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -21,13 +34,16 @@
         </ControlTemplate>
       </Setter>
     </Style>
+    <!-- 悬停：只改 #Bg 的底色（#0BFFFFFF 约 4% 白），不影响按钮其余部分。 -->
     <Style Selector="Button.song:pointerover /template/ Border#Bg">
       <Setter Property="Background" Value="#0BFFFFFF" />
     </Style>
+    <!-- 选中：selected 类由 XAML 的 Classes.selected="{Binding IsSelected}" 控制，底色换成 13% 强调蓝。 -->
     <Style Selector="Button.song.selected /template/ Border#Bg">
       <Setter Property="Background" Value="#216C8BFF" />
     </Style>
 
+    <!-- Button.tab：筛选页签。透明底 + 去边框 + 26 高，靠左右 10px padding 撑出胶囊形点击区。 -->
     <Style Selector="Button.tab">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -36,15 +52,18 @@
       <Setter Property="FontSize" Value="11.5" />
       <Setter Property="Foreground" Value="{DynamicResource Text2}" />
     </Style>
+    <!-- 页签悬停：W04 极淡白底提示可点，文字提亮一级。 -->
     <Style Selector="Button.tab:pointerover">
       <Setter Property="Background" Value="{DynamicResource W04}" />
       <Setter Property="Foreground" Value="{DynamicResource Text1}" />
     </Style>
+    <!-- 页签选中：半透明蓝底 + 浅蓝文字（#B9C8FF），比主强调色柔和，避免和播放按钮抢视觉。 -->
     <Style Selector="Button.tab.selected">
       <Setter Property="Background" Value="#296C8BFF" />
       <Setter Property="Foreground" Value="#B9C8FF" />
     </Style>
 
+    <!-- Button.cbtn：32px 圆形图标按钮，播放控制、收藏、更多统一复用它。 -->
     <Style Selector="Button.cbtn">
       <Setter Property="Width" Value="32" />
       <Setter Property="Height" Value="32" />
@@ -54,22 +73,29 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Foreground" Value="{DynamicResource Text1}" />
     </Style>
+    <!-- 悬停只加一层 W06 底色，图标从 Text1 提亮到 Text0。 -->
     <Style Selector="Button.cbtn:pointerover">
       <Setter Property="Background" Value="{DynamicResource W06}" />
       <Setter Property="Foreground" Value="{DynamicResource Text0}" />
     </Style>
   </UserControl.Styles>
 
+  <!-- ===== 三栏骨架 286 / * / 224 ===== -->
+  <!-- 左右两栏定宽：曲库 286 保证歌名不被压扁，可视化 224 保证频谱有足够画布； -->
+  <!-- 中间 * 吸收窗口缩放的全部增量，所以窗口变宽时只有主舞台变宽。 -->
   <Grid ColumnDefinitions="286,*,224">
 
     <!-- ==================== 播放列表 ==================== -->
+    <!-- 左栏容器：半透明黑底 #24000000 + 右侧 1px Line 分隔，与中间舞台拉开层级。 -->
     <Border Background="#24000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <!-- 四行：标题 / 筛选页签 / 可滚动曲库（*）/ 底部两个按钮；只有曲库行吃剩余高度。 -->
       <Grid RowDefinitions="Auto,Auto,*,Auto">
         <StackPanel Margin="16,16,16,10">
           <TextBlock Text="{Binding LibraryTitle}" FontSize="15" FontWeight="SemiBold" />
           <TextBlock Text="{Binding LibrarySubtitle}" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,3,0,0" />
         </StackPanel>
 
+        <!-- 页签横向排列（Spacing=4），每项是 SegmentItem：Label 作文案、IsSelected 决定 selected 类。 -->
         <ItemsControl Grid.Row="1" ItemsSource="{Binding Tabs}" Margin="12,0,12,8">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
@@ -78,19 +104,25 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate DataType="{x:Type vm:SegmentItem}">
+              <!-- Command 统一是 FilterCommand，CommandParameter 传条目本身；VM 侧目前按字符串取值，见那边的坑注释。 -->
               <Button Classes="tab" Classes.selected="{Binding IsSelected}" Content="{Binding Label}"
                       Command="{Binding Command}" CommandParameter="{Binding}" />
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
 
+        <!-- 曲库滚动区：只允许纵向滚动，横向禁用，防止超长歌名把整行推出视口。 -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <!-- 绑 VisibleSongs 而不是 AllSongs：切页签时 VM 只重建这个集合。 -->
           <ItemsControl ItemsSource="{Binding VisibleSongs}" Margin="8,2,8,12">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="{x:Type vm:SongItem}">
+                <!-- 整行是 Button.song：热区覆盖封面、文字、时长三列，点任意位置都能切歌。 -->
                 <Button Classes="song" Classes.selected="{Binding IsSelected}"
                         Command="{Binding Command}" CommandParameter="{Binding}">
+                  <!-- Auto,*,Auto：34px 封面 / 自适应歌名 / 右侧状态区。 -->
                   <Grid ColumnDefinitions="Auto,*,Auto">
+                    <!-- 封面是 34x34 圆角方块，背景直接绑 SongItem.Cover（渐变画刷）。 -->
                     <Border Width="34" Height="34" CornerRadius="6" Background="{Binding Cover}" />
                     <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                       <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{StaticResource Text0}"
@@ -98,8 +130,12 @@
                       <TextBlock Text="{Binding Artist}" FontSize="10.5" Foreground="{StaticResource Text2}"
                                  Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
+                    <!-- 右侧用一个 Panel 叠两层：跳动指示器与时长文案共用同一块位置。 -->
                     <Panel Grid.Column="2" VerticalAlignment="Center">
+                      <!-- 正在播放时显示三格跳动指示器（自绘，内部跑 120ms 的 DispatcherTimer）。 -->
                       <ctrl:EqIndicator Width="11" Height="11" IsVisible="{Binding IsPlaying}" />
+                      <!-- IsVisible="{Binding !IsPlaying}" 是 Avalonia 的取反绑定写法，等价于 !IsPlaying： -->
+                      <!-- 播放中隐藏时长、暂停时隐藏跳动条，两者互斥显示，不会同时占位。 -->
                       <TextBlock Text="{Binding Duration}" FontSize="10.5" Foreground="{StaticResource Text2}"
                                  IsVisible="{Binding !IsPlaying}" />
                     </Panel>
@@ -110,6 +146,7 @@
           </ItemsControl>
         </ScrollViewer>
 
+        <!-- 左栏底部：导入 / 新建歌单，仅视觉占位，没有 Command。 -->
         <Grid Grid.Row="3" ColumnDefinitions="*,*" Margin="14,10" ColumnSpacing="6">
           <Button Content="导入" FontSize="11" HorizontalAlignment="Stretch" Height="26" />
           <Button Grid.Column="1" Content="新建歌单" FontSize="11" HorizontalAlignment="Stretch" Height="26" />
@@ -118,9 +155,13 @@
     </Border>
 
     <!-- ==================== 播放主舞台 ==================== -->
+    <!-- ===== 主舞台：46 顶栏 / * 唱片与歌词 / Auto 控制区 ===== -->
+    <!-- RowDefinitions 46,*,Auto：中间行吃掉剩余高度；ClipToBounds 防止径向光晕溢出到左右栏。 -->
     <Grid Grid.Column="1" RowDefinitions="46,*,Auto" ClipToBounds="True">
+      <!-- 背景层用 Panel + Grid.RowSpan=3 一次铺满三行：整块光晕连续，不会在行边界出现接缝。 -->
       <Panel Grid.RowSpan="3">
         <Panel.Background>
+          <!-- 径向光晕：中心 50%,20%（偏上）、半径 75%，从 22% 透明紫过渡到全透明；#AARRGGBB 前两位是透明度。 -->
           <RadialGradientBrush Center="50%,20%" GradientOrigin="50%,20%" RadiusX="75%" RadiusY="75%">
             <GradientStop Offset="0" Color="#38A78BFA" />
             <GradientStop Offset="0.55" Color="#146C8BFF" />
@@ -129,15 +170,18 @@
         </Panel.Background>
       </Panel>
 
+      <!-- 顶栏：左侧「正在播放」+ LOSSLESS 徽标，右侧收藏 / 更多两个圆形图标按钮。 -->
       <Border Grid.Row="0" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="24,0">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <TextBlock Text="正在播放" FontSize="11.5" Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
+            <!-- LOSSLESS 徽标：12% 青底 + 20% 青边，纯装饰，不反映真实音频格式。 -->
             <Border CornerRadius="4" Padding="7,2" Background="#1F3DD6E8" BorderBrush="#333DD6E8" BorderThickness="1">
               <TextBlock Text="LOSSLESS" FontSize="10" Foreground="{StaticResource Cyan}" />
             </Border>
           </StackPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <!-- 图标按钮的说明走 ToolTip.Tip（悬浮提示），不再额外占一行文字。 -->
             <Button Classes="cbtn" Width="26" Height="26" ToolTip.Tip="收藏">
               <ctrl:Icon Data="{x:Static ctrl:Icons.Heart}" Width="14" Height="14" />
             </Button>
@@ -150,8 +194,13 @@
 
       <!-- 唱片与歌词 -->
       <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,10,0,0">
+        <!-- ===== 唱片区：212 外框 + 108 内部旋转盘 ===== -->
+        <!-- 外框 Border 负责封面渐变、圆角与裁剪，SpinningDisc 只画黑色盘面、纹路和中心标签。 -->
+        <!-- 尺寸关系：内盘 108 约为外框 212 的一半，四周留出封面色，视觉上像唱片压在封面上。 -->
+        <!-- 外框 212x212 + 20 圆角 + ClipToBounds：内盘旋转时不会溢出圆角。 -->
         <Border Width="212" Height="212" CornerRadius="20" ClipToBounds="True">
           <Border.Background>
+            <!-- 封面渐变四段（232746 → 3D2F6B → 7C4FA3 → 2FA8C4），45° 斜向从深蓝紫过渡到青。 -->
             <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
               <GradientStop Offset="0" Color="#232746" />
               <GradientStop Offset="0.4" Color="#3D2F6B" />
@@ -159,15 +208,18 @@
               <GradientStop Offset="1" Color="#2FA8C4" />
             </LinearGradientBrush>
           </Border.Background>
+          <!-- IsSpinning 绑 IsPlaying：暂停即停转；旋转角度由控件内部的 50ms 定时器累加，与播放进度无关。 -->
           <ctrl:SpinningDisc Width="108" Height="108" IsSpinning="{Binding IsPlaying}"
                              HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>
 
+        <!-- 歌名 / 艺人：Title 与 Artist 都来自 VM，Artist 已拼上专辑名与年份。 -->
         <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold" Margin="0,20,0,0"
                    HorizontalAlignment="Center" />
         <TextBlock Text="{Binding Artist}" FontSize="12" Foreground="{StaticResource Text2}"
                    Margin="0,6,0,0" HorizontalAlignment="Center" />
 
+        <!-- 三行歌词纯静态：中间行 13.5px 高亮，上下行 Opacity 降到 0.5 / 0.55 表示非当前行。 -->
         <StackPanel Spacing="3" Margin="0,16,0,0" HorizontalAlignment="Center">
           <TextBlock Text="{Binding LyricsLine0}" FontSize="12.5" Foreground="{StaticResource Text2}"
                      Opacity="0.5" HorizontalAlignment="Center" />
@@ -179,28 +231,40 @@
       </StackPanel>
 
       <!-- 控制区 -->
+      <!-- ===== 控制区：进度条 + 传输按钮 + 音量 ===== -->
       <StackPanel Grid.Row="2" Margin="40,0,40,22">
+        <!-- 进度行 Auto,*,Auto：两端时间各占 34px 固定宽，中间 TrackBar 吃掉剩余宽度。 -->
         <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12">
           <TextBlock Text="{Binding PositionText}" FontSize="10.5" Foreground="{StaticResource Text2}"
                      Width="34" VerticalAlignment="Center" />
+          <!-- TrackBar 的 Maximum 绑 DurationSeconds（秒）、Value 双向绑 Position（秒）——进度条本身不认百分比， -->
+          <!-- 所以这里用 Position 而不是 Progress。拖动时 TrackBar 直接把新值写回 Position，由 setter 负责 Clamp。 -->
           <ctrl:TrackBar Grid.Column="1" Height="14" Value="{Binding Position, Mode=TwoWay}"
                          Maximum="{Binding DurationSeconds}" MinHeight="14" />
           <TextBlock Grid.Column="2" Text="{Binding DurationText}" FontSize="10.5" Foreground="{StaticResource Text2}"
                      Width="34" TextAlignment="Right" VerticalAlignment="Center" />
         </Grid>
 
+        <!-- 传输按钮一组：随机 / 上一首 / 播放 / 下一首 / 循环 + 音量，Spacing=16 等距。 -->
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="16">
+          <!-- 随机 / 循环图标的前景色绑 *Brush 计算属性，开关切换时由 VM 手动通知刷新。 -->
           <Button Classes="cbtn" Command="{Binding ToggleShuffleCommand}" ToolTip.Tip="随机">
+            <!-- ShuffleBrush：开启为 Accent 蓝、关闭为中性灰 #9BA3B7。 -->
             <ctrl:Icon Data="{x:Static ctrl:Icons.Shuffle}" Width="15" Height="15" Foreground="{Binding ShuffleBrush}" />
           </Button>
+          <!-- 上一首 / 下一首是顺序命令，与随机开关无关（Prev 永远按列表回退）。 -->
           <Button Classes="cbtn" Command="{Binding PrevCommand}" ToolTip.Tip="上一首">
             <ctrl:Icon Data="{x:Static ctrl:Icons.Prev}" Width="15" Height="15" Filled="True" />
           </Button>
 
+          <!-- 播放按钮外面套一层同尺寸 (46) 的透明 Border，只为承载辉光：BoxShadow="0 8 24 -8 #F26C8BFF"。 -->
+          <!-- 阴影必须画在按钮外侧，而 Button 自身模板会裁剪外溢阴影，所以改用外层 Border 来画。 -->
           <Border Width="46" Height="46" CornerRadius="23" BoxShadow="0 8 24 -8 #F26C8BFF">
+            <!-- 真正的按钮：46x46、圆角 23（正圆），背景用 PrimaryGrad 渐变，Command 绑 TogglePlayCommand。 -->
             <Button Width="46" Height="46" CornerRadius="23" Padding="0"
                     Background="{StaticResource PrimaryGrad}" BorderThickness="0"
                     Command="{Binding TogglePlayCommand}" ToolTip.Tip="播放/暂停">
+              <!-- Icon.Data 直接绑 PlayIcon 字符串（播放/暂停的 path），Icon 内部 Geometry.Parse 后渲染。 -->
               <ctrl:Icon Data="{Binding PlayIcon}" Width="18" Height="18" Filled="True" Foreground="White" />
             </Button>
           </Border>
@@ -212,9 +276,11 @@
             <ctrl:Icon Data="{x:Static ctrl:Icons.Repeat}" Width="15" Height="15" Foreground="{Binding RepeatBrush}" />
           </Button>
 
+          <!-- 音量组：喇叭图标 + 细进度条，整体靠 VerticalAlignment=Center 与传输按钮对齐。 -->
           <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,0" VerticalAlignment="Center">
             <ctrl:Icon Data="{x:Static ctrl:Icons.Volume}" Width="14" Height="14"
                        Foreground="{StaticResource Text1}" VerticalAlignment="Center" />
+            <!-- 音量条宽度固定 64，Maximum=100 写死，TrackHeight=3 比播放进度条更细。 -->
             <ctrl:TrackBar Width="64" Height="12" MinHeight="12" Maximum="100"
                            Value="{Binding Volume, Mode=TwoWay}" TrackHeight="3" />
           </StackPanel>
@@ -223,15 +289,21 @@
     </Grid>
 
     <!-- ==================== 右侧可视化 ==================== -->
+    <!-- ===== 右栏：42 标题 / 120 频谱 / 参数网格 / 队列标题 / * 队列列表 ===== -->
+    <!-- 五行里只有队列列表是 *，所以窗口变高时只有列表被拉长，其余区域高度稳定。 -->
     <Border Grid.Column="2" Background="#24000000" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+      <!-- RowDefinitions 42,Auto,Auto,Auto,*：除列表外全部按内容高度，列表占满剩余空间。 -->
       <Grid RowDefinitions="42,Auto,Auto,Auto,*">
         <TextBlock Text="音频可视化" FontSize="11" Foreground="{StaticResource Text2}"
                    Margin="16,0" VerticalAlignment="Center" />
 
+        <!-- AudioBars：自绘 18 根频谱柱；IsPlaying 绑播放状态，暂停时柱高降到接近静止。 -->
+        <!-- 高度 120，上下留白 16 / 8，柱条从底边向上生长。 -->
         <Border Grid.Row="1" Height="120" Padding="18,16,18,8">
           <ctrl:AudioBars IsPlaying="{Binding IsPlaying}" />
         </Border>
 
+        <!-- 2x2 参数表：码率 / 采样 / 声道 / 格式，全部是写死的静态文本（没有真实解码信息）。 -->
         <Grid Grid.Row="2" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" Margin="18,6,18,14">
           <StackPanel>
             <TextBlock Text="1411" FontSize="13" FontWeight="SemiBold" />
@@ -251,14 +323,17 @@
           </StackPanel>
         </Grid>
 
+        <!-- 队列标题行用 0,1,0,0 的上边框与参数区隔开。 -->
         <Border Grid.Row="3" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="16,12,16,8">
           <TextBlock Text="播放队列 · 接下来 6 首" FontSize="10.5" Foreground="{StaticResource Text2}" />
         </Border>
 
+        <!-- 队列列表绑 Queue（PlainRow 的 Index / Text）：只读展示，点击不会切歌。 -->
         <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <ItemsControl ItemsSource="{Binding Queue}" Margin="10,0,10,14">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="{x:Type vm:PlainRow}">
+                <!-- 每行 Auto,*：12px 序号列 + 歌名，超长用 TextTrimming 省略。 -->
                 <Grid ColumnDefinitions="Auto,*" Margin="8,7" Height="18">
                   <TextBlock Text="{Binding Index}" FontSize="10" Foreground="{StaticResource Text2}"
                              Width="12" VerticalAlignment="Center" />

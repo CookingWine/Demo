@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================
+     ShellView.axaml —— 登录后的主壳：自绘标题栏 + 三栏布局
+     职责：44px 标题栏（拖动/最小化/最大化/关闭）+ 74px 一级导航 rail
+           + 二级导航 + 内容区（ContentControl 按 VM 类型匹配 DataTemplate）。
+     位置：MainWindow 的 Panel 中，IsVisible 绑定 MainWindowViewModel.IsApp。
+     协作：导航项来自 RailItem / SubNavEntry；内容视图由 HomeViewModel / AdminViewModel 等
+           的隐式 DataTemplate 决定；样式类定义在 Styles/Controls.axaml。
+     易踩坑：标题栏是自绘的，窗口拖动与双击最大化都靠 PointerPressed 手写；
+           导航选中态靠 Classes.selected 这种「条件类」绑定，不是靠触发器。
+     ============================================================ -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Aster.ViewModels"
@@ -7,16 +17,29 @@
              x:Class="Aster.Views.ShellView"
              x:DataType="vm:MainWindowViewModel">
 
+  <!-- ===== 局部资源：一级导航按钮模板 =====
+       放在 Resources 而不是 DataTemplates，是因为它需要 x:Key 被两处显式引用
+       （顶部列表的 ItemTemplate 与底部设置项的 ContentTemplate），
+       而隐式 DataTemplate 只能靠类型自动匹配、无法在两个不同容器间复用同一个实例。 -->
   <UserControl.Resources>
 
     <!-- 一级导航 -->
+    <!-- DataType 用于编译期绑定校验（配合上方 x:DataType 的继承链）；
+         写成 keyed 模板而非隐式模板，是为了同一个模板能同时给
+         ItemsControl.ItemTemplate 与 ContentControl.ContentTemplate 复用 -->
     <DataTemplate x:Key="RailTemplate" DataType="{x:Type vm:RailItem}">
+      <!-- Classes.selected="{Binding IsSelected}"：Avalonia 的条件类，
+           绑定为 true 时给按钮追加 selected 类名，样式 Button.nav.selected 才会命中
+           （背景高亮 + 左侧指示条）；false 时移除类名，无需手写触发器。
+           CommandParameter="{Binding}" 把整个 RailItem 传给命令，由 VM 判断点了哪一项 -->
       <Button Classes="nav"
               Classes.selected="{Binding IsSelected}"
               Command="{Binding Command}"
               CommandParameter="{Binding}"
               ToolTip.Tip="{Binding Title}"
               HorizontalAlignment="Center">
+        <!-- 图标在上、文字在下：74px 的 rail 宽度放不下横排，
+             整体 HorizontalAlignment=Center 让不同字数的标题都居中对齐 -->
         <StackPanel Spacing="4" HorizontalAlignment="Center">
           <ctrl:Icon Data="{Binding Icon}" Width="19" Height="19" HorizontalAlignment="Center" />
           <TextBlock Text="{Binding Title}" FontSize="10.5" HorizontalAlignment="Center" />
@@ -26,8 +49,15 @@
 
   </UserControl.Resources>
 
+  <!-- ===== 隐式 DataTemplate：按数据类型自动选模板 =====
+       不写 x:Key 时 Avalonia 以 DataType 作为匹配键，ContentControl 或 ItemsControl
+       在渲染每一项时会拿「数据对象的运行时类型」去查模板。
+       这正是内容区能只绑定一个 ActiveView 就切换整页的原因，不需要任何 if/switch 代码。
+       根元素上声明了 x:DataType，因此这些 {Binding} 全部是编译期绑定，
+       属性名写错时是编译错误而不是运行期静默失败。 -->
   <UserControl.DataTemplates>
     <!-- 二级导航：分组标题 -->
+    <!-- 只有文字、不可点击；用 Text3 这类弱化令牌，与可点击条目在视觉上区分开 -->
     <DataTemplate DataType="{x:Type vm:SubNavGroupEntry}">
       <TextBlock Text="{Binding Title}"
                  FontSize="14"
@@ -37,6 +67,8 @@
     </DataTemplate>
 
     <!-- 二级导航：条目 -->
+    <!-- 高度、字号、字重、是否显示图标与徽标全部由 VM 计算，
+         视图只做呈现，避免在 XAML 里堆条件判断 -->
     <DataTemplate DataType="{x:Type vm:SubNavLinkEntry}">
       <Button Classes="subnav"
               Classes.selected="{Binding IsSelected}"
@@ -44,9 +76,12 @@
               CommandParameter="{Binding}"
               Height="{Binding Height}"
               Padding="14,0">
+        <!-- Auto,*,Auto：图标按内容宽、标题吃掉剩余空间、徽标靠右固定；
+             标题列用 * 才能让 TextTrimming 的省略号在窄宽度下真正生效 -->
         <Grid ColumnDefinitions="Auto,*,Auto">
           <ctrl:Icon Data="{Binding Icon}" Width="16" Height="16" VerticalAlignment="Center"
                      IsVisible="{Binding ShowIcon}" />
+          <!-- Margin 左侧留 10px 作为图标与文字的间距（图标隐藏时该间距当作缩进保留） -->
           <TextBlock Grid.Column="1"
                      Text="{Binding Title}"
                      FontSize="{Binding TitleFontSize}"
@@ -54,6 +89,9 @@
                      Margin="10,0,0,0"
                      VerticalAlignment="Center"
                      TextTrimming="CharacterEllipsis" />
+          <!-- 徽标：#26F8716E 是约 15% 透明度的红色底，文字用 DynamicResource 取 Red 令牌，
+               同色系叠加得到「浅底 + 亮字」的轻量提示；
+               DynamicResource 用于可能整体更换的调色板，StaticResource 用于固定令牌 -->
           <Border Grid.Column="2"
                   IsVisible="{Binding HasBadge}"
                   CornerRadius="13"
@@ -68,6 +106,8 @@
     </DataTemplate>
 
     <!-- 主视图 -->
+    <!-- ActiveView 的运行时类型 → 具体 UserControl，一个类型一个模板；
+         模板只声明 DataType 与根控件，视图实例由框架在匹配时按需创建 -->
     <DataTemplate DataType="{x:Type vm:HomeViewModel}">
       <views:HomeView />
     </DataTemplate>
@@ -83,29 +123,40 @@
 
   </UserControl.DataTemplates>
 
+  <!-- ===== 整体结构：44px 固定标题栏 + 剩余空间全部给三栏主体 =====
+       标题栏高度与一级导航 rail 顶部留白对齐，视觉上形成一条连续的顶边 -->
   <Grid RowDefinitions="44,*">
 
     <!-- ================= 标题栏 ================= -->
+    <!-- 自绘标题栏：x:Name 会生成同名字段（当前 code-behind 未直接引用，保留便于调试定位）；
+         PointerPressed 同时承担「拖动」与「双击最大化」，因为无边框窗口没有系统标题栏 -->
     <Border Grid.Row="0"
             x:Name="TitleBar"
             Background="{StaticResource Bg1}"
             BorderBrush="{StaticResource Line}"
             BorderThickness="0,0,0,1"
             PointerPressed="OnTitleBarPressed">
+      <!-- 属性元素写法会覆盖上面 Background 属性的值：最终生效的是这层
+           8% 白 → 全透明的竖向渐变，作为标题栏的顶部高光 -->
       <Border.Background>
         <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
           <GradientStop Offset="0" Color="#0AFFFFFF" />
           <GradientStop Offset="1" Color="#00FFFFFF" />
         </LinearGradientBrush>
       </Border.Background>
+      <!-- Auto,*,Auto：左侧品牌固定、中间留白（也是拖动热区）、右侧窗口按钮靠右 -->
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0,8,0">
         <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center" Margin="4,0">
+          <!-- 22px 圆角 6 的渐变方块内缩 3px 放 LogoMark：
+               容器负责底色与圆角，LogoMark 只画花瓣，PetalBrush 用近黑在亮底上形成镂空 -->
           <Border Width="22" Height="22" CornerRadius="6" Background="{StaticResource LogoGrad}">
             <ctrl:LogoMark Margin="3" PetalBrush="#0A0B12" />
           </Border>
           <TextBlock Text="Aster" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource Text0}" />
         </StackPanel>
 
+        <!-- 窗口按钮复用 chrome / chrome close 两个样式类，close 类只改 hover 的底色为红；
+             图标用 x:Static 直接引用 C# 常量里的路径数据，避免每个按钮写一大串 Path Data -->
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
           <Button Classes="chrome" Click="OnMinimize" ToolTip.Tip="最小化">
             <ctrl:Icon Data="{x:Static ctrl:Icons.Minus}" Width="12" Height="12" Thickness="1.4" />
@@ -121,11 +172,21 @@
     </Border>
 
     <!-- ================= 主体 ================= -->
+    <!-- 三栏宽度的来源：
+         74 = 一级导航固定宽度（图标 + 竖排文字刚好放下）；
+         Auto = 二级导航按 VM 的 SubNavWidth 取值（管理模块 260，其它 184），并随 IsVisible 收起；
+         * = 内容区吃掉剩余宽度，宽屏下页面才能铺满 -->
     <Grid Grid.Row="1" ColumnDefinitions="74,Auto,*">
 
       <!-- 一级导航 -->
+      <!-- 底色 #2E000000 是约 18% 的纯黑，叠加在窗口底色上压暗一档；
+           不用实色是为了保留外层圆角与投影带来的层次 -->
       <Border Grid.Column="0" Background="#2E000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+        <!-- Auto,*,Auto,Auto：顶部导航项 / 弹性空白 / 底部设置入口 / 头像，
+             中间用 * 把设置与头像压到 rail 底部 -->
         <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="0,14,0,12">
+          <!-- 顶部项列表：ItemsSource 是 RailTop（当前只含「管理」）；
+               ItemsPanel 换成带 6px 间距的 StackPanel，默认面板不提供间距 -->
           <ItemsControl ItemsSource="{Binding RailTop}"
                         ItemTemplate="{StaticResource RailTemplate}">
             <ItemsControl.ItemsPanel>
@@ -135,11 +196,16 @@
             </ItemsControl.ItemsPanel>
           </ItemsControl>
 
+          <!-- 「设置」用单独的 ContentControl 而不是放进 RailTop：
+               它需要固定在 rail 底部，与顶部列表解耦；
+               两者共用 RailTemplate，所以外观与交互完全一致 -->
           <ContentControl Grid.Row="2"
                           Content="{Binding RailSettings}"
                           ContentTemplate="{StaticResource RailTemplate}"
                           HorizontalAlignment="Center" />
 
+          <!-- 头像：32px + CornerRadius=16 得到正圆；W10 的 2px 描边模拟「在线」外圈；
+               只在二级导航收起时显示（IsRailAvatarVisible），避免与二级导航底部用户区重复 -->
           <Border Grid.Row="3" Width="32" Height="32" CornerRadius="16"
                   IsVisible="{Binding IsRailAvatarVisible}"
                   Background="{StaticResource AvatarGrad}"
@@ -152,17 +218,23 @@
       </Border>
 
       <!-- 二级导航 -->
+      <!-- 宽度由 VM 计算后绑定，Auto 列随之伸缩；整体 IsVisible 绑定 IsSubNavVisible，
+           收起时列宽归零、内容区自动补位 -->
       <Border Grid.Column="1" Width="{Binding SubNavWidth}" IsVisible="{Binding IsSubNavVisible}"
               Background="#29000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+        <!-- Auto,*,Auto：标题 / 可滚动条目 / 底部当前用户，
+             中间用 * 让条目区独占滚动空间，用户卡片永远贴在底部 -->
         <Grid RowDefinitions="Auto,*,Auto">
           <TextBlock Text="{Binding SubNavTitle}"
                      FontSize="11" FontWeight="Bold" Foreground="{StaticResource Text3}"
                      Margin="24,20,12,10" />
+          <!-- 只允许纵向滚动：二级导航宽度是算好的，横向滚动条会破坏三栏对齐 -->
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding SubNavEntries}" Margin="14,0,14,12" />
           </ScrollViewer>
 
           <!-- 底部当前用户 -->
+          <!-- 仅管理模块显示（IsSubNavUserVisible）；上边框 1px 的 Line 与条目区做视觉分隔 -->
           <Border Grid.Row="2" IsVisible="{Binding IsSubNavUserVisible}"
                   BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,12">
             <Grid ColumnDefinitions="Auto,*,Auto">
@@ -180,6 +252,10 @@
       </Border>
 
       <!-- 内容 -->
+      <!-- Content 绑定 ActiveView（一个 ViewModel 对象），
+           由上面的隐式 DataTemplate 决定渲染成哪个 View。
+           两个 ContentAlignment 都设 Stretch，否则视图会按内容尺寸居中、四周留白；
+           ClipToBounds 防止页面内部的滚动或动画内容溢出到导航栏上 -->
       <ContentControl Grid.Column="2"
                       Content="{Binding ActiveView}"
                       HorizontalContentAlignment="Stretch"

@@ -1,19 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================
+     App.axaml —— 应用级资源与样式的装配点
+     职责：把设计令牌 Styles/Theme.axaml 合并进 Application.Resources，
+           把通用样式 Styles/Controls.axaml 与 FluentTheme 挂到 Application.Styles。
+     时机：App.Initialize 中由 AvaloniaXamlLoader 加载，早于 MainWindow 构造，
+           因此窗口与视图里可以直接用 StaticResource 取到这些令牌。
+     协作：Theme 只放带 Key 的资源，Controls 只放选择器样式且依赖 Theme 的键，加载顺序不可反。
+     易踩坑：选择器样式写进 MergedDictionaries 不会生效；RequestedThemeVariant="Dark"
+           只切换 FluentTheme 内置变体，本项目配色实际由 Theme.axaml 的令牌决定。
+     ============================================================ -->
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Aster.App"
              RequestedThemeVariant="Dark">
 
+  <!-- ===== 资源区：设计令牌 ===== -->
   <Application.Resources>
+    <!-- 显式包一层 ResourceDictionary：MergedDictionaries 是该类型的成员，
+         也便于以后在同一字典里追加非合并的局部资源 -->
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
+        <!-- 颜色、画刷、字体、ControlTheme、BoxShadows 全部来自这里，
+             用 ResourceInclude 而非 StyleInclude：前者进资源字典，后者才进样式树 -->
         <ResourceInclude Source="avares://Aster/Styles/Theme.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>
 
+  <!-- ===== 样式区：基础主题 + 通用控件样式 ===== -->
   <Application.Styles>
+    <!-- FluentTheme 提供 Button / TextBox / ScrollBar 等默认模板，
+         Controls.axaml 在其之上做覆写与补充 -->
     <FluentTheme />
+    <!-- 顺序有意义：通用样式必须在 FluentTheme 之后加载，
+         否则同等优先级下会被默认模板的选择器压回去 -->
     <StyleInclude Source="avares://Aster/Styles/Controls.axaml" />
   </Application.Styles>
 

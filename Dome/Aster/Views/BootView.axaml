@@ -1,19 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================
+     BootView.axaml —— 启动闪屏（AppStage.Boot 阶段的页面）
+     职责：品牌标识 + 进度条推进动画 + 版本号，纯展示，没有绑定也没有交互。
+     位置：MainWindow 的 Panel 中与其它页面叠放，IsVisible 绑定 MainWindowViewModel.IsBoot。
+     协作：进度条动画在本地 Styles 里用关键帧实现；阶段切换由 MainWindowViewModel 的
+           DispatcherTimer（2000ms）驱动 Boot → Login，所以动画时长 1.85s 刚好在切页前跑完，
+           不会出现「进度条没走满就跳走」的断裂感。
+     坑：本文件没有 x:DataType，DataContext 继承自 MainWindow，不要在这里绑定业务属性。
+     ============================================================ -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ctrl="using:Aster.Controls"
              x:Class="Aster.Views.BootView">
 
+  <!-- ===== 进度条动画：用关键帧推进 Width =====
+       选择动画 Width 而不是 ScaleTransform，是为了让填充条始终贴着 3px 高的轨道被裁剪，
+       圆角不会因为缩放而变形 -->
   <UserControl.Styles>
+    <!-- bootfill 只作用于这一条填充条；样式定义在局部 Styles 里，避免污染全局 -->
     <Style Selector="Border.bootfill">
       <Style.Animations>
+        <!-- Duration 1.85s 略短于 VM 里 2000ms 的启动定时器，留出约 150ms 的「满格停留」；
+             FillMode=Forward 保证动画结束后停在 100% 的宽度，不会回弹到 0 -->
         <Animation Duration="0:0:1.85" FillMode="Forward">
+          <!-- 0%：从 0 宽度起步，模拟刚开始加载 -->
           <KeyFrame Cue="0%">
             <Setter Property="Width" Value="0" />
           </KeyFrame>
+          <!-- 55%：已到 108px（约 64%），前段快、后段慢，制造「先冲一下再等」的真实加载节奏 -->
           <KeyFrame Cue="55%">
             <Setter Property="Width" Value="108" />
           </KeyFrame>
+          <!-- 100%：收在 168px，正好等于轨道总宽，视觉上是刚好填满而不是溢出 -->
           <KeyFrame Cue="100%">
             <Setter Property="Width" Value="168" />
           </KeyFrame>
@@ -22,7 +40,12 @@
     </Style>
   </UserControl.Styles>
 
+  <!-- ===== 背景：深色底 + 中心径向光晕 =====
+       Panel 铺满整个窗口，作为闪屏的画布；后面所有元素都叠在它上面 -->
   <Panel Background="#08090D">
+    <!-- 属性元素会覆盖上面 Background 属性的 #08090D，最终生效的是这层径向渐变：
+         中心 18% 的冷蓝光晕，0.45 处衰减到 7%，边缘完全透明，
+         用来把视线聚到中间的 Logo 上 -->
     <Panel.Background>
       <RadialGradientBrush Center="50%,42%" GradientOrigin="50%,42%" RadiusX="80%" RadiusY="80%">
         <GradientStop Offset="0" Color="#2E6C8BFF" />
@@ -31,25 +54,36 @@
       </RadialGradientBrush>
     </Panel.Background>
 
+    <!-- 内容整体居中：竖向 StackPanel 用两个 Center 对齐，
+         所以窗口缩放时闪屏始终停在视觉中心 -->
     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+      <!-- 74px 圆角 20 的品牌方块：与 ShellView 标题栏里 22px 的版本同款渐变，
+           只是尺寸更大；LogoMark 内缩 10px，花瓣色取近黑以形成镂空感 -->
       <Border Width="74" Height="74" CornerRadius="20" Background="{StaticResource LogoGrad}">
         <ctrl:LogoMark Margin="10" PetalBrush="#0A0B12" />
       </Border>
 
+      <!-- 主标题与副标题：字号差近一倍，靠 22px / 7px 的上下间距拉开层级 -->
       <TextBlock Text="Aster" FontSize="21" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,22,0,0" />
       <TextBlock Text="管理系统工作台" FontSize="11.5" Foreground="{StaticResource Text2}"
                  HorizontalAlignment="Center" Margin="0,7,0,0" />
 
+      <!-- 进度条轨道：168x3，圆角 3 让两端是半圆；
+           ClipToBounds 必须开，否则子 Border 的 Width 动画会画出圆角之外 -->
       <Border Width="168" Height="3" CornerRadius="3" Background="#17FFFFFF" Margin="0,34,0,0"
               HorizontalAlignment="Center" ClipToBounds="True">
+        <!-- 填充条：初始 Width=0，由 bootfill 的关键帧动画推到 168；
+             HorizontalAlignment=Left 让宽度增长从左侧开始，而不是向两侧扩张 -->
         <Border Classes="bootfill" Width="0" Height="3" CornerRadius="3" HorizontalAlignment="Left"
                 Background="{StaticResource AccentViolet}" />
       </Border>
 
+      <!-- 状态文案用 Text2 这种弱化色，避免与主标题抢注意力 -->
       <TextBlock Text="正在初始化工作区…" FontSize="10.5" Foreground="{StaticResource Text2}"
                  HorizontalAlignment="Center" Margin="0,13,0,0" />
     </StackPanel>
 
+    <!-- 版本号贴底居中，颜色比正文更暗（#3F4657），只作为信息存在、不参与视觉层级 -->
     <TextBlock Text="v1.4.2 · Avalonia 11" FontSize="10.5" Foreground="#3F4657"
                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,22" />
   </Panel>

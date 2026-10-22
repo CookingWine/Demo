@@ -6,7 +6,22 @@
              x:Class="Aster.Views.SettingsOverlay"
              x:DataType="vm:MainWindowViewModel">
 
+  <!-- ==========================================================================
+       设置浮层：整窗遮罩 + 940×680 居中面板；显隐由 MainWindowViewModel.IsSettingsOpen 控制
+       （MainWindow.axaml 里直接给本控件绑 IsVisible）。
+       核心机制：下面的隐式 DataTemplate 只写 DataType、不写 x:Key，Avalonia 会拿对象的运行时
+       类型去匹配模板，所以 VM 里的每个 SettingValue 子类都必须在这里有且只有一份模板。
+       数据流：Settings.Sections（左栏）→ SelectCommand 改 Current（右栏）→ 右栏再逐层展开
+       Groups → Rows → Value，每一层都用 ContentControl 或 ItemsControl 继续往下找模板。
+       坑一：根节点 x:DataType 是 MainWindowViewModel，所以外层绑定要写 Settings.xxx；
+             模板内部则以 DataTemplate 的 DataType 为准，写错类型的报错会落到模板里。
+       坑二：Value 声明成 object，忘写某个子类的模板时不会编译报错，只会渲染出 ToString 文本。
+       ========================================================================== -->
+
   <UserControl.Styles>
+    <!-- 局部样式：只作用于本浮层。下面都是 Style + Class 选择器（例如 Button.setitem），
+         由控件的 Classes 命中；和 Theme.axaml 中用 x:Key 定义的 ControlTheme 不是一回事。 -->
+    <!-- 左栏分区按钮的常态：透明底 + 内容左对齐，行高靠 Padding 撑出来，底部留 2px 间距 -->
     <Style Selector="Button.setitem">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="1" />
@@ -19,16 +34,21 @@
       <Setter Property="FontSize" Value="12.5" />
       <Setter Property="Margin" Value="0,0,0,2" />
     </Style>
+    <!-- 悬停态：叠一层 4% 白（W04），只提亮背景不改字号，避免指针移动时文字轻微位移 -->
     <Style Selector="Button.setitem:pointerover">
       <Setter Property="Background" Value="{DynamicResource W04}" />
       <Setter Property="Foreground" Value="{DynamicResource Text0}" />
     </Style>
+    <!-- 选中态：由 Classes.selected="{Binding IsSelected}" 动态挂上，
+         换成强调色底 + 33 透明度的强调色描边 + 更亮的文字，和悬停态叠加时也保持可辨认 -->
     <Style Selector="Button.setitem.selected">
       <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
       <Setter Property="BorderBrush" Value="#336C8BFF" />
       <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
     </Style>
 
+    <!-- 色块按钮：20×20 圆角方块，边框被当作「选中环」使用。
+         常态描边透明而不是不写，选中的瞬间只换颜色不换布局，尺寸不会跳 -->
     <Style Selector="Button.swatch">
       <Setter Property="Width" Value="20" />
       <Setter Property="Height" Value="20" />
@@ -38,10 +58,13 @@
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="MinHeight" Value="0" />
     </Style>
+    <!-- 选中色块加 2px 白边，色块本身就是颜色，用白边比用强调色边更容易看清 -->
     <Style Selector="Button.swatch.selected">
       <Setter Property="BorderBrush" Value="White" />
     </Style>
 
+    <!-- 分组卡片：一个分组的行共用同一张圆角边框；
+         内层 Padding 上下只给 2，让首尾行的分隔线与卡片边缘保持贴合的观感 -->
     <Style Selector="Border.groupCard">
       <Setter Property="Background" Value="{DynamicResource Bg2}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
@@ -49,6 +72,7 @@
       <Setter Property="CornerRadius" Value="10" />
       <Setter Property="Padding" Value="16,2" />
     </Style>
+    <!-- 单行：只保留下边框当行间分隔线（0A 白，比卡片描边更淡），上下的 10 是行内留白 -->
     <Style Selector="Border.setrow">
       <Setter Property="BorderBrush" Value="#0AFFFFFF" />
       <Setter Property="BorderThickness" Value="0,0,0,1" />
@@ -56,9 +80,15 @@
     </Style>
   </UserControl.Styles>
 
+  <!-- 模板库：以下 DataTemplate 全都不带 x:Key，只靠 DataType 隐式匹配。
+       它们声明在 UserControl 级别，所以本文件内任意 ContentControl / ItemsControl
+       只要内容对象的类型对上就自动命中，不需要再显式指定 ContentTemplate。 -->
   <UserControl.DataTemplates>
 
     <!-- 账号资料卡 -->
+    <!-- 匹配 SettingSection.TopCard 里的 AccountCard：左侧头像圆（显示姓名首字），
+         中间姓名 + 角色标签 + 邮箱 + 加入时间，右侧「更换头像」占位按钮。
+         因为结构固定且只有账号页在用，所以没拆成 SettingRow 序列 -->
     <DataTemplate DataType="{x:Type vm:AccountCard}">
       <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
               CornerRadius="10" Padding="16,15" Margin="0,0,0,14">
@@ -84,6 +114,7 @@
     </DataTemplate>
 
     <!-- 关于头部 -->
+    <!-- 匹配 AboutCard：Logo 渐变方块 + 应用名 + 版本号 +「已是最新」绿色胶囊，右侧「检查更新」占位 -->
     <DataTemplate DataType="{x:Type vm:AboutCard}">
       <Border Background="{StaticResource Bg2}" BorderBrush="{StaticResource Line}" BorderThickness="1"
               CornerRadius="10" Padding="16,18" Margin="0,0,0,20">
@@ -107,22 +138,35 @@
     </DataTemplate>
 
     <!-- 行取值：文本 -->
+    <!-- 匹配 TextValue：固定 196 宽的单行输入框，Placeholder 映射到 Watermark（无内容时的灰色提示文字）。
+         宽度写死是为了让同列多行输入框左右边缘对齐；自身不设 HorizontalAlignment，
+         右对齐由行模板里那个 ContentControl 负责（见下方 SettingRow 模板） -->
     <DataTemplate DataType="{x:Type vm:TextValue}">
       <TextBox Text="{Binding Text, Mode=TwoWay}" Watermark="{Binding Placeholder}" Width="196" />
     </DataTemplate>
 
     <!-- 行取值：下拉 -->
+    <!-- 匹配 SelectValue：选项是字符串集合，Selected 双向绑定；宽度取 VM 的 Width（默认 158），
+         Controls.axaml 里全局给 ComboBox 设了 HorizontalAlignment=Right，
+         所以它只占自己那一小块，不会把右侧的星号列撑满 -->
     <DataTemplate DataType="{x:Type vm:SelectValue}">
       <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected, Mode=TwoWay}"
                 Width="{Binding Width}" MinHeight="30" />
     </DataTemplate>
 
     <!-- 行取值：开关 -->
+    <!-- 匹配 ToggleValue：用 Theme 属性挂 SwitchToggle。Theme 是整份 ControlTheme 的替换，
+         Classes 只是在其上叠样式，两者不要混用——所以这里不写 Classes。
+         IsChecked 双向绑定 IsOn；开/关的视觉全在主题里，靠 ^:checked /template/ Border#Track
+         这类选择器实现：^ 指控件自身处于 :checked 伪类，/template/ 表示进入控件模板内部取名为
+         Track 的元素，因此不需要在这里给轨道和滑块分别绑任何属性 -->
     <DataTemplate DataType="{x:Type vm:ToggleValue}">
       <ToggleButton Theme="{StaticResource SwitchToggle}" IsChecked="{Binding IsOn, Mode=TwoWay}" />
     </DataTemplate>
 
     <!-- 行取值：滑块 -->
+    <!-- 匹配 RangeValue：TrackBar 负责拖拽，右侧 TextBlock 显示 DisplayText。
+         整体宽 186、读数固定 44 宽并右对齐，这样从 80% 拖到 100% 时轨道长度不变 -->
     <DataTemplate DataType="{x:Type vm:RangeValue}">
       <StackPanel Orientation="Horizontal" Spacing="10" Width="186">
         <ctrl:TrackBar Width="126" Height="14" MinHeight="14"
@@ -134,6 +178,8 @@
     </DataTemplate>
 
     <!-- 行取值：多选标签 -->
+    <!-- 匹配 ChipsValue：默认 ItemsControl 是纵向 StackPanel，这里换成 WrapPanel，
+         标签多到一行放不下时自动换行；整体靠右，与其它取值控件保持同一条右边线 -->
     <DataTemplate DataType="{x:Type vm:ChipsValue}">
       <ItemsControl ItemsSource="{Binding Items}" MaxWidth="300">
         <ItemsControl.ItemsPanel>
@@ -142,6 +188,10 @@
           </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
+          <!-- 每个标签再按 ChipItem 匹配一层模板：Content 取 Label，IsChecked 双向绑定 IsSelected，
+               再次点击可以取消选中（与强调色色板的单选语义不同）。
+               ChipToggle 和上面的 SwitchToggle 一样是 ControlTheme 而不是 Class，
+               选中态由主题内部的 ^:checked 选择器改 Border#Bg 的底色和描边 -->
           <DataTemplate DataType="{x:Type vm:ChipItem}">
             <ToggleButton Theme="{StaticResource ChipToggle}" Content="{Binding Label}"
                           IsChecked="{Binding IsSelected, Mode=TwoWay}" />
@@ -151,6 +201,8 @@
     </DataTemplate>
 
     <!-- 行取值：按钮 -->
+    <!-- 匹配 ButtonValue：文案、命令、三个画刷全部来自 VM，模板里不出现任何颜色。
+         好处是「默认 / 主按钮 / 危险」三种语气只需要在 VM 里换开关，XAML 完全不动 -->
     <DataTemplate DataType="{x:Type vm:ButtonValue}">
       <Button Content="{Binding Text}" Command="{Binding Command}"
               Background="{Binding Background}"
@@ -159,12 +211,15 @@
     </DataTemplate>
 
     <!-- 行取值：只读值 -->
+    <!-- 匹配 InfoValue：等宽字体、不可编辑，用于版本号一类需要逐字符对齐的值 -->
     <DataTemplate DataType="{x:Type vm:InfoValue}">
       <TextBlock Text="{Binding Text}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                  Foreground="{StaticResource Text1}" VerticalAlignment="Center" />
     </DataTemplate>
 
     <!-- 行取值：路径 -->
+    <!-- 匹配 PathValue：只读 TextBox 方便选中复制长路径，右侧「打开」目前只是占位（没接 Command）。
+         整体宽度由 Grid 固定在 300，避免超长路径把整行撑宽 -->
     <DataTemplate DataType="{x:Type vm:PathValue}">
       <Grid ColumnDefinitions="Auto,Auto" Width="300">
         <TextBox Text="{Binding Text}" IsReadOnly="True" FontFamily="{StaticResource MonoFont}"
@@ -174,6 +229,8 @@
     </DataTemplate>
 
     <!-- 行取值：色板 -->
+    <!-- 匹配 PaletteValue：横向一排色块。选中态靠 Classes.selected 绑定 SwatchItem.IsSelected，
+         由 VM 里的 SwatchCommand 保证互斥；背景色直接绑 Brush，不用在这里列颜色 -->
     <DataTemplate DataType="{x:Type vm:PaletteValue}">
       <ItemsControl ItemsSource="{Binding Swatches}">
         <ItemsControl.ItemsPanel>
@@ -191,15 +248,25 @@
     </DataTemplate>
 
     <!-- 行 -->
+    <!-- 匹配 SettingRow，是整个「数据驱动表单」的核心连接点：
+         左列标题 + 描述（描述用 MaxWidth 420 在长文案处换行），右列用 ContentControl 承载 Value。
+         ContentControl 会把 Content 当成新数据继续按类型查模板，所以「一行一种控件」才成立：
+         同一个模板里 Value 可以是 TextBox，也可以是开关或按钮。
+         右侧统一 HorizontalAlignment=Right：所有取值控件贴齐同一条右边线，标题在左、值在右，
+         视线扫一列就能读完，也让每行控件宽度不同（196 的输入框、158 的下拉）不会显得参差 -->
     <DataTemplate DataType="{x:Type vm:SettingRow}">
       <Border Classes="setrow">
         <Grid ColumnDefinitions="*,Auto">
+          <!-- 左列固定内容：描述没有配置时不占位（IsVisible 绑 HasDesc），行高自动收窄 -->
           <StackPanel VerticalAlignment="Center">
             <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{StaticResource Text0}" />
             <TextBlock Text="{Binding Desc}" FontSize="11.5" Foreground="{StaticResource Text2}"
                        Margin="0,2,0,0" MaxWidth="420" HorizontalAlignment="Left"
                        TextWrapping="Wrap" IsVisible="{Binding HasDesc}" />
           </StackPanel>
+          <!-- 这里就是「按类型分发」的那一步：Content 是 object 类型的 Value，
+               ContentControl 拿到实例后回查本文件的隐式模板，命中哪个 DataType 就渲染哪个控件；
+               Margin 的 24 是两列之间的最小间距，右列变宽时被压缩的是左侧星号列 -->
           <ContentControl Grid.Column="1" Content="{Binding Value}" Margin="24,0,0,0"
                           VerticalAlignment="Center" HorizontalAlignment="Right"
                           IsVisible="{Binding HasValue}" />
@@ -208,6 +275,8 @@
     </DataTemplate>
 
     <!-- 分组 -->
+    <!-- 匹配 SettingGroup：小标题（比正文小一号、用次级文字色）+ 圆角卡片，
+         卡片内的 ItemsControl 把 Rows 逐行展开，行模板就是上面那个 SettingRow -->
     <DataTemplate DataType="{x:Type vm:SettingGroup}">
       <StackPanel Margin="0,0,0,12">
         <TextBlock Text="{Binding Title}" FontSize="10.5" FontWeight="SemiBold"
@@ -219,6 +288,8 @@
     </DataTemplate>
 
     <!-- 链接行 -->
+    <!-- 匹配 LinkItem：图标 + 标题 + 副标题 + 右侧「›」箭头。整行不可点击，
+         因为目前只做展示，Command 字段留着给后续接线用 -->
     <DataTemplate DataType="{x:Type vm:LinkItem}">
       <Grid ColumnDefinitions="Auto,*,Auto" Height="40">
         <ctrl:Icon Data="{Binding Icon}" Width="14" Height="14" Foreground="{StaticResource Text2}"
@@ -232,21 +303,32 @@
     </DataTemplate>
 
     <!-- 设置分区 -->
+    <!-- 匹配 SettingSection：右栏的整页内容。结构固定为「标题区 + 可选顶部卡 + 若干分组 + 可选资源区」，
+         具体有什么由 VM 决定，所以这里是所有 7 个分区共用的一份模板。
+         外层 ScrollViewer 只开纵向滚动：内容超出 680 高度时右栏自己滚，不带动整窗 -->
     <DataTemplate DataType="{x:Type vm:SettingSection}">
       <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="24,14,24,18">
+          <!-- 分区标题与副标题：文字来自 VM，切换分区时靠 Current 变更整体替换这块内容 -->
           <StackPanel Margin="0,0,0,12">
             <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold" />
             <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Text2}" Margin="0,5,0,0" />
           </StackPanel>
 
+          <!-- 顶部卡片是可选内容：账号页塞 AccountCard、关于页塞 AboutCard，
+               其余分区为 null，HasTopCard 为 false 时这个 ContentControl 直接不占位 -->
           <ContentControl Content="{Binding TopCard}" IsVisible="{Binding HasTopCard}" />
 
+          <!-- 分组列表：默认面板就是纵向 StackPanel，所以不用额外写 ItemsPanel；
+               每个元素再按 SettingGroup 匹配模板（见上方） -->
           <ItemsControl ItemsSource="{Binding Groups}" />
 
+          <!-- 资源区只在 Links 非空时出现（HasLinks），目前只有「关于」分区会命中 -->
           <StackPanel IsVisible="{Binding HasLinks}">
+            <!-- 小标题写死在这里：所有分区的资源区都叫「资源」，没必要为它加一个 VM 属性 -->
             <TextBlock Text="资源" FontSize="10.5" FontWeight="SemiBold"
                        Foreground="{StaticResource Text2}" Margin="2,0,0,8" />
+            <!-- 复用分组卡片样式，让资源列表和上面的设置组看起来是同一类容器 -->
             <Border Classes="groupCard" Padding="16,2">
               <ItemsControl ItemsSource="{Binding Links}" />
             </Border>
@@ -257,22 +339,35 @@
 
   </UserControl.DataTemplates>
 
+  <!-- 叠层容器：遮罩与面板共用同一坐标系，Panel 不做布局裁剪，两者都按对齐方式自由摆放 -->
   <Panel>
     <!-- 遮罩 -->
+    <!-- 铺满整个控件的半透明黑（#BD 不透明度 + 设计稿底色 #030407），
+         点击即关闭浮层，事件处理在 SettingsOverlay.axaml.cs 的 OnMaskPressed。
+         它写在面板之前，Z 序位于面板下方，所以只有点到面板之外的区域才会触发关闭 -->
     <Border Background="#BD030407" PointerPressed="OnMaskPressed" />
 
     <!-- 设置窗口 -->
+    <!-- 固定 940×680，不随内容自适应——切换 7 个分区时窗口尺寸始终一致，不会抖动；
+         MaxWidth/MaxHeight 与 Width/Height 相同，等于锁死尺寸，防止父容器拉伸。
+         PopShadow 是 Theme.axaml 里的 70px 大扩散阴影，用来把面板从暗遮罩上「托」起来；
+         ClipToBounds 保证内容不越过 14 圆角，否则滚动内容会在圆角处露直角 -->
     <Border Width="940" Height="680" MaxWidth="940" MaxHeight="680"
             HorizontalAlignment="Center" VerticalAlignment="Center"
             Background="{StaticResource Bg1}"
             BorderBrush="{StaticResource Line2}" BorderThickness="1"
             CornerRadius="14" BoxShadow="{StaticResource PopShadow}" ClipToBounds="True">
+      <!-- 三行：50 标题栏（固定）、* 主体（占满剩余）、56 底栏（固定），
+           中部高度由 680 减去上下两栏得到，右栏再在这个高度内自己滚动 -->
       <Grid RowDefinitions="50,*,56">
 
-        <!-- 头部 -->
+        <!-- 头部：标题 + 关闭按钮，下边框把标题栏和内容分开 -->
         <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,0,12,0">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="设置" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <!-- chrome 类本身不含模板：Controls.axaml 里只是把它的 Theme 指向 Theme.axaml 的 ChromeButton，
+                 所以这个图标按钮的底色、悬停色全在主题里，这里不需要写任何颜色；
+                 关闭复用 MainWindowViewModel 的 CloseSettingsCommand，除了 IsSettingsOpen 不改别的状态 -->
             <Button Grid.Column="1" Classes="chrome" Command="{Binding CloseSettingsCommand}" ToolTip.Tip="关闭">
               <ctrl:Icon Data="{x:Static ctrl:Icons.Close}" Width="14" Height="14" Thickness="1.8" />
             </Button>
@@ -280,13 +375,20 @@
         </Border>
 
         <!-- 主体 -->
+        <!-- 两列：左栏固定 176（分区数量固定，宽度不需要自适应），右栏星号占满剩余空间 -->
         <Grid Grid.Row="1" ColumnDefinitions="176,*">
 
+          <!-- 左栏容器：比面板底色再暗一档（12% 黑）并在右侧加一条分隔线，形成视觉分区 -->
           <Border Background="#24000000" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+            <!-- 两行：分区列表占满高度，底部留给版本号文案；外层 10,12 的内边距让按钮不贴边 -->
             <Grid RowDefinitions="*,Auto" Margin="10,12">
               <ItemsControl ItemsSource="{Binding Settings.Sections}">
+                <!-- 注意：这里是本文件第二份 SettingSection 模板，但写在 ItemTemplate 里属于显式指定，
+                     优先级高于上面那份隐式模板，所以左栏只会渲染成一行按钮而不是整页内容 -->
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type vm:SettingSection}">
+                    <!-- Classes.selected 跟进 IsSelected：点哪个分区，VM 里的 Select 就只会让那个为 true；
+                         CommandParameter 传自身，因此 7 个分区的 Command 可以共用同一个 SelectCommand -->
                     <Button Classes="setitem" Classes.selected="{Binding IsSelected}"
                             Command="{Binding Command}" CommandParameter="{Binding}">
                       <StackPanel Orientation="Horizontal" Spacing="9">
@@ -298,18 +400,26 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
+              <!-- 左栏底部文案来自 VM 的 Footer 属性（Aster v1.4.2 · 设置已同步至本地），
+                   不写死在 XAML，方便以后版本号或同步状态变化时只改一处；LineHeight 17 让长文案换行后仍紧凑 -->
               <TextBlock Grid.Row="1" Text="{Binding Settings.Footer}"
                          FontSize="10.5" Foreground="{StaticResource Text2}"
                          LineHeight="17" Margin="8,10,8,2" TextWrapping="Wrap" />
             </Grid>
           </Border>
 
+          <!-- 右栏：Content 绑 Settings.Current（SettingSection），交给隐式模板渲染成整页；
+               Stretch 让模板根节点撑满这一格，否则 ScrollViewer 只会跟内容一样宽；
+               ClipToBounds 防止滚动内容画出边界盖住圆角 -->
           <ContentControl Grid.Column="1" Content="{Binding Settings.Current}"
                           HorizontalContentAlignment="Stretch"
                           VerticalContentAlignment="Stretch" ClipToBounds="True" />
         </Grid>
 
         <!-- 底部 -->
+        <!-- 左边是静态说明文案：所有设置项即时生效并自动保存，所以这里没有「应用」按钮；
+             右边 pri 是 Controls.axaml 里的主按钮类（渐变底 + 白字），一屏只放这一个主操作，
+             点「完成」同样走 CloseSettingsCommand -->
         <Border Grid.Row="2" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
                 Background="#29000000" Padding="20,0">
           <Grid ColumnDefinitions="*,Auto">

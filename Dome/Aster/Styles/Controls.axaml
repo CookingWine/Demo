@@ -4,13 +4,22 @@
 
 
 
+  <!-- 文件定位：全局样式层（Styles），只做一件事——把令牌和控件主题套到具体控件上，不定义颜色、也不定义模板 -->
+  <!-- 与 Theme.axaml 的分工：颜色 / 字体 / 模板都在 Theme.axaml（资源侧）；这里只有 Selector + Setter，用 DynamicResource 引用那些令牌 -->
+  <!-- 引入顺序：App.axaml 的 Application.Styles 中排在 FluentTheme 之后，所以这里的 Setter 能盖掉 Fluent 默认外观；顺序颠倒就会被打回原样 -->
+  <!-- 两种挂载方式：Setter Property="Theme" 挂 ControlTheme（Button.nav → NavButton），Classes 挂样式类（Classes="pri" / ghost / link） -->
+  <!-- 风格约定：默认样式负责"安静"（低对比底 + 弱描边），强调只交给样式类和 .selected 状态，一屏最好只有一个 pri -->
+  <!-- 新增样式：优先组合已有类；确实需要新模板时回 Theme.axaml 加 ControlTheme，不要在这里重写 Template -->
+
   <!-- ===================== 基础 ===================== -->
+  <!-- Window 上设字体与字号，全应用靠继承生效：页面里不必重复声明 FontFamily，只有等宽等特例才单独覆盖 -->
   <Style Selector="Window">
     <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
     <Setter Property="FontSize" Value="13" />
     <Setter Property="Foreground" Value="{DynamicResource Text0}" />
   </Style>
 
+  <!-- ToolTip 属于临时浮层，用 Bg3 而不是卡片的 Bg2，靠"比卡片更亮"表达它浮在内容之上 -->
   <Style Selector="ToolTip">
     <Setter Property="Background" Value="{DynamicResource Bg3}" />
     <Setter Property="Foreground" Value="{DynamicResource Text1}" />
@@ -22,18 +31,22 @@
   </Style>
 
   <!-- ===================== 滚动条 ===================== -->
+  <!-- 轨道完全透明，只留滑块：深色界面里一条常驻的轨道会显得很脏，滚动条应当"需要时才被看见" -->
   <Style Selector="ScrollBar">
     <Setter Property="Background" Value="Transparent" />
   </Style>
+  <!-- Thumb 在模板里，必须走 /template/；#1CFFFFFF 约 11% 白，是"能看见但不打扰"的滑轨强度 -->
   <Style Selector="ScrollBar /template/ Thumb">
     <Setter Property="Background" Value="#1CFFFFFF" />
     <Setter Property="CornerRadius" Value="9" />
   </Style>
+  <!-- 悬停提到约 20% 白：给用户确认"我要拖的是这个东西"的反馈 -->
   <Style Selector="ScrollBar:pointerover /template/ Thumb">
     <Setter Property="Background" Value="#33FFFFFF" />
   </Style>
 
   <!-- ===================== 通用按钮 ===================== -->
+  <!-- 默认按钮＝次级按钮：W04 底 + Line2 描边 + Text1 文字，保证"没被强调的动作"看起来也是可点的 -->
   <Style Selector="Button">
     <Setter Property="MinHeight" Value="28" />
     <Setter Property="Padding" Value="12,0" />
@@ -48,36 +61,50 @@
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
   </Style>
+  <!-- 这条模板内部选择器是必须的：FluentTheme 的 Button 把底色画在 ContentPresenter#PART_ContentPresenter 上，而不是 Button 自身 -->
+  <!-- 不写它的话，下面所有 :pointerover / :pressed 的背景都改不到可见的那一层；元素名 PART_ContentPresenter 是 Fluent 模板里写死的，写错会静默失效 -->
+  <!-- 顺带把 CornerRadius 同步成 6：这层是真正被填色的矩形，圆角不同步就会从外框圆角里"露角" -->
   <Style Selector="Button /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="CornerRadius" Value="6" />
   </Style>
+  <!-- 文字色挂在 Button 自身（由模板继承下去），所以这条不需要 /template/ -->
   <Style Selector="Button:pointerover">
     <Setter Property="Foreground" Value="{DynamicResource Text0}" />
   </Style>
+  <!-- 悬停底色要落在模板元素上：W08（8%）比常态的 W04（4%）明显更亮，变化才看得出来 -->
   <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource W08}" />
   </Style>
+  <!-- 按下反而回到 W06：比悬停更暗，形成"按下去变沉"的手感，而不是越按越亮 -->
   <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource W06}" />
   </Style>
 
+  <!-- .pri 主按钮：一屏只放一个的主要动作（登录、保存、发送），渐变底 + 更实的描边 + 白色 Medium 字重 -->
+  <!-- 白色文字在饱和渐变上需要 Medium，Regular 会显得虚；描边用 W14 而不是有色蓝，让边缘在深色背景上"收得住" -->
   <Style Selector="Button.pri">
     <Setter Property="Background" Value="{DynamicResource PrimaryGrad}" />
     <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
     <Setter Property="Foreground" Value="White" />
     <Setter Property="FontWeight" Value="Medium" />
   </Style>
+  <!-- 渐变没法通过"换一个色值"表达悬停，所以整体用 Opacity 压暗；文字在这里再声明一次，避免被通用的 :pointerover 改成 Text0 -->
   <Style Selector="Button.pri:pointerover">
     <Setter Property="Foreground" Value="White" />
     <Setter Property="Opacity" Value="0.9" />
   </Style>
+  <!-- 关键一条：上面通用的 Button:pointerover 会把 PART_ContentPresenter 刷成 W08 灰底，那层灰色正好盖在渐变之上 -->
+  <!-- 因此这里必须把模板元素重新指回 PrimaryGrad，主按钮的悬停才不会变成"灰按钮" -->
   <Style Selector="Button.pri:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource PrimaryGrad}" />
   </Style>
+  <!-- 按下再压一档到 0.82，与悬停的 0.9 形成层级差 -->
   <Style Selector="Button.pri:pressed">
     <Setter Property="Opacity" Value="0.82" />
   </Style>
 
+  <!-- .ghost 幽灵按钮：透明底 + 透明描边，只在悬停时给一层 W06，用工具栏图标、卡片右上角"更多"这类次要操作 -->
+  <!-- 它与默认按钮的区别不是颜色而是"存在感"：默认按钮常有底色，ghost 平时完全融入背景 -->
   <Style Selector="Button.ghost">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="Transparent" />
@@ -86,24 +113,29 @@
     <Setter Property="Background" Value="{DynamicResource W06}" />
   </Style>
 
+  <!-- .link 文字链接：取消按钮的一切"盒感"（无底、无框、无内边距），让它在句子里像一段可点的文字 -->
   <Style Selector="Button.link">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="0" />
+    <!-- MinHeight 归零 + Height=NaN（即 Auto）是配套动作：只清 MinHeight 仍会继承 28 的高度，链接会把所在行撑高 -->
     <Setter Property="MinHeight" Value="0" />
     <Setter Property="Height" Value="NaN" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="Foreground" Value="{DynamicResource Accent}" />
     <Setter Property="FontSize" Value="11.5" />
   </Style>
+  <!-- 悬停只提亮文字（#9FB4FF），不改底色：链接的悬停反馈必须轻，否则会像按钮一样被抓注意力 -->
   <Style Selector="Button.link:pointerover">
     <Setter Property="Foreground" Value="#9FB4FF" />
   </Style>
+  <!-- 仍要显式写回 Transparent，压掉通用 :pointerover 给模板元素加的 W08 底 -->
   <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
   </Style>
 
   <!-- ===================== 输入框 ===================== -->
+  <!-- 与按钮同一套"弱面"语言（W04 底 + Line2 描边），但圆角 7 比按钮 6 稍大，暗示这是"可以往里写字的槽" -->
   <Style Selector="TextBox">
     <Setter Property="Background" Value="{DynamicResource W04}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Line2}" />
@@ -114,21 +146,28 @@
     <Setter Property="FontSize" Value="12" />
     <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
     <Setter Property="Foreground" Value="{DynamicResource Text0}" />
+    <!-- 光标与选区都用品牌色：这是输入框里唯一允许出现强色的地方，能立刻指出"焦点在这儿" -->
     <Setter Property="CaretBrush" Value="{DynamicResource Accent}" />
     <Setter Property="SelectionBrush" Value="#806C8BFF" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
+  <!-- PART_BorderElement 是 FluentTheme TextBox 模板里那层可见边框，属性必须作用在它身上才有效 -->
   <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
     <Setter Property="Background" Value="{DynamicResource W06}" />
     <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
   </Style>
+  <!-- 聚焦态用 BoxShadow 做 3px 外发光，而不是加粗 BorderThickness -->
+  <!-- 原因：BorderThickness 变化会参与布局，输入框会整体抖动、文字位移；BoxShadow 只影响绘制，等于免费得到一圈 outline -->
+  <!-- "0 0 0 3" 里前两个 0 是不偏移、第三个 0 是模糊、第四个 3 是扩散，所以光晕是硬边均匀外扩，而不是糊开的阴影 -->
   <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <!-- 底色染 7% 蓝（#12），让聚焦面本身带一点主色，与描边、光晕形成三层同一色相 -->
     <Setter Property="Background" Value="#126C8BFF" />
     <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
     <Setter Property="BoxShadow" Value="0 0 0 3 #246C8BFF" />
   </Style>
 
   <!-- ===================== 下拉框 ===================== -->
+  <!-- ComboBox 底色用 W06（6%），比 TextBox 的 W04（4%）再实一档：它表示"已经选定的值"，视觉上比"待输入的空白"更确定 -->
   <Style Selector="ComboBox">
     <Setter Property="Background" Value="{DynamicResource W06}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Line2}" />
@@ -138,8 +177,11 @@
     <Setter Property="MinHeight" Value="30" />
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource Text0}" />
+    <!-- 默认右对齐是一条排版约定：下拉框多出现在筛选条、表单行的右端，默认对齐省掉每个实例写一次 HorizontalAlignment -->
+    <!-- 需要撑满整行时，在实例上显式写 HorizontalAlignment="Stretch" 覆盖它，而不是改动这条全局约定 -->
     <Setter Property="HorizontalAlignment" Value="Right" />
   </Style>
+  <!-- 菜单项：MinHeight 归零去掉 Fluent 默认的 32，与 12 号字、10,6 的内边距配合，弹层才够紧凑 -->
   <Style Selector="ComboBoxItem">
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource Text1}" />
@@ -148,23 +190,29 @@
   </Style>
 
   <!-- ===================== 文本样式类 ===================== -->
+  <!-- 类名就是令牌名的缩写：t0/t1/t2 对应 Text0/Text1/Text2，数字越小越亮；页面里写 Classes="t2" 就行，不用记色值 -->
+  <!-- 只开放 t0~t2 三级：最弱的 Text3 使用场景很少（禁用、极淡标注），直接引用资源键即可，避免被当成正文色滥用 -->
   <Style Selector="TextBlock.t0"><Setter Property="Foreground" Value="{DynamicResource Text0}" /></Style>
   <Style Selector="TextBlock.t1"><Setter Property="Foreground" Value="{DynamicResource Text1}" /></Style>
   <Style Selector="TextBlock.t2"><Setter Property="Foreground" Value="{DynamicResource Text2}" /></Style>
   <Style Selector="TextBlock.accent"><Setter Property="Foreground" Value="{DynamicResource Accent}" /></Style>
+  <!-- mono：换等宽字体并降到 11，用于 ID、时间戳、代码片段这类需要逐字符对齐的内容 -->
   <Style Selector="TextBlock.mono">
     <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
     <Setter Property="FontSize" Value="11" />
   </Style>
+  <!-- label：字段名、单位、说明，10.5 号 + Text2，是正文之下最小的一档可读文字 -->
   <Style Selector="TextBlock.label">
     <Setter Property="FontSize" Value="10.5" />
     <Setter Property="Foreground" Value="{DynamicResource Text2}" />
   </Style>
+  <!-- groupTitle：与 label 同尺寸同色，只靠 SemiBold 区分身份——前者是"分组的头"，后者是"某一项的标签" -->
   <Style Selector="TextBlock.groupTitle">
     <Setter Property="FontSize" Value="10.5" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource Text2}" />
   </Style>
+  <!-- pageTitle / cardTitle / metric 构成三级标题节奏：18 页面、12.5 卡片、26 指标数字 -->
   <Style Selector="TextBlock.pageTitle">
     <Setter Property="FontSize" Value="18" />
     <Setter Property="FontWeight" Value="SemiBold" />
@@ -175,6 +223,7 @@
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource Text0}" />
   </Style>
+  <!-- metric：只给数字卡片用，26 号是整个界面里最大的字，让数值成为卡片的视觉中心 -->
   <Style Selector="TextBlock.metric">
     <Setter Property="FontSize" Value="26" />
     <Setter Property="FontWeight" Value="SemiBold" />
@@ -182,6 +231,8 @@
   </Style>
 
   <!-- ===================== 卡片 / 分隔 ===================== -->
+  <!-- 四个 Border 类各管一种"块"，不要混用：card 是内容容器，pill 是胶囊徽标，roleTag 是元信息小标签，seg 是分段控件外壳 -->
+  <!-- card：Bg2 底 + Line 细描边 + 11 圆角；ClipToBounds 让内部的图表、图片、表格不会溢出圆角（这是唯一开裁剪的类） -->
   <Style Selector="Border.card">
     <Setter Property="Background" Value="{DynamicResource Bg2}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
@@ -189,11 +240,14 @@
     <Setter Property="CornerRadius" Value="11" />
     <Setter Property="ClipToBounds" Value="True" />
   </Style>
+  <!-- pill：999 圆角做完整胶囊，只定形状与内边距，背景色由使用方按状态绑定（如成功绿、警告琥珀） -->
+  <!-- VerticalAlignment=Center 便于直接塞进表格行或标题行而不被拉高 -->
   <Style Selector="Border.pill">
     <Setter Property="CornerRadius" Value="999" />
     <Setter Property="Padding" Value="8,3" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
+  <!-- roleTag：5 圆角的小方块标签，装"角色/权限/类型"这类固定元信息；比 pill 更方正，是为了和状态徽标区分开 -->
   <Style Selector="Border.roleTag">
     <Setter Property="CornerRadius" Value="5" />
     <Setter Property="Padding" Value="8,2" />
@@ -201,6 +255,7 @@
     <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
     <Setter Property="BorderThickness" Value="1" />
   </Style>
+  <!-- seg：分段控件的"凹槽"，W04 底 + Padding 2，2px 内边距是给选中块留的缝，视觉上形成内凹 -->
   <Style Selector="Border.seg">
     <Setter Property="Background" Value="{DynamicResource W04}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
@@ -210,6 +265,8 @@
   </Style>
 
   <!-- ===================== 标题栏按钮 ===================== -->
+  <!-- Theme 属性是"挂 ControlTheme"的入口：这里不定义任何尺寸与模板，只把 Theme.axaml 里的 ChromeButton 装上 -->
+  <!-- 之后所有状态色都靠 /template/ Border#Bg 改模板里那层底色，因为 ChromeButton 的模板只填这一个 Border -->
   <Style Selector="Button.chrome">
     <Setter Property="Theme" Value="{StaticResource ChromeButton}" />
   </Style>
@@ -219,9 +276,11 @@
   <Style Selector="Button.chrome:pointerover /template/ Border#Bg">
     <Setter Property="Background" Value="{DynamicResource W08}" />
   </Style>
+  <!-- close 是复合类：页面写 Classes="chrome close"，两个类同时存在时这条选择器才命中；单独写 close 不会生效 -->
   <Style Selector="Button.chrome.close:pointerover">
     <Setter Property="Foreground" Value="White" />
   </Style>
+  <!-- #E5484D 是"危险色"的行业惯例：关闭键悬停变红，用户不用读标签就知道后果，因此这里必须偏离 W 系列的中性色 -->
   <Style Selector="Button.chrome.close:pointerover /template/ Border#Bg">
     <Setter Property="Background" Value="#E5484D" />
   </Style>
@@ -229,6 +288,7 @@
   <!-- ===================== 一级导航 ===================== -->
   <Style Selector="Button.nav">
     <Setter Property="Theme" Value="{StaticResource NavButton}" />
+    <!-- 尺寸与 ControlTheme 里的默认值重复：样式类的优先级高于 ControlTheme，这里写一遍等于把"可调参数"提到样式层，改单处即可覆盖主题 -->
     <Setter Property="Width" Value="56" />
     <Setter Property="Height" Value="52" />
     <Setter Property="Padding" Value="0" />
@@ -242,19 +302,25 @@
   <Style Selector="Button.nav:pointerover /template/ Border#Bg">
     <Setter Property="Background" Value="{DynamicResource W04}" />
   </Style>
+  <!-- .selected 是"状态叠加"写法：Button.nav.selected 要求 nav 与 selected 两个类同时存在，不是父子关系也不是伪类 -->
+  <!-- View 里用 Classes.selected="{Binding IsSelected}" 按布尔值动态加类，因此选中态由数据驱动，样式层不需要 :checked -->
   <Style Selector="Button.nav.selected">
     <Setter Property="Foreground" Value="{DynamicResource Accent}" />
   </Style>
+  <!-- 选中时三处联动：文字换 Accent、底板换 AccentSoft + 23% 蓝描边、左侧高亮条点亮 -->
   <Style Selector="Button.nav.selected /template/ Border#Bg">
     <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
     <Setter Property="BorderBrush" Value="#3A6C8BFF" />
   </Style>
+  <!-- 3px 的细条在深色底上容易"消失"，用 80% 蓝的 12px 外发光补强度；比把条加粗到 5px 更轻，也不影响布局 -->
+  <!-- 这三条写在 :pointerover 之后：同优先级下后定义者生效，于是"选中 + 悬停"仍保持选中底色，不会闪回悬停灰 -->
   <Style Selector="Button.nav.selected /template/ Border#Bar">
     <Setter Property="Background" Value="{DynamicResource Accent}" />
     <Setter Property="BoxShadow" Value="0 0 12 0 #CC6C8BFF" />
   </Style>
 
   <!-- ===================== 二级导航 ===================== -->
+  <!-- 与一级导航同构，只是更轻：文字用提亮的 AccentText、选中描边 #336C8BFF（20% 蓝）比一级的 23% 更淡，用强度差表达层级 -->
   <Style Selector="Button.subnav">
     <Setter Property="Theme" Value="{StaticResource SubNavButton}" />
     <Setter Property="Background" Value="Transparent" />
@@ -264,6 +330,7 @@
   <Style Selector="Button.subnav:pointerover">
     <Setter Property="Foreground" Value="{DynamicResource Text0}" />
   </Style>
+  <!-- 悬停底只用 W04（一级导航也是 W04），因为侧栏条目密集，反馈必须比内容区按钮更轻 -->
   <Style Selector="Button.subnav:pointerover /template/ Border#Bg">
     <Setter Property="Background" Value="{DynamicResource W04}" />
   </Style>
@@ -276,6 +343,7 @@
   </Style>
 
   <!-- ===================== 分段项 ===================== -->
+  <!-- Button.seg 必须和 Border.seg 一起用：容器负责凹槽（W04 底 + 2px 内边距），按钮只负责内容与选中块 -->
   <Style Selector="Button.seg">
     <Setter Property="Theme" Value="{StaticResource SegButton}" />
     <Setter Property="Background" Value="Transparent" />
@@ -284,6 +352,7 @@
   <Style Selector="Button.seg:pointerover">
     <Setter Property="Foreground" Value="{DynamicResource Text1}" />
   </Style>
+  <!-- 选中块用中性色 W10 而不是 Accent：分段控件表达"当前看的是哪一段"，属于位置指示，强调要留给 pri 主操作 -->
   <Style Selector="Button.seg.selected">
     <Setter Property="Foreground" Value="{DynamicResource Text0}" />
     <Setter Property="Background" Value="{DynamicResource W10}" />

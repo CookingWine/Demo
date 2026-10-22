@@ -2,43 +2,78 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+  <!-- 文件定位：Aster 设计系统的「资源层」，只装设计令牌（Color / Brush / FontFamily / BoxShadows）与控件主题（ControlTheme） -->
+  <!-- 与 Controls.axaml 的分工：本文件回答「有哪些颜色」「控件模板长什么样」，本身不作用于任何控件；Controls.axaml 负责把这里的东西挂到控件和样式类上 -->
+  <!-- 引入顺序：App.axaml 先把本文件合并进 Application.Resources，再在 Application.Styles 里 include Controls.axaml；资源必须先于样式加载，否则样式里的 StaticResource 取不到键 -->
+  <!-- 引用约定：颜色用 DynamicResource（可随主题变体实时切换），跨字典取 ControlTheme 用 StaticResource（键在加载期确定，无需动态查找） -->
+  <!-- 新增令牌：先看能否复用现有档位（Bg / Text / Line / W 系列），确属新语义再按区块追加，键名写用途不写色值 -->
+  <!-- 命名体系：Bg0~Bg4 背景由深到浅，Text0~Text3 文字由亮到暗，Line 三档分割线强度，W 系列是半透明白的透明度档位 -->
+
   <!-- ===================== 设计令牌 · 色彩 ===================== -->
+  <!-- 这里只存 Color 原始值，控件实际消费的是下面「画刷」区块的 SolidColorBrush；改色只改这一处，画刷与全部控件跟随 -->
+  <!-- 背景分层 Bg0~Bg4：越浅越「靠近用户」，用明度差代替投影表达层级，这是深色界面里最稳的层次手段 -->
+  <!-- Bg0 窗口最底层：窗体背景，比任何内容都深，用来把卡片衬出来 -->
   <Color x:Key="Bg0Color">#06070A</Color>
+  <!-- Bg1 第一层内容面：内容区 / 侧栏 / 整页阅读区 -->
   <Color x:Key="Bg1Color">#0E1015</Color>
+  <!-- Bg2 卡片面：Border.card 的默认底色，也是界面上出现面积最大的面 -->
   <Color x:Key="Bg2Color">#13161D</Color>
+  <!-- Bg3 悬浮面：ToolTip、下拉菜单、浮层卡片——凡是「浮起来」的元素都要比它下面的卡片再亮一档 -->
   <Color x:Key="Bg3Color">#191D26</Color>
+  <!-- Bg4 最亮档：需要在卡片之上再凸一层的局部面（悬浮块、输入面），是背景层级的顶格 -->
   <Color x:Key="Bg4Color">#212633</Color>
 
+  <!-- 文字层级 Text0~Text3：数字越大越暗，一级只有一种「最亮」，避免一屏里出现多个同级强调 -->
+  <!-- Text0 主文字：标题、关键数值、正文强调 -->
   <Color x:Key="Text0Color">#E9ECF4</Color>
+  <!-- Text1 正文与常规标签：按钮默认前景、二级导航文字 -->
   <Color x:Key="Text1Color">#9BA3B7</Color>
+  <!-- Text2 辅助信息：说明文字、未选中导航、分组标题，弱于正文但仍可读 -->
   <Color x:Key="Text2Color">#626A7D</Color>
+  <!-- Text3 最弱一级：禁用态、极淡的标注，只提供背景性信息，不承载阅读 -->
   <Color x:Key="Text3Color">#434A5C</Color>
 
+  <!-- 语义色：Accent 是品牌主色（选中态、链接、进度），其余五色只在图表与状态中表达含义，不参与界面主色 -->
   <Color x:Key="AccentColor">#6C8BFF</Color>
+  <!-- 紫色：与 Accent 组成强调渐变的另一端，也用于演示/创作类标签 -->
   <Color x:Key="VioletColor">#A78BFA</Color>
+  <!-- 青色：信息类、科技感的次要强调，常用于图表系列色 -->
   <Color x:Key="CyanColor">#3DD6E8</Color>
+  <!-- 绿色：成功、开启、正向增长 -->
   <Color x:Key="GreenColor">#3DDC97</Color>
+  <!-- 琥珀：警告、待处理、临期提示 -->
   <Color x:Key="AmberColor">#F5B942</Color>
+  <!-- 红色：错误、失败、删除等不可逆操作 -->
   <Color x:Key="RedColor">#F8716E</Color>
 
   <!-- ===================== 画刷 ===================== -->
+  <!-- Color 与 Brush 分开的原因：Color 可被复用在渐变、动画、代码里，Brush 才能直接赋给 Background / Foreground -->
+  <!-- 背景画刷：控件只按层级取 Bg，不直接写死色值，换肤时整层一起变 -->
   <SolidColorBrush x:Key="Bg0" Color="{StaticResource Bg0Color}" />
   <SolidColorBrush x:Key="Bg1" Color="{StaticResource Bg1Color}" />
   <SolidColorBrush x:Key="Bg2" Color="{StaticResource Bg2Color}" />
   <SolidColorBrush x:Key="Bg3" Color="{StaticResource Bg3Color}" />
   <SolidColorBrush x:Key="Bg4" Color="{StaticResource Bg4Color}" />
 
+  <!-- 文字画刷：与 Text0Color~Text3Color 一一对应 -->
   <SolidColorBrush x:Key="Text0" Color="{StaticResource Text0Color}" />
   <SolidColorBrush x:Key="Text1" Color="{StaticResource Text1Color}" />
   <SolidColorBrush x:Key="Text2" Color="{StaticResource Text2Color}" />
   <SolidColorBrush x:Key="Text3" Color="{StaticResource Text3Color}" />
 
+  <!-- 分割线三档：都用白色加透明度，叠在任何背景上都自然，不会出现"灰线压在深色上发脏"的问题 -->
+  <!-- Line 常规档：卡片描边、区块之间的细线，看得见但不抢视线 -->
   <SolidColorBrush x:Key="Line" Color="#FFFFFF" Opacity="0.065" />
+  <!-- Line2 强档：需要明确边界的场合，如输入框、chip 描边、悬浮面板外框 -->
   <SolidColorBrush x:Key="Line2" Color="#FFFFFF" Opacity="0.12" />
+  <!-- LineSoft 弱档：卡片内部的次级分隔（列表行与行之间），几乎只做暗示 -->
   <SolidColorBrush x:Key="LineSoft" Color="#FFFFFF" Opacity="0.035" />
 
+  <!-- Accent 纯色：图标、链接、选中态描边等需要"实色"的地方 -->
   <SolidColorBrush x:Key="Accent" Color="{StaticResource AccentColor}" />
+  <!-- AccentSoft 15%：选中项/选中 chip 的浅色底，避免大面积高饱和蓝 -->
   <SolidColorBrush x:Key="AccentSoft" Color="{StaticResource AccentColor}" Opacity="0.15" />
+  <!-- AccentText 提亮版：放在 AccentSoft 这类浅蓝底上的文字，纯 Accent 会发闷 -->
   <SolidColorBrush x:Key="AccentText" Color="#C7D3FF" />
   <SolidColorBrush x:Key="Violet" Color="{StaticResource VioletColor}" />
   <SolidColorBrush x:Key="Cyan" Color="{StaticResource CyanColor}" />
@@ -47,6 +82,8 @@
   <SolidColorBrush x:Key="Red" Color="{StaticResource RedColor}" />
 
   <!-- 半透明白，替代 rgba(255,255,255,.xx) -->
+  <!-- 键名里的数字就是白度百分比：W04=4%、W14=14%；读键即知强度，比 rgba 好检索也好统一调整 -->
+  <!-- 用法约定：W03/W04 打底（按钮、输入框、chip 常态底），W06 次级悬停与按下，W08 标准悬停底，W10 分段控件的选中块，W14 需要看清的描边 -->
   <SolidColorBrush x:Key="W04" Color="#FFFFFF" Opacity="0.04" />
   <SolidColorBrush x:Key="W03" Color="#FFFFFF" Opacity="0.03" />
   <SolidColorBrush x:Key="W06" Color="#FFFFFF" Opacity="0.06" />
@@ -55,45 +92,64 @@
   <SolidColorBrush x:Key="W14" Color="#FFFFFF" Opacity="0.14" />
 
   <!-- ===================== 渐变 ===================== -->
+  <!-- 渐变承担"品牌识别"，因此每个渐变都有唯一用途，不要互相顶替 -->
+  <!-- LogoGrad：品牌标识专用，三色对角过渡（蓝→紫→青），是整套色板里唯一允许出现三色的地方 -->
   <LinearGradientBrush x:Key="LogoGrad" StartPoint="0%,0%" EndPoint="100%,100%">
     <GradientStop Offset="0" Color="#7E96FF" />
     <GradientStop Offset="0.58" Color="#A78BFA" />
     <GradientStop Offset="1" Color="#57CBE2" />
   </LinearGradientBrush>
 
+  <!-- PrimaryGrad：主按钮底色，自上而下两档蓝；纵向渐变让按钮有轻微"受光"感，且不会在大圆角上出现横向色带 -->
   <LinearGradientBrush x:Key="PrimaryGrad" StartPoint="0%,0%" EndPoint="0%,100%">
     <GradientStop Offset="0" Color="#7A96FF" />
     <GradientStop Offset="1" Color="#5C7BF7" />
   </LinearGradientBrush>
 
+  <!-- AvatarGrad：头像圆形底色，青→蓝对角，用于没有真实头像时的首字母占位 -->
   <LinearGradientBrush x:Key="AvatarGrad" StartPoint="0%,0%" EndPoint="100%,100%">
     <GradientStop Offset="0" Color="#3DD6E8" />
     <GradientStop Offset="1" Color="#6C8BFF" />
   </LinearGradientBrush>
 
+  <!-- AccentViolet：横向蓝→紫，用于进度条与强调细线；横向才能表达"从起点到终点"的进度方向 -->
   <LinearGradientBrush x:Key="AccentViolet" StartPoint="0%,0%" EndPoint="100%,0%">
     <GradientStop Offset="0" Color="#6C8BFF" />
     <GradientStop Offset="1" Color="#A78BFA" />
   </LinearGradientBrush>
 
   <!-- ===================== 字体 ===================== -->
+  <!-- UiFont：Inter 排最前，先匹配西文与数字，保证拉丁字形（尤其数字等宽性、字重）统一；中文字体排在其后作为回退 -->
+  <!-- 中文若放到 Inter 之前，Windows/macOS 会用中文字体去渲染数字与英文，字距和字重立刻失真，这是字体栈顺序的真正意义 -->
   <FontFamily x:Key="UiFont">Inter, PingFang SC, Microsoft YaHei, Segoe UI</FontFamily>
+  <!-- MonoFont：等宽字体，用于代码块、ID、时间戳等需要纵向对齐的文本，末尾 monospace 保证任何系统都有兜底 -->
   <FontFamily x:Key="MonoFont">JetBrains Mono, SF Mono, Cascadia Code, Consolas, Menlo, monospace</FontFamily>
 
   <!-- ===================== 控件主题 ===================== -->
+  <!-- 为什么用 ControlTheme 而不是样式类：模板只能定义在 ControlTheme 里，样式类只能改属性 -->
+  <!-- 好处一：一次定义可被多个样式类复用（Button.nav / Button.subnav / Button.seg 只是给 Theme 换实现），样式类只管状态色 -->
+  <!-- 好处二：ControlTheme 可整体替换，做第二套视觉时换一个 ControlTheme 即可，不必改页面 -->
+  <!-- 挂载方式：Controls.axaml 里用 Setter Property="Theme" Value="{StaticResource Key}" 把主题挂到样式类上；CheckBox 则用类型键直接覆盖默认主题 -->
+  <!-- 模板里的 Name（Bg / Bar / Track / Knob / Box / Check）不是装饰：外部样式靠 /template/ #Name 精确定位到它们才能改状态色 -->
 
     <!-- ============ 窗口标题栏按钮 ============ -->
+    <!-- 标题栏按钮：40×28 比系统标题栏按钮更薄，配合自绘无边框窗口的细标题栏；内容只有图标，所以 Padding 归零 -->
+    <!-- Border#Bg 是唯一的着色面（默认透明、圆角 5），悬停/关闭红底都由 Controls.axaml 通过 /template/ Border#Bg 改写 -->
     <ControlTheme x:Key="ChromeButton" TargetType="Button">
       <Setter Property="Width" Value="40" />
       <Setter Property="Height" Value="28" />
+      <!-- 图标按钮不需要内边距，Padding 清零后 ContentPresenter 才能真正居中 -->
       <Setter Property="Padding" Value="0" />
+      <!-- 默认透明：三个窗口按钮常驻标题栏，未悬停时不应出现底色 -->
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
+      <!-- Text1 是常态色，比标题栏底色亮但不抢眼；悬停时由样式类提升到 Text0 -->
       <Setter Property="Foreground" Value="{DynamicResource Text1}" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border Name="Bg" Background="{TemplateBinding Background}" CornerRadius="5">
+            <!-- ContentPresenter 只做居中容器，不关心内容是一条 Path 还是一个字符，因此窗口按钮可以复用同一模板 -->
             <ContentPresenter Content="{TemplateBinding Content}"
                               HorizontalAlignment="Center"
                               VerticalAlignment="Center" />
@@ -103,6 +159,8 @@
     </ControlTheme>
 
     <!-- ============ 一级导航（rail）============ -->
+    <!-- 一级导航：56×52 的固定尺寸让 rail 里每个图标列宽一致、整列竖直对齐；Padding 为 0 是因为内容只有图标 + 一行小字 -->
+    <!-- BorderThickness=1 配透明 BorderBrush：先占住 1px 描边位，选中时只换颜色，不会因为多出边框而让图标位置抖动 -->
     <ControlTheme x:Key="NavButton" TargetType="Button">
       <Setter Property="Width" Value="56" />
       <Setter Property="Height" Value="52" />
@@ -110,18 +168,26 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="BorderBrush" Value="Transparent" />
+      <!-- 未选中用 Text2：rail 是常驻元素，颜色必须弱于内容区正文 -->
       <Setter Property="Foreground" Value="{DynamicResource Text2}" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Template">
         <ControlTemplate>
+          <!-- Border#Bg：圆角 9 的悬停/选中面，承载整体底色与描边 -->
           <Border Name="Bg" Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}"
                   CornerRadius="9">
+            <!-- Panel 让高亮条与图标叠放而不互相影响布局：条靠左、图标居中 -->
             <Panel>
+              <!-- Border#Bar：左侧 3px 高亮条，CornerRadius="0,3,3,0" 只圆右侧，因为左侧要贴着 rail 边缘 -->
+              <!-- Margin="-10,0,0,0" 用负边距把条推出按钮自身边界，落到按钮左侧的留白里，从而贴住 rail 左边缘 -->
+              <!-- 这条能画在 Border 之外，是因为 Border 默认不裁剪子元素；若外层加了 ClipToBounds，高亮条就会被切掉 -->
+              <!-- 默认 Background=Transparent：条一直存在（占位），只有 .selected 时才被染成 Accent，避免选中瞬间元素出现/消失 -->
               <Border Name="Bar" Width="3" Height="24" CornerRadius="0,3,3,0"
                       HorizontalAlignment="Left" VerticalAlignment="Center"
                       Margin="-10,0,0,0" Background="Transparent" />
+              <!-- 图标与文字由外部 StackPanel 提供，这里只负责居中 -->
               <ContentPresenter Content="{TemplateBinding Content}"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center" />
@@ -132,18 +198,23 @@
     </ControlTheme>
 
     <!-- ============ 二级导航 ============ -->
+    <!-- 二级导航：没有固定宽高，靠 HorizontalAlignment=Stretch 撑满侧栏宽度，这样悬停底是一整条横条，而不是围着文字的色块 -->
     <ControlTheme x:Key="SubNavButton" TargetType="Button">
+      <!-- Padding 9,7 决定条目高度，Margin 底部 2px 是相邻条目之间的呼吸位，两者合起来形成列表节奏 -->
       <Setter Property="Padding" Value="9,7" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="Foreground" Value="{DynamicResource Text1}" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <!-- 内容也拉伸，内部的三列 Grid（图标 / 标题 / 右侧计数）才能把计数推到最右 -->
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Margin" Value="0,0,0,2" />
       <Setter Property="Template">
         <ControlTemplate>
+          <!-- 圆角 7 比一级导航的 9 小一档，用圆角大小暗示层级更深一层 -->
+          <!-- Padding 放在 Border 上而不是 Button 上，悬停底色才会把内边距一起染上，文字不会顶到色块边缘 -->
           <Border Name="Bg" Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}"
@@ -157,9 +228,12 @@
     </ControlTheme>
 
     <!-- ============ 分段控件 ============ -->
+    <!-- 分段控件：比普通按钮更紧凑的一档（高 22、字号 11.5、横向 Padding 10） -->
+    <!-- 22 的高度是为 Border.seg 容器设计的：容器 Padding=2，2+22+2=26，正好形成"凹槽里嵌一块"的观感 -->
     <ControlTheme x:Key="SegButton" TargetType="Button">
       <Setter Property="Padding" Value="10,3" />
       <Setter Property="Background" Value="Transparent" />
+      <!-- 无描边：分段的边界靠选中块的底色区分，加描边会显得脏 -->
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Foreground" Value="{DynamicResource Text2}" />
       <Setter Property="FontSize" Value="11.5" />
@@ -167,6 +241,7 @@
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Template">
         <ControlTemplate>
+          <!-- 圆角 4 小于容器的 6，视觉上才像嵌在容器里的一块，而不是浮在上面 -->
           <Border Name="Bg" Background="{TemplateBinding Background}" CornerRadius="4"
                   Padding="{TemplateBinding Padding}">
             <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center" />
@@ -176,30 +251,39 @@
     </ControlTheme>
 
     <!-- ============ 开关 ============ -->
+    <!-- 开关：38×21 是"手指也点得准"的最小尺寸，桌面端沿用同一比例，保证和移动端截图一致 -->
+    <!-- 结构只有两层：Border#Track 轨道 + Ellipse#Knob 滑块；状态切换靠换对齐方式，不做位移动画 -->
     <ControlTheme x:Key="SwitchToggle" TargetType="ToggleButton">
       <Setter Property="Width" Value="38" />
       <Setter Property="Height" Value="21" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Template">
         <ControlTemplate>
+          <!-- 未选中轨道用 W14 半透明白：在任何底色上都能看出"这里有个凹槽"，又不会像浅灰实色那样发闷 -->
           <Border Name="Track" Width="38" Height="21" CornerRadius="99"
                   Background="{DynamicResource W14}">
+            <!-- Knob 直径 17，轨道高 21，上下各剩 2px，滑块才像嵌在轨道里；Margin 左 2 是关闭态的起始间隙 -->
             <Ellipse Name="Knob" Width="17" Height="17" Fill="White"
                      HorizontalAlignment="Left" VerticalAlignment="Center"
                      Margin="2,0,0,0" />
           </Border>
         </ControlTemplate>
       </Setter>
+      <!-- 选择器语义：^ 指 ControlTheme 的目标控件自身（这里是 ToggleButton），/template/ 表示进入控件模板内部继续查找 -->
+      <!-- 因此 "^:checked /template/ Border#Track" 读作"当开关处于选中态时，模板里的轨道"；省略 /template/ 会去业务子元素里找，永远命不中模板元素 -->
       <Style Selector="^:checked /template/ Border#Track">
+        <!-- 选中态轨道换成 Accent 实色，与全局"选中即品牌色"的约定一致 -->
         <Setter Property="Background" Value="{DynamicResource Accent}" />
       </Style>
       <Style Selector="^:checked /template/ Ellipse#Knob">
+        <!-- 不做动画：把滑块改为靠右、边距左右对调，就得到了"滑过去"的观感，实现成本最低 -->
         <Setter Property="HorizontalAlignment" Value="Right" />
         <Setter Property="Margin" Value="0,0,2,0" />
       </Style>
     </ControlTheme>
 
     <!-- ============ 标签块（chips）============ -->
+    <!-- 标签块（chips）：一组可多选的短标签，Padding 10,4 让文字上下各留 4px；Margin 0,0,6,6 让自动换行时横竖间距都是 6 -->
     <ControlTheme x:Key="ChipToggle" TargetType="ToggleButton">
       <Setter Property="Padding" Value="10,4" />
       <Setter Property="Margin" Value="0,0,6,6" />
@@ -208,6 +292,7 @@
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Template">
         <ControlTemplate>
+          <!-- 常态用 W04 底 + Line2 描边：未选中的 chip 要"看得见边界但不强调"，靠弱色块而不是文字颜色来表达 -->
           <Border Name="Bg" CornerRadius="5" BorderThickness="1"
                   BorderBrush="{DynamicResource Line2}"
                   Background="{DynamicResource W04}"
@@ -216,31 +301,42 @@
           </Border>
         </ControlTemplate>
       </Setter>
+      <!-- 选中态改的是模板里的 Border#Bg，所以要带 /template/；#596C8BFF 是 35% 蓝描边，比底色更实，选中轮廓才清楚 -->
       <Style Selector="^:checked /template/ Border#Bg">
         <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
         <Setter Property="BorderBrush" Value="#596C8BFF" />
       </Style>
+      <!-- 文字颜色挂在控件自身（Button.Foreground），不在模板里，所以这条不带 /template/；两条选择器的作用域不同，别写串 -->
       <Style Selector="^:checked">
+        <!-- 用 AccentText 而不是 Accent：浅蓝底上纯 Accent 会发闷，提亮一档才达到可读对比度 -->
         <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
       </Style>
     </ControlTheme>
 
 
   <!-- 复选框：对齐设计稿的 15px 圆角方框 -->
+  <!-- 键写成 x:Key="{x:Type CheckBox}" 而不是普通字符串：以类型作键等于声明"这是 CheckBox 的默认主题"，Avalonia 解析控件时按类型自动查找，页面里不用写 Theme= 就全局生效 -->
+  <!-- 代价是它会覆盖 FluentTheme 自带的 CheckBox 主题，所有地方（表单、列表、对话框）的复选框都会变成这套外观，改之前要确认没有页面依赖默认样式 -->
   <ControlTheme x:Key="{x:Type CheckBox}" TargetType="CheckBox">
     <Setter Property="Background" Value="Transparent" />
+    <!-- 文字 11.5 + Text1：复选框多出现在表单行里，比正文再弱半档，避免和字段标签抢注意力 -->
     <Setter Property="Foreground" Value="{DynamicResource Text1}" />
     <Setter Property="FontSize" Value="11.5" />
+    <!-- MinHeight 归零：Fluent 默认 32 的最小高会把 15px 的方框撑成一行 32px 的空白，表单会显得很散 -->
     <Setter Property="MinHeight" Value="0" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template">
       <ControlTemplate>
+        <!-- 两列：Auto 列放方框，* 列放文字；文字变长时只挤压文字列，方框尺寸永远稳定在 15px -->
         <Grid ColumnDefinitions="Auto,*" Background="Transparent">
+          <!-- Border#Box：15×15、圆角 4，常态用 W04 底 + Line2 描边，和输入框的"弱面"保持同一套语言 -->
           <Border Name="Box" Width="15" Height="15" CornerRadius="4"
                   Background="{DynamicResource W04}"
                   BorderBrush="{DynamicResource Line2}"
                   BorderThickness="1"
                   VerticalAlignment="Center">
+            <!-- Path#Check：9×9 的矢量对勾；不用"✓"字符是因为不同字体下字符大小与基线差异很大，矢量才能保证像素级一致 -->
+            <!-- 默认 IsVisible=False，靠 :checked 显形，于是勾与不勾共用同一个方框，不需要维护两套模板 -->
             <Path Name="Check" Width="9" Height="9"
                   Data="M0.8 4.6 3.4 7.2 8.2 1.6"
                   Stroke="White" StrokeThickness="1.6"
@@ -249,11 +345,13 @@
                   HorizontalAlignment="Center" VerticalAlignment="Center"
                   IsVisible="False" />
           </Border>
+          <!-- 左 7px 是方框与文字的固定间距；Grid.Column=1 落在上面的 * 列里 -->
           <ContentPresenter Grid.Column="1" Content="{TemplateBinding Content}"
                             Margin="7,0,0,0" VerticalAlignment="Center" />
         </Grid>
       </ControlTemplate>
     </Setter>
+    <!-- 选中：方框填满 Accent、描边同色，与白色对勾形成足够对比，不再需要额外的浅色底 -->
     <Style Selector="^:checked /template/ Border#Box">
       <Setter Property="Background" Value="{DynamicResource Accent}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
@@ -261,9 +359,11 @@
     <Style Selector="^:checked /template/ Path#Check">
       <Setter Property="IsVisible" Value="True" />
     </Style>
+    <!-- 悬停只提亮描边（W14），不动底色：复选框面积小，底色一跳就很晃眼 -->
     <Style Selector="^:pointerover /template/ Border#Box">
       <Setter Property="BorderBrush" Value="{DynamicResource W14}" />
     </Style>
+    <!-- 已选 + 悬停：换成更亮的 #7A96FF（与 PrimaryGrad 顶部同色），表达"这个选中项还能点" -->
     <Style Selector="^:checked:pointerover /template/ Border#Box">
       <Setter Property="Background" Value="#7A96FF" />
       <Setter Property="BorderBrush" Value="#7A96FF" />
@@ -271,7 +371,10 @@
   </ControlTheme>
 
   <!-- ===================== 窗口阴影 ===================== -->
+  <!-- 语法为「X偏移 Y偏移 模糊半径 扩散 颜色」；Y 偏移取正，阴影落在下方，符合"光源在上"的直觉 -->
+  <!-- WindowShadow：18px 下移 + 48px 模糊，比较收敛；#CC000000 约 80% 黑，深色桌面上刚好能描出窗口边界 -->
   <BoxShadows x:Key="WindowShadow">0 18 48 0 #CC000000</BoxShadows>
+  <!-- PopShadow：24px 下移 + 70px 模糊 + 约 90% 黑，比窗口阴影更远更浓，用阴影距离表达"浮层比窗口更高一层" -->
   <BoxShadows x:Key="PopShadow">0 24 70 0 #E6000000</BoxShadows>
 
 </ResourceDictionary>

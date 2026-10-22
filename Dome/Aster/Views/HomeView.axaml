@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ==========================================================================
+     HomeView.axaml —— 个人工作台首页：问候、4 张指标卡、最近编辑、快捷操作、继续播放、今日节奏
+     位置：ShellView 里已有 HomeViewModel 到 HomeView 的 DataTemplate，但一级导航当前只有「管理 / 设置」，
+           本页当前未挂到一级导航，保留待恢复。
+     数据：全部绑 HomeViewModel 的静态假数据；页面内没有任何 Command，按钮都是空壳。
+     坑：根节点 x:DataType 让绑定走编译期校验，VM 里缺同名属性会直接编译报错。
+     说明：样式统一用 StaticResource（资源在 App 启动时已加载），不用 DynamicResource。
+     ========================================================================== -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Aster.ViewModels"
@@ -6,14 +14,19 @@
              x:Class="Aster.Views.HomeView"
              x:DataType="vm:HomeViewModel">
 
+  <!-- 整页可滚动：只开纵向滚动条、横向禁用，避免窗口变窄时卡片被拖出视口产生横向晃动。 -->
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <!-- 页面内容纵向堆叠，26/24/28/34 的内边距即整页留白基准（左 / 上 / 右 / 下）。 -->
     <StackPanel Margin="26,24,28,34">
 
       <!-- ============ 问候 ============ -->
+      <!-- 问候区两列 *,Auto：左侧文案自适应宽度，右侧操作按钮按内容宽度靠右。 -->
       <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,22">
         <StackPanel VerticalAlignment="Bottom">
+          <!-- 问候语与姓名分成两个 TextBlock 并排，才能只给姓名单独上渐变画刷。 -->
           <StackPanel Orientation="Horizontal">
             <TextBlock Text="{Binding Greeting}" FontSize="23" FontWeight="SemiBold" Foreground="{StaticResource Text0}" />
+            <!-- 渐变文字：直接给 Foreground 赋 LinearGradientBrush（8FA8FF → A78BFA → 3DD6E8），无需转换器。 -->
             <TextBlock Text="{Binding UserName}" FontSize="23" FontWeight="SemiBold">
               <TextBlock.Foreground>
                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
@@ -24,12 +37,16 @@
               </TextBlock.Foreground>
             </TextBlock>
           </StackPanel>
+          <!-- 副标题 12.5px + Text2 次级色，与上方 23px 的问候语形成字号与层级对比。 -->
           <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{StaticResource Text2}" Margin="0,7,0,0" />
         </StackPanel>
 
+        <!-- 右上操作区：普通按钮 + pri 主按钮（PrimaryGrad 渐变底、白字），两个都没有绑定 Command。 -->
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+          <!-- 新建文档：图标 + 文案横排，Spacing=6；无命令，点击只有按钮自身的悬停/按下反馈。 -->
           <Button>
             <StackPanel Orientation="Horizontal" Spacing="6">
+              <!-- {x:Static ctrl:Icons.Plus} 取的是 Icons 里的 path 字符串常量，不是图片资源。 -->
               <ctrl:Icon Data="{x:Static ctrl:Icons.Plus}" Width="13" Height="13" />
               <TextBlock Text="新建文档" VerticalAlignment="Center" />
             </StackPanel>
@@ -44,19 +61,25 @@
       </Grid>
 
       <!-- ============ 指标卡 ============ -->
+      <!-- 指标卡区：ItemsControl 绑定 Kpis，4 张卡的内容与顺序完全由 VM 集合决定。 -->
       <ItemsControl ItemsSource="{Binding Kpis}" Margin="0,0,0,16">
+        <!-- ItemsPanelTemplate 换成 UniformGrid：默认 ItemsControl 是纵向 StackPanel，不换容器就不会横排。 -->
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
+            <!-- Columns=4 与 Kpis 的 4 个元素一一对应；元素变多只会换行，不会把已有的 4 列压窄。 -->
             <UniformGrid Columns="4" />
           </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
+          <!-- 单卡三层：标题 / 数值行 / Delta 胶囊；卡片间距由 Border 的 Margin 0,0,14,0 提供。 -->
           <DataTemplate DataType="{x:Type vm:KpiItem}">
             <Border Classes="card" Margin="0,0,14,0" Padding="15,14">
               <StackPanel>
                 <TextBlock Text="{Binding Title}" FontSize="11.5" Foreground="{StaticResource Text2}" />
                 <StackPanel Orientation="Horizontal" Margin="0,9,0,7">
+                  <!-- Classes="metric" 提供 26px + SemiBold（见 Controls.axaml 的 TextBlock.metric），颜色绑 VM 的 ValueBrush。 -->
                   <TextBlock Text="{Binding Value}" Classes="metric" Foreground="{Binding ValueBrush}" />
+                  <!-- Unit / Tail 都是可空字段，用 HasUnit / HasTail 控制显隐，避免空串也占位撑出空隙。 -->
                   <TextBlock Text="{Binding Unit}" FontSize="13" Foreground="{StaticResource Text1}"
                              VerticalAlignment="Bottom" Margin="2,0,0,3"
                              IsVisible="{Binding HasUnit}" />
@@ -64,6 +87,7 @@
                              VerticalAlignment="Bottom" Margin="4,0,0,3"
                              IsVisible="{Binding HasTail}" />
                 </StackPanel>
+                <!-- Delta 胶囊：Border.pill 给 999 圆角，底色与文字色分别绑 DeltaBackground / DeltaBrush，XAML 不做颜色分支。 -->
                 <Border Classes="pill" Background="{Binding DeltaBackground}" HorizontalAlignment="Left">
                   <TextBlock Text="{Binding Delta}" FontSize="11" Foreground="{Binding DeltaBrush}" />
                 </Border>
@@ -74,12 +98,16 @@
       </ItemsControl>
 
       <!-- ============ 主栅格 ============ -->
+      <!-- 主栅格 155*:100*：不是固定像素，左列约占 60.8%、右列 39.2%，窗口变宽时按比例分配。 -->
       <Grid ColumnDefinitions="155*,100*">
 
         <!-- 左列 -->
+        <!-- 左列两张卡：最近编辑 + 快捷操作，纵向排列，间距靠上一张卡的 Margin 0,0,0,14。 -->
         <StackPanel>
+          <!-- card 类统一提供 Bg2 底色 + 1px Line 描边 + 11 圆角（定义在 Styles/Controls.axaml）。 -->
           <Border Classes="card" Margin="0,0,0,14">
             <StackPanel>
+              <!-- 卡头两列 *,Auto：左侧图标 + 标题，右侧「查看全部」只是文案，没有绑定命令。 -->
               <Grid ColumnDefinitions="*,Auto" Margin="16,14">
                 <StackPanel Orientation="Horizontal" Spacing="7">
                   <ctrl:Icon Data="{x:Static ctrl:Icons.PlayCircle}" Width="14" Height="14"
@@ -88,12 +116,17 @@
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="查看全部 →" FontSize="11.5" Foreground="{StaticResource Text2}" />
               </Grid>
+              <!-- 1px 分隔线用 Border 高度 1 + Line 画刷实现，Avalonia 没有专门的 Separator 控件。 -->
               <Border Height="1" Background="{StaticResource Line}" />
+              <!-- 列表直接绑 RecentDocs：只有 4 条，用 ItemsControl 即可，不需要 ListBox 的虚拟化与选中逻辑。 -->
               <ItemsControl ItemsSource="{Binding RecentDocs}">
                 <ItemsControl.ItemTemplate>
+                  <!-- 行结构 Auto,*,Auto：图标块 / 文档名 + 元信息 / 右侧时间。 -->
                   <DataTemplate DataType="{x:Type vm:RecentDocItem}">
+                    <!-- 每行下边框 0,0,0,1，颜色 #0AFFFFFF 比全局 Line 更淡，避免列表被横线切得太碎。 -->
                     <Border Padding="16,10" BorderBrush="#0AFFFFFF" BorderThickness="0,0,0,1">
                       <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!-- 图标底色与图标色分别绑 IconBackground / IconBrush，取值由 RecentDocItem.Tone 决定。 -->
                         <Border Width="30" Height="30" CornerRadius="7" Background="{Binding IconBackground}"
                                 VerticalAlignment="Center">
                           <ctrl:Icon Data="{x:Static ctrl:Icons.Doc}" Width="14" Height="14"
@@ -103,6 +136,7 @@
                           <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{StaticResource Text0}" />
                           <TextBlock Text="{Binding Meta}" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,3,0,0" />
                         </StackPanel>
+                        <!-- 时间右对齐；内容是「3 分钟前」这类写死的相对文案，不是格式化后的 DateTime。 -->
                         <TextBlock Grid.Column="2" Text="{Binding Time}" FontSize="11"
                                    Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
                       </Grid>
@@ -113,6 +147,7 @@
             </StackPanel>
           </Border>
 
+          <!-- 快捷操作卡：结构与上一张相同（卡头 + 分隔线 + 内容网格），复用 card 类保持一致外观。 -->
           <Border Classes="card">
             <StackPanel>
               <StackPanel Orientation="Horizontal" Spacing="7" Margin="16,14">
@@ -121,6 +156,7 @@
                 <TextBlock Text="快捷操作" Classes="cardTitle" />
               </StackPanel>
               <Border Height="1" Background="{StaticResource Line}" />
+              <!-- Columns=2 得到 2x2 四个按钮；按钮自身 Margin 0,0,9,9 同时充当列间距与行间距。 -->
               <ItemsControl ItemsSource="{Binding QuickActions}" Margin="14">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
@@ -129,9 +165,11 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type vm:QuickAction}">
+                    <!-- HorizontalContentAlignment=Left 让图标 + 文案靠左，默认居中会让 38 高的按钮显得很空。 -->
                     <Button Height="38" Margin="0,0,9,9" HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left" Padding="11,0" CornerRadius="8">
                       <StackPanel Orientation="Horizontal" Spacing="9">
+                        <!-- 图标绑 QuickAction.Icon（同样是 path 字符串），Foreground 统一用 Accent 强调色。 -->
                         <ctrl:Icon Data="{Binding Icon}" Width="14" Height="14" Foreground="{StaticResource Accent}" />
                         <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{StaticResource Text1}"
                                    VerticalAlignment="Center" />
@@ -145,7 +183,9 @@
         </StackPanel>
 
         <!-- 右列 -->
+        <!-- 右列：继续播放 + 今日节奏两卡；左侧 14px 外边距与主栅格的列间距对齐。 -->
         <StackPanel Grid.Column="1" Margin="14,0,0,0">
+          <!-- 继续播放卡：卡头 + 分隔线 + 一行「封面 + 文案」。 -->
           <Border Classes="card" Margin="0,0,0,14">
             <StackPanel>
               <Grid ColumnDefinitions="*,Auto" Margin="16,14">
@@ -157,7 +197,9 @@
                 <TextBlock Grid.Column="1" Text="进入 →" FontSize="11.5" Foreground="{StaticResource Text2}" />
               </Grid>
               <Border Height="1" Background="{StaticResource Line}" />
+              <!-- Auto,*：固定 76px 封面 + 剩余宽度放文案；歌名过长靠 TextTrimming 省略而不是撑宽卡片。 -->
               <Grid ColumnDefinitions="Auto,*" Margin="16">
+                <!-- 封面是纯 Border + 四段线性渐变（232746 → 4B3A78 → 8C5AA8 → 3DD6E8），没有真实专辑图。 -->
                 <Border Width="76" Height="76" CornerRadius="10">
                   <Border.Background>
                     <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
@@ -167,18 +209,23 @@
                       <GradientStop Offset="1" Color="#3DD6E8" />
                     </LinearGradientBrush>
                   </Border.Background>
+                  <!-- ♪ 用文本绘制占位，省掉一张图片资源；颜色 #D9FFFFFF 约为 85% 白，压在渐变上仍清晰。 -->
                   <TextBlock Text="♪" FontSize="24" Foreground="#D9FFFFFF"
                              HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
+                <!-- 歌名 / 艺人 / 进度 / 时间四段，全部直接绑 HomeViewModel 的 NowPlaying* 属性。 -->
                 <StackPanel Grid.Column="1" Margin="14,2,0,0" VerticalAlignment="Center">
                   <TextBlock Text="{Binding NowPlayingTitle}" FontSize="13.5" FontWeight="SemiBold"
                              TextTrimming="CharacterEllipsis" />
                   <TextBlock Text="{Binding NowPlayingArtist}" FontSize="11.5" Foreground="{StaticResource Text2}"
                              Margin="0,4,0,10" />
+                  <!-- 进度条是两层 Border：外层 3px 灰轨（W10），内层紫色填充（AccentViolet）。 -->
                   <Border Height="3" CornerRadius="3" Background="{StaticResource W10}">
+                    <!-- 内层 Width=42 是写死的，没有绑 NowPlayingProgress，所以进度永远停在同一位置。 -->
                     <Border Width="42" Height="3" CornerRadius="3" HorizontalAlignment="Left"
                             Background="{StaticResource AccentViolet}" />
                   </Border>
+                  <!-- 两端时间文案分别左、右对齐，字体 10px 走次级色；中间留空即可，无需分隔符。 -->
                   <Grid ColumnDefinitions="*,*" Margin="0,6,0,0">
                     <TextBlock Text="{Binding NowPlayingPosition}" FontSize="10" Foreground="{StaticResource Text2}" />
                     <TextBlock Grid.Column="1" Text="{Binding NowPlayingDuration}" FontSize="10"
@@ -189,6 +236,7 @@
             </StackPanel>
           </Border>
 
+          <!-- 今日节奏卡：一张自绘 Sparkline + 一条 4 等分时间轴。 -->
           <Border Classes="card">
             <StackPanel>
               <StackPanel Orientation="Horizontal" Spacing="7" Margin="16,14">
@@ -198,7 +246,10 @@
               </StackPanel>
               <Border Height="1" Background="{StaticResource Line}" />
               <StackPanel Margin="16,14">
+                <!-- Sparkline 绑 Points（IReadOnlyList<double>）与 Stroke，内部自行求 min/max 画折线 + 渐变面积。 -->
+                <!-- Height=78 给足画布高度；13 个点会被均匀拉伸铺满整行宽度。 -->
                 <ctrl:Sparkline Points="{Binding Rhythm}" Height="78" Stroke="{StaticResource Accent}" />
+                <!-- 4 等分刻度：首列左对齐、末列右对齐，中间两列居中，视觉上与折线起止点对齐。 -->
                 <Grid ColumnDefinitions="*,*,*,*" Margin="0,7,0,0">
                   <TextBlock Text="08:00" FontSize="10" Foreground="{StaticResource Text2}" />
                   <TextBlock Grid.Column="1" Text="12:00" FontSize="10" Foreground="{StaticResource Text2}" />

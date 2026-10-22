@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  AdminView.axaml：管理模块主视图，整个模块只有这一个视图文件。
+  结构：根 Grid 两行，第一行 64px 固定高度的顶部任务条，第二行是 Panel 承载三块互斥布局，
+        靠 IsVisible 绑 IsWorkbench / IsFlow / IsSection 切换（三者由 SetState 保证互斥）：
+          1) 工作台：大标题 + 三张快捷卡 + 对话流 + 底部输入框
+          2) 流程页：左侧对话列（*）+ 右侧固定 380 宽的上下文抽屉
+          3) 列表页：图标标题 + 一组 flatrow 横线行
+  数据：全部来自 AdminViewModel，演示数据写在其静态 Flows 字典里，本文件不含任何业务逻辑。
+  易踩：内容列宽度由 code-behind 的 SetColumnWidth 直接写入 Width，与
+        WorkbenchContent / WorkbenchComposer / SectionContent 三个 x:Name 绑定；
+        另有两个滚动区用字符串 "ChatScroll" / "FlowScroll" 查找，改名不会编译报错、只会静默失效。
+        卡片间距靠 ItemsControl 的负 Margin 与卡片的正 Margin 互相抵消，改一边就会错位。
+-->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Aster.ViewModels"
@@ -6,7 +19,18 @@
              x:Class="Aster.Views.AdminView"
              x:DataType="vm:AdminViewModel">
 
+  <!-- ===== 本页私有样式：wcard / dcard / flatrow ===== -->
+  <!-- 三个类共用同一套设计令牌（Bg2 底色、Line 描边、Line2 hover 描边），只在圆角、内边距、
+       是否有边框上做区分，分别对应三种信息密度的场景：
+         wcard   工作台快捷卡：圆角 14、内边距 20,18、MinHeight 142，是页面里最"重"的卡片，
+                 空间大所以允许 hover 同时改底色和描边。
+         dcard   抽屉条目：圆角 10、内边距 14,12、自带 8 的下外边距，尺寸中等，
+                 hover 只改描边不改底色，避免右侧窄栏里闪烁太明显。
+         flatrow 列表行：无圆角无边框，只用一条底部 1px 横线（#0AFFFFFF 极淡白）分隔，
+                 hover 才浮出一层极浅底色，读起来像表格而不是卡片墙。
+       注意这些样式只在本 UserControl 内生效，不会污染全局。 -->
   <UserControl.Styles>
+    <!-- 快捷卡本体：底色与描边都取自主题令牌，换主题时无需改这里 -->
     <Style Selector="Border.wcard">
       <Setter Property="Background" Value="{DynamicResource Bg2}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
@@ -14,10 +38,12 @@
       <Setter Property="CornerRadius" Value="14" />
       <Setter Property="Padding" Value="20,18" />
     </Style>
+    <!-- hover 态：底色抬一档（Bg3）+ 描边提亮，给出"可点"的反馈 -->
     <Style Selector="Border.wcard:pointerover">
       <Setter Property="BorderBrush" Value="{DynamicResource Line2}" />
       <Setter Property="Background" Value="{DynamicResource Bg3}" />
     </Style>
+    <!-- 抽屉条目：比 wcard 更紧凑，下外边距直接写进样式，省得每个模板重复设置 -->
     <Style Selector="Border.dcard">
       <Setter Property="Background" Value="{DynamicResource Bg2}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
@@ -26,31 +52,42 @@
       <Setter Property="Padding" Value="14,12" />
       <Setter Property="Margin" Value="0,0,0,8" />
     </Style>
+    <!-- 抽屉条目 hover：只提亮描边，不做底色跳变 -->
     <Style Selector="Border.dcard:pointerover">
       <Setter Property="BorderBrush" Value="{DynamicResource Line2}" />
     </Style>
+    <!-- 列表行：靠 BorderThickness 只保留下边线来画分隔线，比额外放一条 Border 更省层级 -->
     <Style Selector="Border.flatrow">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="#0AFFFFFF" />
       <Setter Property="BorderThickness" Value="0,0,0,1" />
       <Setter Property="Padding" Value="18,14" />
     </Style>
+    <!-- 列表行 hover：约 3% 白，几乎不可见，只用来暗示整行可点 -->
     <Style Selector="Border.flatrow:pointerover">
       <Setter Property="Background" Value="#07FFFFFF" />
     </Style>
   </UserControl.Styles>
 
+  <!-- 根布局只用两行：顶部任务条固定 64，剩余空间全部给内容区（*） -->
   <Grid RowDefinitions="64,*">
 
     <!-- ============ 顶部任务条 ============ -->
+    <!-- 高度由根 Grid 的第一行 64 决定；这里只画一条底边线 + 左右 24 的内边距，
+         整条区域在三态之间共用，标题文字由 TopBarTitle 计算属性给出。 -->
     <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="24,0">
+      <!-- 两列：* 让标题占满左侧剩余空间，Auto 让右侧按钮组贴着右边缘 -->
       <Grid ColumnDefinitions="*,Auto">
+        <!-- 左侧标题：只放一个 TextBlock，留白的 StackPanel 方便以后插入面包屑 -->
         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
           <TextBlock Text="{Binding TopBarTitle}" FontSize="18" FontWeight="Bold"
                      Foreground="{StaticResource Text0}" VerticalAlignment="Center" />
 
         </StackPanel>
+        <!-- 右侧操作组：返回按钮只在流程页出现（IsFlow），更多按钮常驻 -->
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <!-- 返回工作台。图标复用 ChevronRight 再旋转 180 度当作"左箭头"，
+               这样不必为返回单独准备一个 Icon 资源 -->
           <Button Classes="ghost" Height="30" Padding="8,0" ToolTip.Tip="返回工作台"
                   Command="{Binding BackCommand}" IsVisible="{Binding IsFlow}">
             <StackPanel Orientation="Horizontal" Spacing="5">
@@ -70,42 +107,65 @@
       </Grid>
     </Border>
 
+    <!-- 内容宿主：Panel 不排版子元素，三块布局全部叠在同一位置，
+         靠各自的 IsVisible 做到同一时刻只显示一块（Panel 的默认行为就是重叠）。 -->
     <Panel Grid.Row="1">
 
       <!-- ==================== 今日工作台 ==================== -->
+      <!-- 两行：* 是滚动区，Auto 是固定在底部的输入框。
+           SizeChanged 交给 code-behind，用来把内容列收敛到 min(1080, 宽-96)。 -->
       <Grid x:Name="WorkbenchHost" RowDefinitions="*,Auto"
             IsVisible="{Binding IsWorkbench}"
             SizeChanged="OnContentSizeChanged">
+        <!-- 对话区滚动容器：x:Name 供 code-behind 在新消息到达时 ScrollToEnd -->
         <ScrollViewer x:Name="ChatScroll" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
           <!-- 外层 Grid 撑满可视宽度，内容列居中并按窗口宽度收敛 -->
+          <!-- 内层不用 MaxWidth 而用固定的 Width：MaxWidth 只是上限，窄窗口下内容仍会贴边，
+               而 code-behind 算出的确定宽度能与下方输入框严格同宽 -->
           <Grid>
+            <!-- 内容列。Width 由 SetColumnWidth 在尺寸变化时写入，宽度上限 1080，
+                 这样超大窗口下文字行宽不会长到难以阅读 -->
             <StackPanel x:Name="WorkbenchContent" HorizontalAlignment="Center" Margin="0,28,0,8">
               <TextBlock Text="今日工作台" FontSize="30" FontWeight="Bold" />
+              <!-- 引导文案：上 10 与主标题分开，下 26 把它与快捷卡拉开层次 -->
               <TextBlock Text="从常用入口开始，也可以直接在下方对话中交办工作。"
                          FontSize="15" Foreground="{StaticResource Text2}" Margin="0,10,0,26"
                          TextWrapping="Wrap" />
 
+              <!-- 快捷卡栅格。右侧 -20 的负 Margin 用来抵消每张卡自己 20 的右外边距：
+                   若不做这一步，三张卡的右边会多出一段 20 的空白，导致卡片组与下方
+                   标题、输入框的左边界对齐但右边界对不齐。 -->
               <ItemsControl ItemsSource="{Binding Cards}" Margin="0,0,-20,0">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
+                    <!-- 三列等宽：Cards 固定三张，写死 Columns=3 比 UniformGrid 自动列更可控；
+                         窗口变窄时三列一起缩，不会掉行。 -->
                     <UniformGrid Columns="3" />
                   </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type vm:WorkbenchCard}">
+                    <!-- 用 Button 包住整张卡，是为了拿到"整卡可点"而不用自己写 PointerPressed：
+                         Background 透明 + BorderThickness 0 + Padding 0 抹掉按钮默认外观，
+                         HorizontalAlignment / HorizontalContentAlignment 都设 Stretch，
+                         让内容撑满按钮，否则 Button 会按内容自适应宽度，栅格里出现宽度不一的卡。 -->
                     <Button Background="Transparent" BorderThickness="0" Padding="0" MinHeight="0"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                             Margin="0,0,20,0"
                             Command="{Binding Command}" CommandParameter="{Binding}">
+                      <!-- 卡片的视觉本体（圆角、描边、hover 都由 wcard 样式提供）。
+                           必须在 DataTemplate 内部才拿得到 WorkbenchCard 的 DataContext。 -->
                       <Border Classes="wcard" MinHeight="142">
                         <StackPanel>
+                          <!-- 左上角状态胶囊：底色与文字色由 ChipBackground / ChipForeground 按 Tone 算 -->
                           <Border CornerRadius="13" Padding="9,4" HorizontalAlignment="Left"
                                   Background="{Binding ChipBackground}">
                             <TextBlock Text="{Binding Chip}" FontSize="12" FontWeight="Medium"
                                        Foreground="{Binding ChipForeground}" />
                           </Border>
                           <TextBlock Text="{Binding Title}" FontSize="21" FontWeight="Bold" Margin="0,12,0,0" />
+                          <!-- LineHeight 20 让两行描述的行距稳定，配合 MinHeight 142 保证三张卡等高 -->
                           <TextBlock Text="{Binding Desc}" FontSize="13" Foreground="{StaticResource Text2}"
                                      TextWrapping="Wrap" LineHeight="20" Margin="0,13,0,0" />
                         </StackPanel>
@@ -115,17 +175,25 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
+              <!-- 对话区标题。这里绑的是 Messages（工作台专属集合），与流程页的 FlowMessages 分开 -->
               <TextBlock Text="对话上下文" FontSize="20" FontWeight="Bold" Margin="0,40,0,20" />
               <ItemsControl ItemsSource="{Binding Messages}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type vm:ChatMessage}">
+                    <!-- 每条消息一个 Grid 容器，两个模板上下叠放、靠 IsVisible 互斥：
+                         永远只有一个参与布局，所以不会出现"占了两份高度"的问题 -->
                     <Grid Margin="0,0,0,20">
+                      <!-- Agent 侧：左对齐、无气泡，只留作者名 + 正文，减少视觉噪音；
+                           MaxWidth 760 是为了长句折行，行宽过大会影响阅读 -->
                       <StackPanel IsVisible="{Binding IsAgent}" MaxWidth="760" HorizontalAlignment="Left">
                         <TextBlock Text="{Binding Author}" FontSize="13" FontWeight="Bold"
                                    Foreground="{StaticResource Text2}" Margin="0,0,0,10" />
                         <TextBlock Text="{Binding Text}" FontSize="15" Foreground="{StaticResource Text0}"
                                    TextWrapping="Wrap" LineHeight="24" />
                       </StackPanel>
+                      <!-- 用户侧：右对齐气泡。背景 #1F6C8BFF 是主色 12% 透明，
+                           描边 #266C8BFF 略高一点，形成"浅色玻璃"质感；
+                           MaxWidth 620 比 Agent 的 760 窄，让用户消息更紧凑、和左侧一眼可分 -->
                       <Border IsVisible="{Binding IsUser}" MaxWidth="620" HorizontalAlignment="Right"
                               Background="#1F6C8BFF" CornerRadius="12" Padding="16,12"
                               BorderBrush="#266C8BFF" BorderThickness="1">
@@ -144,11 +212,18 @@
           </Grid>
         </ScrollViewer>
 
+        <!-- 输入区：横向居中的浮起面板，宽度同样由 SetColumnWidth 与上方内容列对齐；
+             它位于工作台 Grid 的第二行（Auto），所以对话再长也只会滚动上面的区域，输入框始终可见。 -->
         <Border x:Name="WorkbenchComposer" Grid.Row="1" HorizontalAlignment="Center" Margin="0,10,0,20"
                 CornerRadius="18" Background="{StaticResource Bg2}"
                 BorderBrush="{StaticResource Line2}" BorderThickness="1"
                 Padding="26,20,24,16">
+          <!-- 两行：文本框 + 工具条。工具条里用 * 列把发送按钮顶到最右 -->
           <Grid RowDefinitions="Auto,Auto">
+            <!-- 真正的输入框：Draft 双向绑定，发送后由 ViewModel 置空；
+                 AcceptsReturn=True 允许换行，再由 KeyDown 处理器区分 Enter 与 Shift+Enter；
+                 MinHeight 38 / MaxHeight 120 保证单行不塌、长文本到 120 后开始内部滚动。
+                 x:Name=Composer 以便将来做聚焦控制。 -->
             <TextBox x:Name="Composer"
                      Text="{Binding Draft, Mode=TwoWay}"
                      Watermark="输入业务指令，或 @ 同事发起协作请求"
@@ -158,20 +233,28 @@
                      FontSize="16" Padding="0"
                      VerticalContentAlignment="Top"
                      KeyDown="OnComposerKeyDown" />
+            <!-- 底部工具条：+ 附件、权限标签、模型名、发送键。
+                 列定义 Auto,Auto,*,Auto,Auto 里的 * 只是撑开空间的占位列，
+                 作用是让右侧两个控件贴边，本身不承载内容。 -->
             <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,10,0,0">
+              <!-- 附件入口目前只是静态字形，未绑命令 -->
               <TextBlock Text="+" FontSize="24" Foreground="{StaticResource Text1}"
                          VerticalAlignment="Center" Margin="2,0,0,0" />
+              <!-- 权限状态标签：琥珀色 12% 底，提示当前会话拥有完整访问权限 -->
               <Border Grid.Column="1" CornerRadius="13" Padding="10,4" Margin="16,0,0,0"
                       Background="#1FF5B942" VerticalAlignment="Center">
                 <TextBlock Text="Full access" FontSize="12" FontWeight="Medium"
                            Foreground="{DynamicResource Amber}" />
               </Border>
+              <!-- 模型选择器：同样是静态展示 + 一个下滑箭头，演示态不接真实切换 -->
               <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"
                           VerticalAlignment="Center" Margin="0,0,14,0">
                 <TextBlock Text="5.5 Medium" FontSize="14" Foreground="{StaticResource Text2}" />
                 <ctrl:Icon Data="{x:Static ctrl:Icons.ChevronDown}" Width="11" Height="11"
                            Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
               </StackPanel>
+              <!-- 发送按钮：绑定 SendCommand；Enter 快捷键由 code-behind 的 KeyDown 处理，
+                   这里只保证鼠标点得到 -->
               <Button Grid.Column="4" Width="44" Height="38" Padding="0" CornerRadius="8"
                       Background="{StaticResource PrimaryGrad}" BorderThickness="0"
                       Command="{Binding SendCommand}" ToolTip.Tip="发送（Enter）">
@@ -184,9 +267,14 @@
       </Grid>
 
       <!-- ==================== 流程页（对话 + 右侧上下文抽屉） ==================== -->
+      <!-- 两列：星号列吃掉剩余宽度，抽屉固定 380（不设 MinWidth/MaxWidth，
+           这样窄窗口下抽屉宽度不变、对话列先被压缩，保证抽屉内容不被挤断行）。 -->
       <Grid ColumnDefinitions="*,380" IsVisible="{Binding IsFlow}">
 
+        <!-- 左列：标题 / 对话滚动区 / 输入框三行，输入框固定在底部 -->
         <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto" Margin="40,28,26,0">
+          <!-- 标题行：流程名 + 状态胶囊。胶囊内容与配色都来自 ViewModel，
+               HasFlowBadge 为 false 时整个胶囊不占位（例如没有异常数的流程）。 -->
           <StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="10">
               <TextBlock Text="{Binding FlowTitle}" FontSize="22" FontWeight="Bold" />
@@ -197,18 +285,24 @@
             </StackPanel>
           </StackPanel>
 
+          <!-- 流程对话区：x:Name 供 code-behind 滚到底；绑定 FlowMessages 而非 Messages，
+               两个集合分开保存，切回工作台时各自的历史都还在 -->
           <ScrollViewer Grid.Row="1" x:Name="FlowScroll" VerticalScrollBarVisibility="Auto"
                         HorizontalScrollBarVisibility="Disabled" Margin="0,20,0,0">
             <ItemsControl ItemsSource="{Binding FlowMessages}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:ChatMessage}">
                   <Grid Margin="0,0,0,20">
+                    <!-- Agent 侧：结构与工作台一致，只是 MaxWidth 从 760 收窄到 700，
+                         因为流程页左列被 380 的抽屉挤掉一部分宽度 -->
                     <StackPanel IsVisible="{Binding IsAgent}" MaxWidth="700" HorizontalAlignment="Left">
                       <TextBlock Text="{Binding Author}" FontSize="13" FontWeight="Bold"
                                  Foreground="{StaticResource Text2}" Margin="0,0,0,10" />
                       <TextBlock Text="{Binding Text}" FontSize="15" Foreground="{StaticResource Text0}"
                                  TextWrapping="Wrap" LineHeight="24" />
                     </StackPanel>
+                    <!-- 用户侧：同样的浅蓝玻璃气泡，MaxWidth 560（再比 Agent 侧窄一档），
+                         与工作台的 620 / 760 形成"同一套模板、不同可用宽度"的取法 -->
                     <Border IsVisible="{Binding IsUser}" MaxWidth="560" HorizontalAlignment="Right"
                             Background="#1F6C8BFF" CornerRadius="12" Padding="16,12"
                             BorderBrush="#266C8BFF" BorderThickness="1">
@@ -225,10 +319,14 @@
             </ItemsControl>
           </ScrollViewer>
 
+          <!-- 流程页输入框：与工作台共用 Draft 属性，但尺寸更紧凑（Padding / 字号都小一档），
+               因为左列宽度有限；两个输入框不会同时出现，共用一个属性不会串内容。 -->
           <Border Grid.Row="2" CornerRadius="18" Background="{StaticResource Bg2}"
                   BorderBrush="{StaticResource Line2}" BorderThickness="1"
                   Padding="22,16,18,14" Margin="0,10,0,20">
             <Grid RowDefinitions="Auto,Auto">
+              <!-- 输入框：Enter 发送、Shift+Enter 换行的约定在这里以文字明示，
+                   实际拦截逻辑在 OnComposerKeyDown -->
               <TextBox Text="{Binding Draft, Mode=TwoWay}"
                        Watermark="继续追问，或输入下一步指令"
                        AcceptsReturn="True" TextWrapping="Wrap"
@@ -252,19 +350,28 @@
         </Grid>
 
         <!-- 右侧上下文抽屉 -->
+        <!-- 固定 380 宽（来自父 Grid 的第二列）。底色 #24000000 是纯黑 14%，
+             比主内容区更暗一层，形成"抽屉浮在主区之上"的层次；只画左边一条分隔线。 -->
         <Border Grid.Column="1" Background="#24000000" BorderBrush="{StaticResource Line}"
                 BorderThickness="1,0,0,0">
+          <!-- 两行：固定高度的抽屉头 + 可滚动的条目区 -->
           <Grid RowDefinitions="Auto,*">
+            <!-- 抽屉头：标题随流程变化（项目字段 / 执行进度 / 审批节点…） -->
             <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,18">
               <TextBlock Text="{Binding DrawerTitle}" FontSize="16" FontWeight="Bold" />
             </Border>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
+              <!-- 外边距 18,16,18,20：左右 18 给 dcard 卡片留白，下 20 让最后一张卡不贴底 -->
               <StackPanel Margin="18,16,18,20">
+                <!-- 主条目列表：每条又是一张整卡可点的 Button + dcard。
+                     这里必须整卡可点，是因为 todos 这类流程的条目带 Key，点了要跳到另一条流程。 -->
                 <ItemsControl ItemsSource="{Binding Drawer}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:FlowItem}">
+                      <!-- 与快捷卡同样的技巧：透明 Button 包视觉层 + Stretch 对齐。
+                           CommandParameter 传条目自身，交给 OpenFlowCommand 取 Key。 -->
                       <Button Background="Transparent" BorderThickness="0" Padding="0" MinHeight="0"
                               HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                               Command="{Binding Command}" CommandParameter="{Binding}">
@@ -276,6 +383,8 @@
                               <TextBlock Text="{Binding Meta}" FontSize="12" Foreground="{StaticResource Text2}"
                                          Margin="0,5,0,0" TextWrapping="Wrap" />
                             </StackPanel>
+                            <!-- 状态胶囊：Tag 为空（HasTag=false）时整块不渲染，
+                                 所以列表里"有标签"和"没标签"的行高度一致，不会参差 -->
                             <Border Grid.Column="1" Classes="pill" Background="{Binding TagBackground}"
                                     IsVisible="{Binding HasTag}" VerticalAlignment="Center">
                               <TextBlock Text="{Binding Tag}" FontSize="11.5" Foreground="{Binding TagBrush}" />
@@ -287,9 +396,13 @@
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
+                <!-- 分隔线：与底部条目同生共死，都绑 HasDrawerFooter，
+                     这样没有 Footer 的流程不会留一条悬空的横线 -->
                 <Border Height="1" Background="{StaticResource Line}" Margin="0,8,0,14"
                         IsVisible="{Binding HasDrawerFooter}" />
 
+                <!-- 抽屉底部条目：纯展示，不套 Button（数据里也没有 Command），
+                     只保留 dcard 的视觉，与上面可点的条目形成「可点 / 只看」的区分 -->
                 <ItemsControl ItemsSource="{Binding DrawerFooter}" IsVisible="{Binding HasDrawerFooter}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:FlowItem}">
@@ -316,12 +429,18 @@
       </Grid>
 
       <!-- ==================== 列表页 ==================== -->
+      <!-- 整页就是一个 ScrollViewer：列表可能很长（客户、导入批次），
+           SizeChanged 同样交给 code-behind 让内容列与工作台对齐同一宽度。 -->
       <ScrollViewer x:Name="SectionHost" IsVisible="{Binding IsSection}"
                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     SizeChanged="OnContentSizeChanged">
         <!-- 外层 Grid 撑满可视宽度，标题与卡片同处一列并居中 -->
         <Grid>
+          <!-- 内容列：Width 由 SetColumnWidth 写入；标题区与下方卡片共用这一列宽 -->
           <StackPanel x:Name="SectionContent" HorizontalAlignment="Center" Margin="0,32,0,28">
+            <!-- 标题行：34x34 的圆角图标块 + 页面标题。
+                 图标不是图片而是 ctrl:Icon，Data 绑到 Icons 里的几何数据（Geometry），
+                 换主题色只需改 Foreground，不用换资源文件。 -->
             <StackPanel Orientation="Horizontal" Spacing="12">
               <Border Width="34" Height="34" CornerRadius="9" Background="{DynamicResource AccentSoft}"
                       VerticalAlignment="Center">
@@ -329,28 +448,40 @@
               </Border>
               <TextBlock Text="{Binding SectionTitle}" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
             </StackPanel>
+            <!-- 页面描述：一句话说明这个区域是干什么的，由 Describe 的第二个返回值提供 -->
             <TextBlock Text="{Binding SectionDesc}" FontSize="15" Foreground="{StaticResource Text2}"
                        TextWrapping="Wrap" Margin="0,10,0,24" />
 
+            <!-- 卡片容器：把整组行装进一张 card 里，行之间的分隔靠 flatrow 的下边线，
+                 所以这里不需要额外的分割控件。 -->
             <Border Classes="card">
               <ItemsControl ItemsSource="{Binding Rows}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type vm:FlowItem}">
+                    <!-- 整行可点：透明 Button + Stretch；CommandParameter 传行自身，
+                         OpenFlowCommand 会先判断 CanOpen 再决定跳不跳。
+                         ToolTip 直接显示 Meta，长文案被截断时仍可查看全文。 -->
                     <Button Background="Transparent" BorderThickness="0" Padding="0" MinHeight="0"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                             Command="{Binding Command}" CommandParameter="{Binding}"
                             ToolTip.Tip="{Binding Meta}">
+                      <!-- 三列：正文（*）、状态胶囊（Auto）、箭头（Auto）。
+                           箭头绑 CanOpen 而不是 Command，因为 CanOpen 还要求 Key 非空，
+                           没有目标 key 的行不会显示一个点了没反应的箭头。 -->
                       <Border Classes="flatrow">
                         <Grid ColumnDefinitions="*,Auto,Auto">
+                          <!-- 主副文案上下排，副文案字号 13 + Text2 灰，形成层级 -->
                           <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="{Binding Title}" FontSize="15" Foreground="{StaticResource Text0}" />
                             <TextBlock Text="{Binding Meta}" FontSize="13" Foreground="{StaticResource Text2}"
                                        Margin="0,5,0,0" />
                           </StackPanel>
+                          <!-- 状态胶囊：文案/底色/字色全部由条目的 Tag 与 Tone 计算得出 -->
                           <Border Grid.Column="1" Classes="pill" Background="{Binding TagBackground}"
                                   VerticalAlignment="Center" IsVisible="{Binding HasTag}">
                             <TextBlock Text="{Binding Tag}" FontSize="12" Foreground="{Binding TagBrush}" />
                           </Border>
+                          <!-- 行尾箭头：提示"可以进下一层"，与抽屉条目的整卡点击呼应 -->
                           <ctrl:Icon Grid.Column="2" Data="{x:Static ctrl:Icons.ChevronRight}" Width="12" Height="12"
                                      Foreground="{StaticResource Text3}" Margin="10,0,0,0"
                                      VerticalAlignment="Center" IsVisible="{Binding CanOpen}" />
