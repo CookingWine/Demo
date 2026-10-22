@@ -91,6 +91,7 @@ dotnet publish -c Release -r osx-arm64 --self-contained false
 ```
 .
 ├── README.md                    本文件
+├── CHANGELOG.md                 变更记录（每次改动的内容与涉及文件）
 ├── docs/screenshots/            界面截图（由程序真实渲染导出）
 └── Dome/
     ├── Dome.sln
