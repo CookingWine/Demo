@@ -51,7 +51,8 @@ dotnet run
 ```
 Aster/
 ├─ Program.cs                 入口（AppBuilder + Inter 字体）
-├─ App.axaml(.cs)             Fluent 深色主题 + 资源/样式装配
+├─ App.axaml(.cs)             Fluent 深色主题 + 资源/样式装配（Name="Aster" 决定 macOS 菜单栏名）
+├─ Assets/                    应用图标：aster.ico / aster.icns / aster-*.png（由 tools/make_icon.py 生成）
 ├─ Styles/
 │  ├─ Theme.axaml             设计令牌：四级背景、文字、强调/语义色、渐变、ControlTheme
 │  └─ Controls.axaml          控件样式：按钮/输入框/导航/分段/开关/标签/滚动条
@@ -63,6 +64,16 @@ Aster/
 ├─ ViewModels/                纯 C# MVVM（ObservableObject + RelayCommand）
 └─ Views/                     Shell / 工作台 / 文档 / 音乐 / 管理 / 设置 / 登录 / 启动屏
 ```
+
+## 应用图标
+
+`Assets/` 下三套文件各管一段：`aster.ico` 嵌进 Windows exe（csproj `ApplicationIcon`），
+`aster-256.png` 作为窗口图标（`MainWindow` 的 `Icon`，Windows/Linux 任务栏也读它），
+`aster.icns` 给 macOS 的 `.app`。图标不是手工位图，而是 `tools/make_icon.py` 按参数画出来的
+（与 `Controls/Visuals.cs` 的 `LogoMark` 同源：5 片椭圆绕中心转 72°），改色改比例重跑脚本即可。
+
+macOS 想在 Dock 里看到这个图标，必须用 `Dome/make-app.sh` 打成 `.app`——`dotnet run` 的宿主是
+dotnet，Dock 显示的是宿主图标。
 
 ## 实现说明
 

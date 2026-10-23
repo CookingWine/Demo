@@ -21,6 +21,50 @@
 
 ---
 
+## 2026-10-23
+
+### 8. 补充应用图标（PNG / ICO / ICNS 三套 + macOS .app 打包）
+
+- **改动**：按设计稿（暗紫圆角方块 + 五瓣粉花）给桌面程序补上应用图标。之前工程里没有任何图标资源：
+  exe 是默认的 .NET 图标、窗口没有 `Icon`、macOS 只能顶着 dotnet 的通用图标跑。
+- **文件**：
+  - 新增 `tools/make_icon.py`（图标唯一源，用 numpy + Pillow 按参数绘制）
+  - 新增 `Dome/Aster/Assets/`：`aster-1024.png`、`aster-512.png`、`aster-256.png`、`aster-128.png`、`aster.ico`、`aster.icns`
+  - 新增 `Dome/make-app.sh`（macOS `.app` 打包，含 Info.plist 与 ad-hoc 签名）
+  - 改 `Dome/Aster/Aster.csproj`：`<ApplicationIcon>Assets/aster.ico</ApplicationIcon>` + `<AvaloniaResource Include="Assets/**" />`
+  - 改 `Dome/Aster/Views/MainWindow.axaml`：根节点加 `Icon="/Assets/aster-256.png"`
+  - 改 `Dome/Aster/App.axaml`：根节点加 `Name="Aster"`（否则 macOS 菜单栏显示 "Avalonia Application"）
+  - 改 `README.md`（新增「应用图标」章节与打包说明）、`Dome/Aster/README.md`（图标小节）、`.gitignore`（忽略 `Dome/dist/`）
+- **实现要点**
+  - **图标是脚本画的，不是位图**：几何与 `Controls/Visuals.cs` 的 `LogoMark` 同源（5 片椭圆绕中心旋转 72°），
+    每瓣由「外层深色椭圆 + 内层浅色椭圆」两层叠成，再用 `lit = (花瓣轴 · 光方向 + 1) / 2` 按左上光源分档，
+    所以左下两瓣最亮、右下最暗——和参考稿的明暗关系一致。花瓣还带一个 `taper` 收腰系数（内端窄、外端宽），
+    否则标准椭圆会把瓣与瓣之间的缝堵死，整朵花看起来是五个圆。
+  - **每档尺寸单独渲染**：`render(size)` 内部按 `size*4` 画再 LANCZOS 降采样（≥512 用 2 倍），
+    所以 16px 图标也是从 64px 画布缩下来的，不是拿 1024 硬缩。
+  - **三套格式各司其职**：`.ico` 给 Windows exe 内嵌（资源管理器 / 任务栏 / Alt+Tab 读的是它），
+    `.png` 给 `Window.Icon`（三端都由 Skia 解码，不依赖平台 ICO 解码器），`.icns` 给 macOS 的 `.app`。
+  - **macOS 必须打 .app 才有 Dock 图标**：`Window.Icon` 只影响窗口，Dock 读的是 bundle 的 `Info.plist` +
+    `Contents/Resources/*.icns`。`make-app.sh` 默认自带运行时（约 80MB，双击即开），
+    `SELF_CONTAINED=0` 则走框架依赖并在 `Info.plist` 里写 `LSEnvironment.DOTNET_ROOT`
+    （Finder 启动的进程拿不到终端里的环境变量，不写就报 "You must install .NET"）。
+- **注意**
+  - 改动图标只改 `tools/make_icon.py` 顶部的常量再重跑，别直接编辑 PNG；重跑会覆盖 `Assets/` 下全部产物。
+  - `Assets/**` 必须在 csproj 里声明为 `AvaloniaResource`，否则 `Icon="/Assets/..."` 运行期取不到、窗口直接抛异常（编译不报错）。
+  - `cp -R "$OUT/publish/" "$BUNDLE/Contents/MacOS/"` 这种写法会把 publish 目录整个塞进去（变成 `MacOS/publish/Aster`），
+    系统报「可执行文件缺失」；要多写一个 `/.`（脚本里已注明）。
+  - 图标是粉色系，与界面主色 `#6C8BFF` 蓝不同调；如需统一，改 `PETAL_DARK` / `PETAL_LITE` / `INNER_*` 四个常量即可。
+  - macOS 菜单栏 / Dock 悬停标题读的是 `Application.Name`，不是 `Info.plist` 的 `CFBundleName`；
+    只改 plist 会看到名字仍是 "Avalonia Application"（已改 App.axaml）。
+  - `SELF_CONTAINED=1` 首次构建要下 `Microsoft.NETCore.App.Runtime.osx-arm64` 运行时包，
+    走 `nuget.azure.cn` 镜像时可能很慢甚至卡住（本次实测卡了 8 分钟仍未下完，最终改用框架依赖模式验证）。
+- **验证**：`dotnet build` 0 warning 0 error；`dotnet run` 启动无资源加载异常；
+  `make-app.sh` 产物 `Aster.app` 的 `Info.plist` 通过 `plutil -p` 校验、`sips` 读出 icns 为 1024×1024、
+  `codesign -dv` 显示 adhoc 签名；`open Aster.app` 后 `lsappinfo` 报告 `pid` 存在且 `LSDisplayName` 为 "Aster"；
+  ICO 内含 7 档尺寸（Pillow 校验）。
+
+---
+
 ## 2026-10-22
 
 ### 7. 注释加深到「逐段讲解」级（第二轮） — `0e32a11`

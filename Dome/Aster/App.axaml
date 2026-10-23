@@ -17,10 +17,13 @@
      RequestedThemeVariant="Dark"：只切换 FluentTheme 内置的明/暗变体（系统控件默认配色、
        滚动条、ToolTip、右键菜单等），以及 ThemeVariant 作用域资源的查找键；
        本项目 90% 的观感来自 Theme.axaml 的自定义令牌，所以把它改成 Light 不会让界面变浅，
-       只会让 FluentTheme 自带的少数控件（如未覆写的下拉项）跟着变浅。 -->
+       只会让 FluentTheme 自带的少数控件（如未覆写的下拉项）跟着变浅。
+     Name="Aster"：应用名。macOS 的菜单栏第一项与 Dock 悬停标题读的是它，
+       不写就默认显示 "Avalonia Application"（与 Info.plist 里的 CFBundleName 是两回事）。 -->
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Aster.App"
+             Name="Aster"
              RequestedThemeVariant="Dark">
 
   <!-- ===== 资源区：设计令牌 ===== -->

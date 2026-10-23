@@ -38,6 +38,7 @@
         x:Class="Aster.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Aster"
+        Icon="/Assets/aster-256.png"
         Width="1320"
         Height="850"
         MinWidth="1320"
@@ -51,6 +52,11 @@
 
   <!-- ===== 根元素属性：无边框窗口的开关组合 =====
        Title="Aster"：任务栏、Alt+Tab 与系统菜单里显示的名字；自绘标题栏不读它。
+       Icon="/Assets/aster-256.png"：窗口图标，走 avares 资源（csproj 里 Assets/** 已声明为
+         AvaloniaResource）。为什么这里用 PNG 而不是 .ico：.ico 是给 Windows 可执行文件用的
+         （ApplicationIcon，嵌在 exe 里，由系统在任务栏/资源管理器读取），窗口这层只要求
+         一张位图；用 256px PNG 在 Windows / Linux / macOS 三端都能被 Skia 直接解码，
+         不依赖各平台的 ICO 解码器。macOS 的 Dock 图标不读这个属性，见 Dome/make-app.sh。
        Width/Height=1320×850：设计稿基准尺寸，单位是逻辑像素（DIP）。
          高分屏上会乘缩放比变成物理像素，XAML 里的数字不需要跟着 DPI 改。
        MinWidth/MinHeight 与初始尺寸完全相同：与 CanResize=True 组合后得到

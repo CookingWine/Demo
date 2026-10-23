@@ -10,7 +10,14 @@
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyName>Aster</AssemblyName>
     <RootNamespace>Aster</RootNamespace>
+    <!-- Windows 下把多尺寸 .ico 嵌进 exe：资源管理器、任务栏、Alt+Tab 用的都是它 -->
+    <ApplicationIcon>Assets/aster.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <!-- 图标资源必须显式声明为 AvaloniaResource，否则 Window.Icon 的 /Assets/... 取不到 -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.22" />

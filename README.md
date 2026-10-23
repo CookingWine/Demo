@@ -86,6 +86,18 @@ dotnet publish -c Release -r osx-arm64 --self-contained false
 # Windows: -r win-x64 ；Linux: -r linux-x64
 ```
 
+### 打包成 macOS 应用（带 Dock 图标）
+
+```bash
+./Dome/make-app.sh                    # 自带运行时，产物 Dome/dist/Aster.app，双击即开
+SELF_CONTAINED=0 ./Dome/make-app.sh   # 框架依赖，体积小，要求本机装了 .NET 8 运行时
+RID=osx-x64 ./Dome/make-app.sh        # Intel 机器
+```
+
+> `dotnet run` 的宿主进程是 dotnet，Dock 里显示的是宿主的图标，`Window.Icon` 管不到它。
+> 只有装进标准的 `.app` 结构（`Contents/MacOS` + `Info.plist` + `Contents/Resources/Aster.icns`），
+> 系统才认这个包自己的图标和名字。脚本已包含 ad-hoc 签名，Apple Silicon 上可直接打开。
+
 ## 目录结构
 
 ```
@@ -93,12 +105,16 @@ dotnet publish -c Release -r osx-arm64 --self-contained false
 ├── README.md                    本文件
 ├── CHANGELOG.md                 变更记录（每次改动的内容与涉及文件）
 ├── docs/screenshots/            界面截图（由程序真实渲染导出）
+├── tools/
+│   └── make_icon.py             应用图标生成脚本（PNG / ICO / ICNS 一次出全套）
 └── Dome/
     ├── Dome.sln
     ├── run.sh                   一键启动脚本
+    ├── make-app.sh              macOS .app 打包（Dock / Finder 图标靠它）
     └── Aster/
         ├── Program.cs           入口（AppBuilder + Inter 字体）
         ├── App.axaml(.cs)       Fluent 深色主题、资源与样式装配
+        ├── Assets/              应用图标：aster.ico / aster.icns / aster-*.png
         ├── Styles/
         │   ├── Theme.axaml      设计令牌 + 6 个自定义 ControlTheme
         │   └── Controls.axaml   按钮 / 输入框 / 导航 / 分段 / 开关 / 标签 / 滚动条样式
@@ -113,6 +129,27 @@ dotnet publish -c Release -r osx-arm64 --self-contained false
 ```
 
 更细的模块说明见 [`Dome/Aster/README.md`](Dome/Aster/README.md)。
+
+## 应用图标
+
+图标不是一张位图，而是脚本画出来的（`tools/make_icon.py`）：暗紫圆角方块 + 五瓣花，
+花瓣几何和界面里的 `LogoMark`（`Controls/Visuals.cs`）同源——5 片椭圆绕中心转 72°，
+每瓣再叠一层更浅的「瓣中瓣」，整体按左上打光分出明暗。
+
+| 平台 | 文件 | 生效位置 |
+| --- | --- | --- |
+| Windows | `Assets/aster.ico`（16/24/32/48/64/128/256 共 7 档） | exe 内嵌图标（csproj `ApplicationIcon`）：资源管理器、任务栏、Alt+Tab |
+| Windows / Linux | `Assets/aster-256.png` | 窗口图标（`MainWindow` 的 `Icon`），Linux 任务栏也读它 |
+| macOS | `Assets/aster.icns`（10 档） | `.app` 的 `Contents/Resources`，Dock 与 Finder |
+
+每档尺寸都是单独渲染再降采样的（16px 也走 4 倍画布），不是拿 1024 往下缩，所以小图标不糊。
+
+改配色 / 比例只动脚本顶部的常量，然后重跑：
+
+```bash
+# 需要 numpy + Pillow
+python3 tools/make_icon.py --preview   # --preview 额外输出一张多尺寸对照图到 /tmp
+```
 
 ## 设计系统
 
