@@ -134,8 +134,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private DialogKind _dialog = DialogKind.None;
     // 登录表单三个字段：账号、密码、记住我。全部与 LoginView 的输入控件双向绑定。
     // Password 存明文（演示项目），遮罩只在视图层通过 PasswordChar 做。
-    private string _userName = string.Empty;
-    private string _password = string.Empty;
+    // 默认值给演示账号 admin / admin：登录页没有任何后端校验（任意非空都能进），
+    // 预填只是为了省掉「每次启动都要敲两遍」这一步。账号会被缓存里的「记住我」覆盖，
+    // 密码不落盘，所以每次都从这个默认值起步。
+    private string _userName = "admin";
+    private string _password = "admin";
     // 默认勾选：演示时少点一次，也让「记住我」的初始视觉是「已选」。
     // 真实值由本地缓存覆盖（构造函数步骤 0），用户在缓存文件里存过 false 就以缓存为准。
     private bool _remember = true;
@@ -493,6 +496,8 @@ public sealed class MainWindowViewModel : ObservableObject
     // 反过来 Login() 里读的就是这个字段，所以「校验」不需要从控件取值。
     // 复用关系：ForgotEmail 是本属性的别名（getter/setter 都转调它），所以弹窗里的邮箱框
     // 与登录页的账号框是同一份数据 —— 登录页填过什么，打开弹窗就能看到。
+    // 默认值 "admin"（来自字段初始化器）；缓存里存过「记住我」的账号时会被覆盖，
+    // 覆盖点在 RestoreRememberedLogin（构造函数步骤 0），那里直接写 _userName、不走本 setter。
     public string UserName
     {
         get => _userName;
@@ -500,6 +505,7 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>密码明文存放（演示用）。视图侧靠 PasswordChar 遮罩，不在这里加密。</summary>
+    // 默认值 "admin"，与账号配套；密码不进本地缓存，所以每次启动都是这个预填值。
     // 明文存放是刻意的演示取舍：真实项目这里应该是「不保存、只在提交时读一次」，
     // 或至少不放在 VM 的公开属性上。现在退出登录后密码还留在内存里（见 LogoutCommand 的说明）。
     public string Password
