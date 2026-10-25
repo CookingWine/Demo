@@ -427,6 +427,13 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+
+                <!-- 空态提示：v2 起客户数据完全来自本地缓存，一个客户都没有是完全合法的状态。
+                     只在没有数据时出现，文案直接告诉用户数据在哪、怎么补 ——
+                     不写「暂无数据」这种让人以为程序坏了的话。 -->
+                <TextBlock Text="本地缓存里还没有客户。打开 Dome/Aster/AppData/local-cache.json，在 workspace.customers 里加一条即可。"
+                           FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
+                           Margin="18,22,18,24" IsVisible="{Binding !HasCustomers}" />
               </StackPanel>
             </Border>
 
@@ -773,7 +780,7 @@
                 <!-- TaskItem → 一张任务卡。左侧：标题 + 状态标签（成对取色）、
                      客户/类型/期限用三个 Run 拼成一行、Note 仅在 HasNote 为 true 时显示；
                      右侧：退回 / 通过两个按钮，整组仅在 IsPending 为 true 时出现。
-                     两个命令由 BuildTasks 按实例注入，模板不用向上找父级 DataContext。
+                     两个命令由 LoadWorkspace 按实例注入，模板不用向上找父级 DataContext。
                      Note 与 HasNote 都是不发通知的普通属性，能显示靠的是 Decide 之后
                      RefreshTasks 重建行容器、绑定重新求值这一副作用。 -->
                 <DataTemplate DataType="{x:Type vm:TaskItem}">
@@ -810,6 +817,12 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- 空态提示：任务同样只来自本地缓存（workspace.tasks），审批完最后一条后这里会露出来。
+                 注意判断的是「当前筛选下有没有任务」，所以切到「全部记录」看到旧记录时它是隐藏的。 -->
+            <TextBlock Text="当前筛选下没有待办。数据来自 local-cache.json 的 workspace.tasks。"
+                       FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
+                       Margin="0,14,0,0" IsVisible="{Binding !HasTasks}" />
           </StackPanel>
         </Grid>
       </ScrollViewer>

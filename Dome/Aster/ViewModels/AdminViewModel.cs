@@ -2,8 +2,9 @@
 // AdminViewModel.cs —— 工作区（工作台 / 协作与审批 / 客户工作空间 / Workflow / KPI）
 // 结构参考 HR Agent 交互原型：侧栏四个入口 + 客户列表 + 客户详情四页签 + 三步核对。
 // 数据全部是内置演示数据，不连后端；页面切换用 AdminPage 枚举 + 一组 bool 供 XAML 绑 IsVisible。
-// 本地持久化：对话记录与审批结果通过 Services.LocalCache 存到本地缓存文件，重启后回填
-// （客户 / 人员 / 核对表仍是每次从内置种子重建，见各自 Build* / FillDetail 的说明）。
+// 本地持久化：工作区的全部展示数据（客户及其详情、待办、KPI、对话）都来自
+// Services.LocalCache 的 workspace 段，代码里没有任何硬编码演示数据；
+// 启动时 LoadWorkspace 读出来画，发消息 / 审批之后 SaveWorkspace 整体写回。
 // ============================================================================
 //
 // ── 页面状态机（第二轮补充）─────────────────────────────────────────────
@@ -120,7 +121,7 @@ public sealed class WorkbenchCard
 // 只读演示数据（init-only）。派生属性都在 XAML 里直接绑：
 // PendingText 与 HasPending 配合，同一列放两个 TextBlock，一个显示「3 项」、一个显示破折号，
 // 靠 IsVisible 和 {Binding !HasPending} 二选一，省掉值转换器。
-// OpenCommand 由 BuildCustomers 注入 OpenCustomerCommand，XAML 再用 CommandParameter="{Binding}"
+// OpenCommand 由 LoadWorkspace 注入 OpenCustomerCommand，XAML 再用 CommandParameter="{Binding}"
 // 把「这一行」当参数传回命令，命令体里就能拿到被点的客户。
 /// <summary>客户档案。</summary>
 public sealed class CustomerItem : ObservableObject
@@ -140,6 +141,14 @@ public sealed class CustomerItem : ObservableObject
     public string State { get; init; } = string.Empty;
     public int People { get; init; }
     public int Pending { get; init; }
+
+    // 详情页四个页签的行数据，跟着客户一起从本地缓存读出来（v2 起不再由代码现造）。
+    // 用 init-only 的只读列表而不是 ObservableCollection：这份数据在客户对象上是不变的，
+    // 界面显示的是 FillDetail 复制到 PeopleRows / RunRows / FileRows / Activities 的那一份。
+    public IReadOnlyList<ActivityItem> Activities { get; init; } = Array.Empty<ActivityItem>();
+    public IReadOnlyList<PersonRow> Staff { get; init; } = Array.Empty<PersonRow>();
+    public IReadOnlyList<RunRow> Runs { get; init; } = Array.Empty<RunRow>();
+    public IReadOnlyList<FileRow> Files { get; init; } = Array.Empty<FileRow>();
 
     public ICommand? OpenCommand { get; init; }
 
@@ -271,8 +280,9 @@ public sealed class MetricRow
 // 1) 页面与筛选状态（_page / _detailTab / _query / _filter / _taskFilter / _draft），
 //    改完必须给对应的派生属性补通知，界面绑的都是派生属性而不是字段；
 // 2) Workflow 向导状态（_wfStep / _wfSkill / _wfPeriod / _wfNote / _wfAccepted / _wfError）；
-// 3) _allCustomers / _allTasks 两个私有源列表：过滤只重建对外的 ObservableCollection，
-//    源列表始终保持全量，所以清空搜索词能立刻恢复全部数据。
+// 3) _allCustomers / _allTasks 两个源列表：过滤只重建对外的 ObservableCollection，
+//    源列表始终保持全量 —— 但它们本身不再有硬编码种子，内容全部来自本地缓存
+//    （Services.LocalCache 的 workspace 段，见 LoadWorkspace / SaveWorkspace）。
 public sealed class AdminViewModel : ObservableObject
 {
     private AdminPage _page = AdminPage.Workbench;
@@ -297,8 +307,8 @@ public sealed class AdminViewModel : ObservableObject
     //        （Cards[i].Command、TaskItem.ApproveCommand），命令必须早于这些对象存在，否则绑上去是 null。
     // 步骤 2：建 Cards 与 Messages。Cards 的每一项都指向同一个 CardCommand —— 具体去哪个页面
     //        由命令体按卡片 Title 判断，卡片本身只是展示数据。
-    // 步骤 3：BuildCustomers / BuildTasks / BuildMetrics 往私有源列表灌演示数据。
-    // 步骤 3.5：RestoreLocalState 从本地缓存回填上一次的审批结果与对话记录。
+    // 步骤 3：LoadWorkspace 从本地缓存读出工作区的全部数据（客户及其详情 / 待办 / KPI / 对话），
+    //        代码里不再有任何硬编码演示数据 —— 缓存为空，界面就是空的。
     // 步骤 4：建对外集合。Customers 从源列表整体拷贝；People / Run / File / Activities 先空着，
     //        等 OpenCustomer 填充；Tasks 也先空，交给下一步筛选。
     // 步骤 5：RefreshTasks 按默认筛选「待处理」灌入任务，同时发出 TaskSummary / PendingCount。
@@ -366,28 +376,20 @@ public sealed class AdminViewModel : ObservableObject
 
         Cards = new ObservableCollection<WorkbenchCard>
         {
-            // Chip 里的「3 项」「12 条」是写死的演示文案，不随后续审批结果变化；
-            // 真实待处理数要看 PendingCount（种子数据是 7 条），两者对不上属于演示数据的不一致。
+            // Chip 改成了中性文案（原来写死「3 项」「12 条」）：v2 起待办数量由文件决定，
+            // 卡片上再挂一个硬编码数字就会和实际列表对不上。
             new() { Chip = "创建", Tone = "accent", Title = "新建项目", Desc = "创建客户或项目工作空间。", Command = CardCommand },
-            new() { Chip = "3 项", Tone = "green", Title = "KPI 考勤", Desc = "查看绩效、考勤异常、响应时效。", Command = CardCommand },
-            new() { Chip = "12 条", Tone = "red", Title = "待办事项", Desc = "审批、核对、资料更新与协作请求。", Command = CardCommand }
+            new() { Chip = "查看", Tone = "green", Title = "KPI 考勤", Desc = "查看绩效、考勤异常、响应时效。", Command = CardCommand },
+            new() { Chip = "查看", Tone = "red", Title = "待办事项", Desc = "审批、核对、资料更新与协作请求。", Command = CardCommand }
         };
 
-        Messages = new ObservableCollection<ChatMessage>
-        {
-            new() { Author = "Agent", Text = "早上好。今天有 12 条待办，其中 3 条需要审批。你可以创建客户项目，或开始一次交叉验证。" },
-            new() { Author = "张客服", IsUser = true, Text = "先帮我核对青禾新能源的 8 月个税，再把结果保存到客户工作空间。" },
-            new() { Author = "Agent", Text = "可以。我会先确认客户与材料，再展示样例差异，复核后归档。" }
-        };
+        // 对话从空集合起步：缓存里有几条就画几条，没有再冷启动问候语 ——
+        // 「界面内容全部来自本地文件」这条原则不给自己留例外。
+        Messages = new ObservableCollection<ChatMessage>();
 
-        BuildCustomers();
-        BuildTasks();
-        // 步骤 3.5：用本地缓存覆盖种子数据里「用户操作过」的部分（审批状态 + 对话记录）。
-        // 必须卡在 BuildTasks 之后、RefreshTasks 之前：
-        //   前 —— 得先有 _allTasks 才能按 Id 回填状态；
-        //   后 —— RefreshTasks 要按最终状态过滤出「待处理」，晚一步就会先渲染出全部七条再删。
-        RestoreLocalState();
-        BuildMetrics();
+        // 步骤 3：从本地缓存读出工作区全部数据（客户及其详情、待办、KPI、对话）。
+        // 这里是整条链上唯一读文件的地方；缓存为空时四个集合就是空的，属于合法状态。
+        LoadWorkspace();
 
         Customers = new ObservableCollection<CustomerItem>(_allCustomers);
         Tasks = new ObservableCollection<TaskItem>();
@@ -397,7 +399,9 @@ public sealed class AdminViewModel : ObservableObject
         Activities = new ObservableCollection<ActivityItem>();
 
         RefreshTasks();
-        OpenCustomer(_allCustomers[0], "base");
+        // 没有任何客户时不能直接下标取第一个（会抛 IndexOutOfRange）：
+        // 退化成「停在客户工作空间页」并显示空态提示，详情页自然也就进不去。
+        if (_allCustomers.Count > 0) OpenCustomer(_allCustomers[0], "base");
         Go(AdminPage.Workbench);
     }
 
@@ -457,6 +461,11 @@ public sealed class AdminViewModel : ObservableObject
     /// <summary>外壳（一级导航 / 二级会话列表）调用，把侧栏的 key 映射到页面。</summary>
     public void Select(string key)
     {
+        // 详情类 key 都要落到「某个客户」上，而客户来自本地缓存，可能一个都没有。
+        // 这里统一前置判断：没有客户时直接去客户工作空间，由那里的空态提示告诉用户去补数据，
+        // 而不是让它去访问 _allCustomers[0] 抛异常。
+        var hasFirst = _allCustomers.Count > 0;
+
         switch (key)
         {
             // 协作与审批：只换页，任务列表由 RefreshTasks 提前准备好，这里不重建。
@@ -466,22 +475,34 @@ public sealed class AdminViewModel : ObservableObject
             case "customers": Go(AdminPage.Customers); break;
             // Workflow 向导：不重置 WfStep，所以上次停在第几步这次还停在第几步。
             case "workflow": Go(AdminPage.Workflow); break;
-            // KPI：纯只读页，数据在构造函数 BuildMetrics 里一次性建好。
+            // KPI：纯只读页，数据在构造函数 LoadWorkspace 里一次性建好。
             case "kpi": Go(AdminPage.Kpi); break;
-            // 二级导航的「项目」条目：打开青禾的详情首页。
-            case "customer-qinghe": OpenCustomer(_allCustomers[0], "base"); break;
+            // 二级导航的「项目」条目：打开第一个客户的详情首页。
+            case "customer-qinghe": OpenFirstCustomer("base", hasFirst); break;
             // 「8 月个税交叉验证」这条会话：打开同一个客户，但直接落在核对记录页签。
-            case "thread-tax": OpenCustomer(_allCustomers[0], "runs"); break;
+            case "thread-tax": OpenFirstCustomer("runs", hasFirst); break;
             // 下面四个 detail-* 是详情页内部深链；detail 与 customer-qinghe 等价。
-            // 它们不做「当前客户」判断，永远打开 _allCustomers[0]，多客户时需要改成带 id 的 key。
-            case "detail": OpenCustomer(_allCustomers[0], "base"); break;
-            case "detail-people": OpenCustomer(_allCustomers[0], "people"); break;
-            case "detail-runs": OpenCustomer(_allCustomers[0], "runs"); break;
-            case "detail-files": OpenCustomer(_allCustomers[0], "files"); break;
+            // 它们不做「当前客户」判断，永远打开第一个客户，多客户时需要改成带 id 的 key。
+            case "detail": OpenFirstCustomer("base", hasFirst); break;
+            case "detail-people": OpenFirstCustomer("people", hasFirst); break;
+            case "detail-runs": OpenFirstCustomer("runs", hasFirst); break;
+            case "detail-files": OpenFirstCustomer("files", hasFirst); break;
             // 兜底：recent-* / thread-new / workbench 以及任何拼错的 key 都回工作台。
             // 兜底而不抛异常，是为了让壳层新增占位条目时不会把演示点崩。
             default: Go(AdminPage.Workbench); break;
         }
+    }
+
+    /// <summary>打开第一个客户并落到指定页签；没有客户时退到客户工作空间页。</summary>
+    // 抽出来只是为了把「空判断」收在一处：上面六个详情 key 各写一遍 if 会很难读。
+    private void OpenFirstCustomer(string tab, bool hasFirst)
+    {
+        if (!hasFirst)
+        {
+            Go(AdminPage.Customers);
+            return;
+        }
+        OpenCustomer(_allCustomers[0], tab);
     }
 
     // ===================== 工作台 =====================
@@ -513,10 +534,10 @@ public sealed class AdminViewModel : ObservableObject
         Messages.Add(new ChatMessage { Author = "张客服", Text = text, IsUser = true });
         // 步骤 3：清空草稿，TextBox 由双向绑定立刻变空。
         Draft = string.Empty;
-        // 步骤 3.5：把对话落盘。用户在输入框里说的话是唯一「不可再生的数据」，
+        // 步骤 3.5：把工作区写回本地缓存。用户在输入框里说的话是唯一「不可再生的数据」，
         // 丢了就真没了；Agent 的回复是规则文案、丢了也无所谓，但为了保持顺序一致一起存。
         // 用 SaveSoon 而不是 Save：下面 600ms 后还会追加一条 Agent 回复，两次写会被合并成一次。
-        SaveChatMessages();
+        SaveWorkspace();
 
         // 步骤 4：起一个一次性 DispatcherTimer 模拟「Agent 正在输入」。600ms 是演示用的假延迟，
         // 不是为了等任何真实计算；期间界面完全可操作，没有加载态、也没有禁用发送按钮。
@@ -536,7 +557,7 @@ public sealed class AdminViewModel : ObservableObject
             // 步骤 6：补一条落盘。前面 SaveSoon 起的 700ms 防抖还没到期，
             // 这里再调一次只是把计时重置，最终只有一次写盘 —— 但少了这一句，
             // 用户「发完消息立刻关掉程序」时这条回复可能来不及存。
-            SaveChatMessages();
+            SaveWorkspace();
         };
         timer.Start();
     }
@@ -572,11 +593,14 @@ public sealed class AdminViewModel : ObservableObject
     }
 
     public string CustomerCount => $"显示 {Customers.Count} 个客户";
-    public string CustomerTotal => $"演示数据 · 共 {_allCustomers.Count} 个客户";
+    public string CustomerTotal => $"本地缓存 · 共 {_allCustomers.Count} 个客户";
     public string[] Filters { get; } = { "全部客户", "有待处理事项", "我负责的客户" };
 
-    // 调用方：Query / Filter 的 setter。前提：_allCustomers 已由 BuildCustomers 填好。
-    // 做完之后：Customers 换成过滤结果，CustomerCount 重算并通知；_allCustomers 保持全量不变。
+    /// <summary>列表里有没有客户。空态提示绑它（true 时显示表格，false 时显示一行说明）。</summary>
+    public bool HasCustomers => Customers.Count > 0;
+
+    // 调用方：Query / Filter 的 setter、构造函数（集合初始化之后）。
+    // 做完之后：Customers 换成过滤结果，CustomerCount / HasCustomers 重算并通知；_allCustomers 保持全量不变。
     private void RefreshCustomers()
     {
         // 步骤 1：查询词统一转小写再比较；空串表示不过滤。用 ToLowerInvariant 而不是当前区域的
@@ -593,9 +617,10 @@ public sealed class AdminViewModel : ObservableObject
         // ObservableCollection 的 Reset/Add 事件会让 ItemsControl 自己重建行。
         Customers.Clear();
         foreach (var c in list) Customers.Add(c);
-        // 步骤 4：CustomerCount 是计算属性，集合变了不会自动通知，必须手发。
+        // 步骤 4：CustomerCount / HasCustomers 都是计算属性，集合变了不会自动通知，必须手发。
         // CustomerTotal 读的是 _allCustomers.Count，与过滤无关，所以不用发。
         OnPropertyChanged(nameof(CustomerCount));
+        OnPropertyChanged(nameof(HasCustomers));
     }
 
     // ===================== 客户详情 =====================
@@ -672,64 +697,55 @@ public sealed class AdminViewModel : ObservableObject
     }
 
     // 调用方：OpenCustomer。前提：c 非空，四个集合已初始化。
-    // 做完之后：Activities 固定 3 条；PeopleRows 0 或 3 条；RunRows 0 或 1 条；FileRows 1 或 2 条。
-    // 全部是演示数据：人数刻意只造 3 条固定样例，而不是按 c.People 循环，避免 68 人把页面刷满。
+    // 做完之后：四个集合的内容 = 该客户在本地缓存里存的 Activities / Staff / Runs / Files。
+    // 关键变化（v2）：这里不再「按档案字段编造行数据」，只是把缓存里的列表复制到界面集合。
+    // 想改某个客户的核对记录 / 人员 / 文件，改 local-cache.json 对应客户的数组即可。
     private void FillDetail(CustomerItem c)
     {
-        // 步骤 1：最近更新固定三条，时间文案里拼上该客户自己的日期、负责人和人数，
-        // 制造「数据与客户相关」的观感。日期格式直接沿用数据里写死的 "10-17 10:32"。
+        // 步骤 1：最近更新。
         Activities.Clear();
-        Activities.Add(new ActivityItem { Text = "客户资料更新至 V2", Time = $"{c.Date} · {c.Owner} 确认" });
-        Activities.Add(new ActivityItem { Text = "保存人员资料", Time = $"当前在册 {c.People} 人，可在人员记录中查阅" });
-        Activities.Add(new ActivityItem { Text = "建立客户项目", Time = "10-12 09:20 · 归档初始交接资料" });
+        foreach (var a in c.Activities)
+            Activities.Add(new ActivityItem { Text = a.Text, Time = a.Time });
 
-        // 步骤 2：People > 0 才造人员行；EMP-00i 与 (char)('A' + i) 是刻意的假编号、假姓名，
-        // 证件信息用默认的「已脱敏」，保证演示里不出现真实个人信息。
+        // 步骤 2：人员记录。
         PeopleRows.Clear();
-        if (c.People > 0)
-        {
-            for (var i = 0; i < 3; i++)
-                PeopleRows.Add(new PersonRow
-                {
-                    No = $"EMP-00{i + 1}",
-                    Name = $"演示员工 {(char)('A' + i)}",
-                    Customer = c.Short,
-                    Source = "人员资料_v2.xlsx"
-                });
-        }
+        foreach (var p in c.Staff)
+            PeopleRows.Add(new PersonRow
+            {
+                No = p.No,
+                Name = p.Name,
+                IdInfo = p.IdInfo,
+                Customer = p.Customer,
+                Status = p.Status,
+                Source = p.Source
+            });
 
-        // 步骤 3：State 为「暂无核对」表示该客户从没跑过核对，于是不造 RunRow，
-        // 页签里会走「暂无核对记录」的空状态。Batch 用 c.Code[3..] 截掉「KH-」前缀，
-        // 拼成 RC-001-01 这种批次号；切片假设编号至少 3 个字符，来自 BuildCustomers 的固定数据。
+        // 步骤 3：核对记录。
         RunRows.Clear();
-        if (c.State != "暂无核对")
-        {
+        foreach (var r in c.Runs)
             RunRows.Add(new RunRow
             {
-                Batch = $"RC-{c.Code[3..]}-01",
-                Period = "2026-08",
-                Version = "V2",
-                Status = c.State,
-                Pending = c.Pending > 0 ? c.Pending.ToString() : "—",
-                Date = c.Date
+                Batch = r.Batch,
+                Period = r.Period,
+                Version = r.Version,
+                Status = r.Status,
+                Pending = r.Pending,
+                Date = r.Date
             });
-        }
         // 步骤 4：HasRunRows 由 RunRows.Count 推导，集合变动不会自动通知它 ——
         // 这里手动补一条，否则「暂无核对记录」的提示不会随客户切换而显隐。
         OnPropertyChanged(nameof(HasRunRows));
 
-        // 步骤 5：文件永远有原始材料；只有跑过核对才有第二行 Excel 产出，
-        // Tone=ok 让用途标签借 StatusPalette 走绿色，和灰色的原始材料区分开。
+        // 步骤 5：文件与产出。
         FileRows.Clear();
-        FileRows.Add(new FileRow { Name = c.File, Purpose = "原始材料", Related = "客户档案 V2", Time = c.Date });
-        if (c.State != "暂无核对")
+        foreach (var f in c.Files)
             FileRows.Add(new FileRow
             {
-                Name = $"{c.Short}_个税核对_202608_V2.xlsx",
-                Purpose = "Excel 产出",
-                Related = "个税核对 V2",
-                Time = c.Date,
-                Tone = "ok"
+                Name = f.Name,
+                Purpose = f.Purpose,
+                Related = f.Related,
+                Time = f.Time,
+                Tone = f.Tone
             });
     }
 
@@ -757,8 +773,11 @@ public sealed class AdminViewModel : ObservableObject
     public int PendingCount => _allTasks.Count(t => t.IsPending);
     public string TaskSummary => $"{Tasks.Count} 项 · 数量随处理结果更新";
 
-    // 调用方：构造函数、TaskFilterCommand、Decide。前提：_allTasks 已由 BuildTasks 填好。
-    // 做完之后：Tasks 换成过滤后的同一批实例（不克隆），并重算 TaskSummary / PendingCount。
+    /// <summary>当前筛选下有没有任务。空态提示绑它（false 时显示一行说明而不是空白）。</summary>
+    public bool HasTasks => Tasks.Count > 0;
+
+    // 调用方：构造函数、TaskFilterCommand、Decide。前提：_allTasks 已由 LoadWorkspace 填好（可能是空的）。
+    // 做完之后：Tasks 换成过滤后的同一批实例（不克隆），并重算 TaskSummary / PendingCount / HasTasks。
     // 因为放的是原对象，审批改了 Status 之后，「全部」视图里同一行会同步变色，不需要重建对象。
     private void RefreshTasks()
     {
@@ -766,9 +785,10 @@ public sealed class AdminViewModel : ObservableObject
         var list = _allTasks.Where(t => _taskFilter == "全部" || t.IsPending);
         Tasks.Clear();
         foreach (var t in list) Tasks.Add(t);
-        // 两个计算属性都依赖 Tasks.Count 与源列表，集合变了不会自动通知，逐条补发。
+        // 三个计算属性都依赖 Tasks.Count 与源列表，集合变了不会自动通知，逐条补发。
         OnPropertyChanged(nameof(TaskSummary));
         OnPropertyChanged(nameof(PendingCount));
+        OnPropertyChanged(nameof(HasTasks));
     }
 
     // 调用方：ApproveCommand / RejectCommand，参数是 XAML 用 CommandParameter="{Binding}" 传回的 TaskItem。
@@ -786,9 +806,9 @@ public sealed class AdminViewModel : ObservableObject
             : "审批已通过，结果已同步到工作台。";
         // 步骤 3：重建列表。状态已不是「待处理」，于是在「待处理」筛选下这一条会消失。
         RefreshTasks();
-        // 步骤 4：把处理结果写进本地缓存。存的是「全部任务的状态快照」而不是这一条的增量，
-        // 读取时按 Id 回填，天然免疫「种子数据顺序变了导致对错行」的问题。
-        SaveTaskStates();
+        // 步骤 4：把处理结果写回本地缓存。整体写回全量工作区（含这条任务的 status / note），
+        // 下次启动按原样读出来渲染，所以处理过的任务不会再回到「待处理」。
+        SaveWorkspace();
     }
 
     // ===================== Workflow =====================
@@ -941,163 +961,161 @@ public sealed class AdminViewModel : ObservableObject
     // ===================== KPI =====================
     public ObservableCollection<MetricRow> Metrics { get; } = new();
 
-    // 只在构造函数里调用一次。三条都是固定演示值，不随审批结果变化；
-    // 其中「任务处理 0 / 12」的 12 与 Messages 里的欢迎语对齐，但和实际种子任务数（7）并不一致。
-    // 方法内没有 Clear，重复调用会把三条叠加成六条。
-    private void BuildMetrics()
-    {
-        Metrics.Add(new MetricRow { Title = "任务处理", Value = "0 / 12", Note = "随演示操作更新" });
-        Metrics.Add(new MetricRow { Title = "考勤异常（固定样例）", Value = "2 项", Note = "缺少打卡记录，需人工核实" });
-        Metrics.Add(new MetricRow { Title = "平均响应（固定样例）", Value = "12 分钟", Note = "不用于真实考核" });
-    }
+    // 指标已经不在这里构造了：内容来自本地缓存的 workspace.metrics（见 LoadWorkspace / SaveWorkspace）。
+    // 想加一行指标就改文件，不加就一行都不显示 —— 代码里没有兜底的三条演示值。
 
-    // ===================== 本地缓存 =====================
-    // 三个方法的职责边界：
-    //   RestoreLocalState —— 只读缓存、只写内存集合，永远在构造函数里跑；
-    //   SaveChatMessages / SaveTaskStates —— 只读内存、只写缓存，不碰任何集合与页面状态。
-    // 之所以不做一个「整体 Save/Load」：两部分数据的生命周期不同 ——
-    // 对话是「只增不改」，审批是「可反复改」，分开存才能各自决定写入时机。
+    // ===================== 本地缓存（唯一数据源） =====================
+    // v2 起工作区不再有硬编码演示数据：构造函数里的 LoadWorkspace 把缓存读成内存集合，
+    // 之后每一处会改变数据的动作（发消息 / 审批）都调一次 SaveWorkspace 整体写回。
+    //
+    // 两个方法的职责边界：
+    //   LoadWorkspace —— 只在构造函数里跑一次，只读缓存、只写内存；
+    //   SaveWorkspace —— 只读内存、只写缓存，不碰页面状态。
+    // 之所以整体写回而不是分块写：文件本来就小（几十 KB），一次原子写比维护四份局部写更不容易出错；
+    // 真正的性能保护交给 LocalCache.SaveSoon 的防抖。
 
     /// <summary>
-    /// 从本地缓存回填上一次的状态：审批结果按 Id 覆盖种子数据，对话记录整体替换。
+    /// 把本地缓存里的工作区数据读进内存集合：客户（含四个详情页签）、待办、KPI 指标、对话记录。
     /// </summary>
-    // 调用点：构造函数步骤 3.5（BuildTasks 之后、RefreshTasks 之前）。
-    // 前提：_allTasks 已灌好种子、Messages 已初始化为内置三条。
-    // 做完之后：被处理过的任务带上旧状态（不再出现在「待处理」筛选里）；
-    //          对话集合变成上次退出时的样子（含内置三条，因为它们也被存过）。
+    // 调用点：构造函数步骤 3（集合初始化之前）。
+    // 前提：_allCustomers / _allTasks / Metrics / Messages 四个容器已存在。
+    // 做完之后：四个容器里是缓存里的原样数据；缓存为空时它们也是空的，界面走各自的空态。
     //
-    // 三条容错，都是为了让「缓存坏了 / 手改坏了」不至于起不来：
-    //   · 缓存里没有对应 Id → 跳过（新增任务时旧缓存依然可用）；
-    //   · Status 为空 → 跳过（保留种子的「待处理」）；
-    //   · 缓存里一条对话都没有 → 保留内置三条（首次启动走这条路径）。
-    private void RestoreLocalState()
+    // 三条容错（都在这里做，读取时不必再判）：
+    //   · 缓存文件里缺某个数组 → Normalize 已补成空列表；
+    //   · 客户缺 activities/staff/runs/files → 详情页对应页签为空，不抛异常；
+    //   · 待办缺 status → 用 TaskCache 的默认值「待处理」，所以未填状态的任务照样能出现在默认筛选里。
+    private void LoadWorkspace()
     {
-        var cache = LocalCache.Data;
+        var ws = LocalCache.Data.Workspace;
 
-        // 审批状态：GroupBy + Last 是为了容忍手工编辑出的重复 Id（后出现的赢）。
-        // 用字典而不是双重循环：七条任务 × 七条缓存，量级无所谓，但字典写法更能表达「按 Id 找」。
-        var saved = cache.TaskStates
-            .Where(t => !string.IsNullOrEmpty(t.Id))
-            .GroupBy(t => t.Id)
-            .ToDictionary(g => g.Key, g => g.Last());
+        _allCustomers.Clear();
+        foreach (var c in ws.Customers)
+            _allCustomers.Add(ToCustomerItem(c));
 
-        foreach (var task in _allTasks)
-        {
-            if (!saved.TryGetValue(task.Id, out var state)) continue;
-            if (string.IsNullOrEmpty(state.Status)) continue;
-            // 走 Status 的 setter（而不是改字段）：它连带通知 IsPending / StatusBrush / StatusBackground，
-            // 否则「全部」视图里这一行的标签颜色会停在「待处理」的琥珀色。
-            task.Status = state.Status;
-            // Note 是普通自动属性，不发通知；它能在界面上显示靠后面 RefreshTasks 重建行容器，
-            // 而构造函数末尾恰好会调一次 RefreshTasks，顺序刚好对得上。
-            task.Note = state.Note;
-        }
-
-        // 对话记录：整体替换。用 Clear + Add 而不是换集合实例 ——
-        // XAML 与 code-behind（滚动到底）都订阅了这个实例的 CollectionChanged。
-        if (cache.Messages.Count == 0) return;
-        Messages.Clear();
-        foreach (var m in cache.Messages)
-            Messages.Add(new ChatMessage { Author = m.Author, Text = m.Text, IsUser = m.IsUser });
-    }
-
-    /// <summary>把当前对话列表整体写成缓存快照（延迟合并写）。</summary>
-    // 调用点：Send（用户消息之后、Agent 回复之后各一次）。
-    // 存全部消息而不是只存用户消息：重启后要还原完整对话顺序，
-    // 内置的三条种子消息也在其中 —— 它们会被原样存回去，不会重复叠加
-    // （因为 RestoreLocalState 先 Clear 再回放）。
-    private void SaveChatMessages()
-    {
-        var cache = LocalCache.Data;
-        cache.Messages.Clear();
-        foreach (var m in Messages)
-            cache.Messages.Add(new MessageCache { Author = m.Author, Text = m.Text, IsUser = m.IsUser });
-        LocalCache.SaveSoon();
-    }
-
-    /// <summary>把全部任务的处理结果写成缓存快照（延迟合并写）。</summary>
-    // 调用点：Decide（审批通过 / 退回）。
-    // 存的是 _allTasks（全量源列表）而不是 Tasks（当前筛选结果）——
-    // 后者在「待处理」筛选下只有未处理项，拿它存会把已处理的记录从文件里删掉。
-    private void SaveTaskStates()
-    {
-        var cache = LocalCache.Data;
-        cache.TaskStates.Clear();
-        foreach (var t in _allTasks)
-            cache.TaskStates.Add(new TaskStateCache { Id = t.Id, Status = t.Status, Note = t.Note });
-        LocalCache.SaveSoon();
-    }
-
-    // ===================== 演示数据 =====================
-    // 以下三个 Build* 只在构造函数里各跑一次，往私有源列表灌固定数据。
-    // 之所以不直接填对外集合：过滤会反复重建 Customers，源列表必须是「永不损耗」的备份。
-    private void BuildCustomers()
-    {
-        // 四条客户覆盖四种状态：待复核（有差异）、已完成、待补材料、暂无核对（没有核对记录）。
-        // OpenCommand 注入同一个 OpenCustomerCommand，点击时再由 CommandParameter 把整行带回来。
-        // Id 目前没被使用，留着是为了将来做带 id 的深链。
-        _allCustomers.Add(new CustomerItem
-        {
-            Id = "c1", Name = "青禾新能源有限公司", Short = "青禾新能源", Code = "KH-001",
-            Type = "劳务派遣", People = 68, Owner = "张客服", Pending = 3, Date = "10-17 10:32",
-            State = "待复核", City = "郑州", Contact = "客户联系人 A",
-            Service = "工资代发、社保服务", Tax = "已登记 · 演示脱敏", File = "客户交接资料_v2.xlsx",
-            OpenCommand = OpenCustomerCommand
-        });
-        _allCustomers.Add(new CustomerItem
-        {
-            Id = "c2", Name = "澄川医疗服务有限公司", Short = "澄川医疗服务", Code = "KH-002",
-            Type = "劳务派遣", People = 92, Owner = "张客服", Pending = 0, Date = "10-16 16:20",
-            State = "已完成", City = "洛阳", Contact = "客户联系人 B",
-            Service = "工资代发、商保服务", Tax = "已登记 · 演示脱敏", File = "客户基础信息.xlsx",
-            OpenCommand = OpenCustomerCommand
-        });
-        _allCustomers.Add(new CustomerItem
-        {
-            Id = "c3", Name = "远山工程管理有限公司", Short = "远山工程", Code = "KH-003",
-            Type = "业务外包", People = 35, Owner = "周客服", Pending = 2, Date = "10-16 14:05",
-            State = "待补材料", City = "郑州", Contact = "客户联系人 C",
-            Service = "社保、商保服务", Tax = "待补充", File = "项目交接资料.xlsx",
-            OpenCommand = OpenCustomerCommand
-        });
-        _allCustomers.Add(new CustomerItem
-        {
-            Id = "c4", Name = "云帆商贸有限公司", Short = "云帆商贸", Code = "KH-004",
-            Type = "人事代理", People = 24, Owner = "周客服", Pending = 0, Date = "10-15 11:40",
-            State = "暂无核对", City = "新乡", Contact = "客户联系人 D",
-            Service = "人事代理", Tax = "待补充", File = "客户信息采集表.xlsx",
-            OpenCommand = OpenCustomerCommand
-        });
-    }
-
-    private void BuildTasks()
-    {
-        // 元组数组当种子：只写业务会变的部分（标题/类型/客户/期限），
-        // Id 与命令在下面循环里统一生成，避免七条重复写样板代码。
-        var seed = new (string Title, string Kind, string Customer, string Due)[]
-        {
-            ("核对结果归档确认", "审批", "青禾新能源有限公司", "今日"),
-            ("客户资料变更确认", "审批", "澄川医疗服务有限公司", "今日"),
-            ("补收说明确认", "审批", "远山工程管理有限公司", "今日"),
-            ("复核本期差异", "核对", "青禾新能源有限公司", "今日"),
-            ("复核本期差异", "核对", "远山工程管理有限公司", "今日"),
-            ("补充系统导出表", "补材料", "远山工程管理有限公司", "待安排"),
-            ("更新客户资料", "资料", "云帆商贸有限公司", "待安排")
-        };
-
-        // 七条种子的 Status 都走 TaskItem 的默认值「待处理」，所以构造函数里 RefreshTasks 一跑，
-        // 全部条目都会出现在默认的「待处理」筛选下。
-        // 审批/退回命令按实例注入：按钮写在 DataTemplate 里，只能从条目自身拿到命令。
-        for (var i = 0; i < seed.Length; i++)
+        _allTasks.Clear();
+        foreach (var t in ws.Tasks)
             _allTasks.Add(new TaskItem
             {
-                Id = $"t{i + 1}",
-                Title = seed[i].Title,
-                Kind = seed[i].Kind,
-                CustomerName = seed[i].Customer,
-                Due = seed[i].Due,
+                Id = t.Id,
+                Title = t.Title,
+                Kind = t.Kind,
+                CustomerName = t.Customer,
+                Due = t.Due,
+                Status = t.Status,
+                Note = t.Note,
+                // 审批 / 退回命令按实例注入：按钮写在 DataTemplate 里，只能从条目自身拿到命令。
                 ApproveCommand = ApproveCommand,
                 RejectCommand = RejectCommand
             });
+
+        Metrics.Clear();
+        foreach (var m in ws.Metrics)
+            Metrics.Add(new MetricRow { Title = m.Title, Value = m.Value, Note = m.Note });
+
+        Messages.Clear();
+        foreach (var m in ws.Messages)
+            Messages.Add(new ChatMessage { Author = m.Author, Text = m.Text, IsUser = m.IsUser });
+    }
+
+    /// <summary>缓存模型 → 界面模型（客户）。详情四张表一并转换，供 FillDetail 直接复制。</summary>
+    private CustomerItem ToCustomerItem(CustomerCache c) => new()
+    {
+        Id = c.Id,
+        Name = c.Name,
+        Short = c.Short,
+        Code = c.Code,
+        Type = c.Type,
+        Owner = c.Owner,
+        City = c.City,
+        Contact = c.Contact,
+        Service = c.Service,
+        Tax = c.Tax,
+        File = c.File,
+        Date = c.Date,
+        State = c.State,
+        People = c.People,
+        Pending = c.Pending,
+        OpenCommand = OpenCustomerCommand,
+        Activities = c.Activities.Select(a => new ActivityItem { Text = a.Text, Time = a.Time }).ToList(),
+        Staff = c.Staff.Select(p => new PersonRow
+        {
+            No = p.No, Name = p.Name, IdInfo = p.IdInfo,
+            Customer = p.Customer, Status = p.Status, Source = p.Source
+        }).ToList(),
+        Runs = c.Runs.Select(r => new RunRow
+        {
+            Batch = r.Batch, Period = r.Period, Version = r.Version,
+            Status = r.Status, Pending = r.Pending, Date = r.Date
+        }).ToList(),
+        Files = c.Files.Select(f => new FileRow
+        {
+            Name = f.Name, Purpose = f.Purpose, Related = f.Related,
+            Time = f.Time, Tone = f.Tone
+        }).ToList()
+    };
+
+    /// <summary>把内存里的工作区数据整体写回缓存（延迟合并写）。</summary>
+    // 调用点：Send（用户消息之后、Agent 回复之后）、Decide（审批之后）。
+    // 取的是 _allCustomers / _allTasks 这两个「全量源列表」，不是 Customers / Tasks 这两个过滤结果 ——
+    // 否则在「有待处理事项」筛选下保存会把不满足筛选条件的客户从文件里抹掉。
+    private void SaveWorkspace()
+    {
+        var ws = LocalCache.Data.Workspace;
+
+        ws.Customers.Clear();
+        foreach (var c in _allCustomers)
+            ws.Customers.Add(new CustomerCache
+            {
+                Id = c.Id, Name = c.Name, Short = c.Short, Code = c.Code,
+                Type = c.Type, Owner = c.Owner, City = c.City, Contact = c.Contact,
+                Service = c.Service, Tax = c.Tax, File = c.File, Date = c.Date,
+                State = c.State, People = c.People, Pending = c.Pending,
+                // 详情四张表原样回写：它们本来就是从缓存读进来的，界面不改这些行，
+                // 但整体写回能保证文件与内存永远一致（手改过的字段也不会被丢掉）。
+                Activities = c.Activities.Select(a => new ActivityCache { Text = a.Text, Time = a.Time }).ToList(),
+                Staff = c.Staff.Select(p => new StaffCache
+                {
+                    No = p.No, Name = p.Name, IdInfo = p.IdInfo,
+                    Customer = p.Customer, Status = p.Status, Source = p.Source
+                }).ToList(),
+                Runs = c.Runs.Select(r => new RunCache
+                {
+                    Batch = r.Batch, Period = r.Period, Version = r.Version,
+                    Status = r.Status, Pending = r.Pending, Date = r.Date
+                }).ToList(),
+                Files = c.Files.Select(f => new FileEntryCache
+                {
+                    Name = f.Name, Purpose = f.Purpose, Related = f.Related,
+                    Time = f.Time, Tone = f.Tone
+                }).ToList()
+            });
+
+        ws.Tasks.Clear();
+        foreach (var t in _allTasks)
+            ws.Tasks.Add(new TaskCache
+            {
+                Id = t.Id, Title = t.Title, Kind = t.Kind,
+                Customer = t.CustomerName, Due = t.Due,
+                Status = t.Status, Note = t.Note
+            });
+
+        ws.Metrics.Clear();
+        foreach (var m in Metrics)
+            ws.Metrics.Add(new MetricCache { Title = m.Title, Value = m.Value, Note = m.Note });
+
+        ws.Messages.Clear();
+        foreach (var m in Messages)
+            ws.Messages.Add(new MessageCache { Author = m.Author, Text = m.Text, IsUser = m.IsUser });
+
+        LocalCache.SaveSoon();
     }
 }
+
+// ── 关于「演示数据」────────────────────────────────────────────────────────
+// v1 里这里还有 BuildCustomers / BuildTasks 两个方法，硬编码了 4 个客户与 7 条待办。
+// v2 起这些内容全部搬进本地缓存文件（workspace.customers / workspace.tasks），
+// 代码只负责「读出来画」，不再提供任何兜底演示数据 —— 也就是说：
+//   · 缓存文件为空 → 界面就是空的（各页有各自的空态提示）；
+//   · 想造数据 → 直接编辑 local-cache.json，重启即生效；
+//   · 想回到初始状态 → 删掉该文件（或设置页「清理」），程序会重建一份空的。

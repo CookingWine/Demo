@@ -18,11 +18,69 @@
 | 运行 | `dotnet run`；登录框任意非空账号密码即可进入（无后端校验） |
 | 当前模块 | 一级入口为 工作台 / 审批 / 客户 / Workflow / 设置；文档、音乐模块已在 rail 中移除，代码仍保留 |
 | 页面状态 | 工作区六个页面由 `AdminPage` 枚举 + `AdminViewModel.Go(page)` 切换，`IsWorkbench` / `IsCustomers` / `IsDetail` / `IsApproval` / `IsWorkflow` / `IsKpi` 六个派生 bool 控制显隐 |
-| 本地存储 | `Dome/Aster/Services/LocalCache.cs` + 运行期文件 `Dome/Aster/AppData/local-cache.json`（**已在 .gitignore 中忽略**），存登录记忆 / 对话 / 审批结果 / 窗口尺寸 |
+| 本地存储 | `Dome/Aster/Services/LocalCache.cs` + 运行期文件 `Dome/Aster/AppData/local-cache.json`（**已在 .gitignore 中忽略**）：登录记忆、窗口尺寸，以及工作区全部数据（客户 / 详情四页签 / 待办 / KPI / 对话）；**界面内容完全由该文件决定，代码里无演示数据** |
 
 ---
 
 ## 2026-10-25
+
+### 10. 工作区改为「本地数据驱动」：清空内置演示数据，界面全部从缓存文件读取
+
+- **改动**：上一版只把「用户操作过的状态」（审批结果、对话）写进缓存，客户、客户详情、KPI 仍是每次启动
+  从 `BuildCustomers` / `BuildTasks` / `BuildMetrics` 硬编码重建。本次把这批数据整体搬进
+  `local-cache.json` 的 `workspace` 段，删掉全部硬编码演示数据，界面改成「读文件 → 渲染」：
+  **文件里有什么就画什么，没有就是空的**（各页有对应空态提示）。同时把已有缓存文件清空（换结构版本，见下）。
+- **文件**：
+  - 改 `Dome/Aster/Services/LocalCache.cs`：结构版本 1 → 2，新增 `workspace`（customers / tasks / metrics / messages）
+    与 `CustomerCache`、`ActivityCache`、`StaffCache`、`RunCache`、`FileEntryCache`、`MetricCache`；
+    `TaskStateCache` 升级为完整的 `TaskCache`（标题 / 类型 / 客户 / 期限也进文件）；`Normalize` 改成逐层兜底
+  - 改 `Dome/Aster/ViewModels/AdminViewModel.cs`：删 `BuildCustomers` / `BuildTasks` / `BuildMetrics`（约 130 行），
+    新增 `LoadWorkspace` / `SaveWorkspace` / `ToCustomerItem`；`FillDetail` 从「按档案字段编造行」改成「复制缓存里的行」；
+    `CustomerItem` 增加 `Activities` / `Staff` / `Runs` / `Files` 四个只读列表；新增 `HasCustomers` / `HasTasks` 与空数据守卫
+  - 改 `Dome/Aster/Views/AdminView.axaml`：客户列表、审批列表各加一条空态提示（`!HasCustomers` / `!HasTasks`）
+  - 改 `Dome/Aster/ViewModels/MainWindowViewModel.cs`：二级导航「工作台」的写死徽标 `"12"` 去掉（改为 null）
+  - 改 `README.md`：本地数据存储章节改成完整 schema + 维护说明；已知限制同步更新
+- **新的缓存结构（schemaVersion = 2）**
+  ```jsonc
+  "workspace": {
+    "customers": [{ "id","name","short","code","type","owner","city","contact","service","tax",
+                    "file","date","state","people","pending",
+                    "activities":[…], "staff":[…], "runs":[…], "files":[…] }],
+    "tasks":    [{ "id","title","kind","customer","due","status","note" }],
+    "metrics":  [{ "title","value","note" }],
+    "messages": [{ "author","text","isUser" }]
+  }
+  ```
+- **实现要点**
+  - **一个入口读、一个入口写**：`LoadWorkspace()` 只在构造函数里跑一次，把缓存映射成
+    `_allCustomers` / `_allTasks` / `Metrics` / `Messages`；`SaveWorkspace()` 在发消息、审批之后
+    把五个集合整体写回（`LocalCache.SaveSoon` 防抖）。不做增量写，因为文件才几十 KB，
+    一次原子写比维护五份局部写更不容易出错。
+  - **详情数据跟着客户走**：`CustomerCache` 自带 `activities / staff / runs / files` 四个数组。
+    `FillDetail` 现在只是把这四张表复制进 `ObservableCollection`，不再按 `Code[3..]`、`People` 这些字段
+    现编批次号与人员行 —— 想改某个客户的核对记录，改 JSON 即可，不用碰代码。
+  - **空数据是合法状态**：构造函数 `if (_allCustomers.Count > 0) OpenCustomer(...)`；
+    `Select` 里六个详情 key 统一走 `OpenFirstCustomer(tab, hasFirst)`，没有客户就退到客户列表页。
+    这两处是「客户为空」唯一会抛异常的地方（下标访问），其余集合都是 `foreach`。
+  - **计算属性补通知**：`HasCustomers` 在 `RefreshCustomers` 里补发，`HasTasks` 在 `RefreshTasks` 里补发 ——
+    否则审批完最后一条，空态提示不会出现。
+  - **结构版本不一致即清空**：老文件是 `schemaVersion: 1`，加载时判定版本不符 → 备份成 `.bak` → 重建成空工作区。
+    也就是说这次「清空已有数据」不是靠手删文件，而是数据结构升级的必然结果（本地实测确实生成了 `.bak` 之外的干净文件）。
+- **注意**
+  - **运行期改文件会被覆盖**：程序在发消息 / 审批时会把内存里的整份 `workspace` 写回，
+    手工维护 `local-cache.json` 请先关掉程序。
+  - 界面上能改的只有「审批状态」与「对话」；客户 / 人员 / 核对 / 文件 / KPI 只能靠编辑文件补充。
+  - `state` / `status` / `tone` 是配色开关（琥珀 = 待处理类、绿 = 完成类、红 = 退回类、其余灰），
+    写错值不会报错，只会落到灰色兜底。
+  - 壳层的「项目 · 青禾 · 月度核对」「最近会话」仍是 `MainWindowViewModel` 里的静态导航条目，
+    不属于数据（点了会落到第一个客户或工作台），本次只摘掉了那个假的待办数徽标。
+  - 卡片上的「3 项 / 12 条」胶囊一并改成中性的「查看」，避免与空列表或实际数量打架。
+- **验证**：`dotnet build` 0 warning 0 error。三步截图验证：
+  ① 空缓存：工作台无对话、客户页「本地缓存里还没有客户…」、审批页「当前筛选下没有待办…」、客户计数「共 0 个客户」；
+  ② 手工往 `workspace` 写 1 个客户（含 2 条最近更新 / 2 条人员 / 1 条核对 / 2 个文件）+ 2 条待办 + 2 条 KPI + 1 条对话，
+     重启后工作台对话、客户列表行、详情四个页签、审批两张卡、KPI 两行全部按文件渲染；
+  ③ 在界面上点「通过审批」，回读文件确认 `tasks[0].status` 变 `已通过`，且 `customers` / `staff` / `metrics`
+     内容完好无损（整体写回没有丢字段）。验证用的「跳过登录」临时代码已还原，工作区 `git status` 干净。
 
 ### 9. 新增本地缓存文件作为本地数据存储（local-cache.json） — `d3f29d7`
 

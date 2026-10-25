@@ -781,8 +781,9 @@ public sealed class MainWindowViewModel : ObservableObject
                 // 具体显示哪个页面由下面的 SelectSubNav → Admin.Select(key) 决定。
                 ActiveView = Admin;
                 // 四个页面入口与一级导航一一对应，点击侧栏与点击 rail 的效果一致。
-                // 第四个参数是右侧徽标文案："12" 是演示用的待办数，null 表示不显示徽标（HasBadge=false）。
-                AddSubNav("workbench", "工作台", Controls.Icons.Grid, "12");
+                // 第四个参数是右侧徽标文案，null 表示不显示徽标（HasBadge=false）。
+                // v2 起不再写死 "12"：待办数量由本地缓存决定，这里挂一个假数字会和审批页的「0 项」自相矛盾。
+                AddSubNav("workbench", "工作台", Controls.Icons.Grid, null);
                 AddSubNav("approval", "协作与审批", Controls.Icons.List, null);
                 AddSubNav("clients", "客户工作空间", Controls.Icons.Users, null);
                 AddSubNav("workflow", "Workflow", Controls.Icons.Trend, null);

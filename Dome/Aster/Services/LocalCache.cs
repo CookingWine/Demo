@@ -16,27 +16,38 @@
 // ============================================================================
 //
 // ── 文件长什么样 ──────────────────────────────────────────────────────────
-// 一份缩进过的 UTF-8 JSON，中文不转义（中文直接可读，方便手工排查）：
+// 一份缩进过的 UTF-8 JSON，中文不转义（中文直接可读，方便手工排查与维护）：
 //
 //   {
-//     "schemaVersion": 1,
+//     "schemaVersion": 2,
 //     "appVersion": "1.0.0.0",
-//     "updatedAt": "2026-10-25T18:50:12.345+08:00",
-//     "login":      { "remember": true, "userName": "张客服", "lastLoginAt": "..." },
-//     "messages":   [ { "author": "张客服", "text": "...", "isUser": true } ],
-//     "taskStates": [ { "id": "t1", "status": "已通过", "note": "审批已通过……" } ],
-//     "window":     { "width": 1320, "height": 850 }
+//     "updatedAt": "2026-10-25T19:20:12.345+08:00",
+//     "login":  { "remember": true, "userName": "张客服", "lastLoginAt": "..." },
+//     "window": { "width": 1320, "height": 850 },
+//     "workspace": {
+//       "customers": [ { "id": "c1", "name": "...", "code": "KH-001", "people": 68,
+//                        "activities": [...], "staff": [...], "runs": [...], "files": [...] } ],
+//       "tasks":     [ { "id": "t1", "title": "...", "kind": "审批", "status": "待处理" } ],
+//       "metrics":   [ { "title": "任务处理", "value": "0 / 12" } ],
+//       "messages":  [ { "author": "张客服", "text": "...", "isUser": true } ]
+//     }
 //   }
 //
 // 四条约定：
 //   · schemaVersion 不匹配 → 整份丢弃重建（演示项目不做逐版本迁移，见 LoadFromDisk）；
-//   · messages / taskStates 是「全量快照」而非增量：每次保存整体覆盖，读取时直接回放；
+//   · workspace 下的四个列表都是「全量快照」而非增量：每次保存整体覆盖，读取时直接回放；
 //   · 时间统一 DateTimeOffset（带时区偏移），换时区打开也不会错位；
 //   · 文件里的字段名全部 camelCase，与 C# 的 PascalCase 属性靠命名策略映射。
 //
+// ── 这份文件是工作区界面的唯一数据源 ──────────────────────────────────────
+// v2 起工作区不再有任何硬编码演示数据：客户、客户详情（最近更新 / 人员 / 核对 / 文件）、
+// 审批待办、KPI 指标、对话记录全部从 workspace 读出来渲染。
+// 也就是说「界面长什么样」完全由这个文件决定 —— 想清空就把它清空，想造数据就手工往里写，
+// 程序启动时会原样读出来画（见 AdminViewModel.LoadWorkspace）。
+//
 // ── 为什么不用数据库 ──────────────────────────────────────────────────────
 // 工程零第三方依赖（见 README「技术说明」），System.Text.Json 已在共享框架里，
-// 数据量又是「几十条对话 + 七条审批」，一个 JSON 文件足够；
+// 数据量又是「几十条对话 + 几条客户」，一个 JSON 文件足够；
 // 换成 SQLite 会引入原生库，把「clone 下来就能跑」这条底线破坏掉。
 // ============================================================================
 
@@ -52,9 +63,9 @@ namespace Aster.Services;
 /// <summary>
 /// 缓存文件的根对象：一份 LocalCacheData 就是磁盘上一个 local-cache.json。
 /// 全部属性都是可读可写（不是 init-only）：反序列化要靠 setter 赋值，
-/// 且运行期会反复改其中几项（Login / Window / Messages）。
+/// 且运行期会反复改其中几项（Login / Window / Workspace）。
 /// </summary>
-// 四个子对象刻意都给了默认实例而不是 null：新用户第一次启动时直接可用，
+// 子对象刻意都给了默认实例而不是 null：新用户第一次启动时直接可用，
 // 调用方也不必到处写 ?. —— 唯一的代价是反序列化遇到 "login": null 时
 // 会真的塞一个 null 进来，所以 Normalize 里还会兜一次底。
 public sealed class LocalCacheData
@@ -71,14 +82,139 @@ public sealed class LocalCacheData
     /// <summary>登录相关的记忆项（对应登录页的「记住我」）。</summary>
     public LoginCache Login { get; set; } = new();
 
-    /// <summary>工作台对话记录的全量快照。</summary>
-    public List<MessageCache> Messages { get; set; } = new();
-
-    /// <summary>审批 / 待办的处理结果（只存状态与说明，标题等静态文案仍在代码里）。</summary>
-    public List<TaskStateCache> TaskStates { get; set; } = new();
-
     /// <summary>上一次正常状态下的窗口尺寸。</summary>
     public WindowCache Window { get; set; } = new();
+
+    /// <summary>工作区的全部展示数据 —— 界面画什么完全由它决定。</summary>
+    public WorkspaceCache Workspace { get; set; } = new();
+}
+
+/// <summary>
+/// 工作区数据：客户（含四个详情页签的数据）、审批待办、KPI 指标、对话记录。
+/// </summary>
+// 四个列表都是「全量快照」：程序启动时整体读出、界面上改了就整体写回。
+// 默认全是空列表 —— 空列表就是「没有数据」的合法状态，界面会走各自的空态提示，
+// 不会抛异常，也不会偷偷塞演示数据。
+public sealed class WorkspaceCache
+{
+    /// <summary>客户档案列表（客户工作空间 / 客户详情的数据源）。</summary>
+    public List<CustomerCache> Customers { get; set; } = new();
+
+    /// <summary>审批 / 待办列表（协作与审批页的数据源）。</summary>
+    public List<TaskCache> Tasks { get; set; } = new();
+
+    /// <summary>KPI 指标列表（KPI 与考勤页的数据源）。</summary>
+    public List<MetricCache> Metrics { get; set; } = new();
+
+    /// <summary>工作台对话记录。</summary>
+    public List<MessageCache> Messages { get; set; } = new();
+}
+
+/// <summary>
+/// 一个客户的全部数据：档案字段 + 详情页四个页签的行数据。
+/// </summary>
+// 详情数据（最近更新 / 人员 / 核对 / 文件）之所以跟着客户一起存，而不是在界面上按档案字段
+// 现算出来：v2 的原则是「界面只负责画，不负责编数据」。想改某个客户的核对记录，
+// 直接改这个客户的 runs 数组即可，不用去碰代码。
+public sealed class CustomerCache
+{
+    /// <summary>客户 Id（深链与后续扩展用；界面目前不做唯一性校验）。</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>客户全称，列表首列与详情页标题都用它。</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>客户简称，用于拼文件名与人员行里的「所属客户」。</summary>
+    public string Short { get; set; } = string.Empty;
+
+    /// <summary>客户编号，形如 KH-001。</summary>
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>服务类型：劳务派遣 / 业务外包 / 人事代理。</summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>负责人（也用于「我负责的客户」筛选，按 "张客服" 匹配）。</summary>
+    public string Owner { get; set; } = string.Empty;
+
+    /// <summary>所在城市。</summary>
+    public string City { get; set; } = string.Empty;
+
+    /// <summary>客户联系人（演示数据里是脱敏代号）。</summary>
+    public string Contact { get; set; } = string.Empty;
+
+    /// <summary>服务内容，一行文案。</summary>
+    public string Service { get; set; } = string.Empty;
+
+    /// <summary>税务登记状态。</summary>
+    public string Tax { get; set; } = string.Empty;
+
+    /// <summary>交接材料文件名。</summary>
+    public string File { get; set; } = string.Empty;
+
+    /// <summary>最后更新时间的展示文案，如 "10-17 10:32"（刻意存字符串，不做本地化转换）。</summary>
+    public string Date { get; set; } = string.Empty;
+
+    /// <summary>核对状态：待复核 / 已完成 / 待补材料 / 暂无核对。决定列表标签配色。</summary>
+    public string State { get; set; } = string.Empty;
+
+    /// <summary>在册人数。</summary>
+    public int People { get; set; }
+
+    /// <summary>待处理事项数量（0 时列表显示破折号）。</summary>
+    public int Pending { get; set; }
+
+    /// <summary>详情页「最近更新」条目。</summary>
+    public List<ActivityCache> Activities { get; set; } = new();
+
+    /// <summary>详情页「人员记录」行。</summary>
+    public List<StaffCache> Staff { get; set; } = new();
+
+    /// <summary>详情页「核对记录」行。</summary>
+    public List<RunCache> Runs { get; set; } = new();
+
+    /// <summary>详情页「文件与产出」行。</summary>
+    public List<FileEntryCache> Files { get; set; } = new();
+}
+
+/// <summary>详情页「最近更新」的一条记录。</summary>
+public sealed class ActivityCache
+{
+    public string Text { get; set; } = string.Empty;
+    public string Time { get; set; } = string.Empty;
+}
+
+/// <summary>详情页「人员记录」的一行。</summary>
+public sealed class StaffCache
+{
+    public string No { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string IdInfo { get; set; } = "已脱敏";
+    public string Customer { get; set; } = string.Empty;
+    public string Status { get; set; } = "在册";
+    public string Source { get; set; } = string.Empty;
+}
+
+/// <summary>详情页「核对记录」的一行。</summary>
+public sealed class RunCache
+{
+    public string Batch { get; set; } = string.Empty;
+    public string Period { get; set; } = string.Empty;
+    public string Version { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string Pending { get; set; } = "—";
+    public string Date { get; set; } = string.Empty;
+}
+
+/// <summary>详情页「文件与产出」的一行。</summary>
+public sealed class FileEntryCache
+{
+    public string Name { get; set; } = string.Empty;
+    public string Purpose { get; set; } = string.Empty;
+    public string Related { get; set; } = string.Empty;
+    public string Time { get; set; } = string.Empty;
+
+    /// <summary>标签语气：ok（Excel 产出，绿色）/ muted（原始材料，灰色）。</summary>
+    public string Tone { get; set; } = "muted";
 }
 
 /// <summary>登录记忆：勾了「记住我」才会保留账号名。</summary>
@@ -112,16 +248,38 @@ public sealed class MessageCache
     public bool IsUser { get; set; }
 }
 
-/// <summary>一条审批 / 待办的处理结果（按 Id 与代码里的种子数据对齐）。</summary>
-public sealed class TaskStateCache
+/// <summary>一条审批 / 待办事项（对应 ViewModels.TaskItem）。</summary>
+// v1 里这里只存 id + status + note（其余字段写死在代码里）；v2 起整条任务都在文件里，
+// 包括标题与所属客户 —— 界面上再也没有「代码里写死、文件里只存状态」的半吊子状态。
+public sealed class TaskCache
 {
-    /// <summary>任务 Id，与 AdminViewModel.BuildTasks 里生成的 t1~t7 对应。</summary>
+    /// <summary>任务 Id，界面上不可见，只在写回时用来对齐（多条同名任务靠它区分）。</summary>
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>处理后的状态：待处理 / 已通过 / 已退回。</summary>
+    /// <summary>任务标题。</summary>
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>类型：审批 / 核对 / 补材料 / 资料。</summary>
+    public string Kind { get; set; } = "审批";
+
+    /// <summary>所属客户名（纯展示，不做外键校验）。</summary>
+    public string Customer { get; set; } = string.Empty;
+
+    /// <summary>期限文案：今日 / 待安排。</summary>
+    public string Due { get; set; } = "今日";
+
+    /// <summary>状态：待处理 / 已通过 / 已退回。只有「待处理」会出现在默认筛选里。</summary>
     public string Status { get; set; } = "待处理";
 
     /// <summary>处理说明，退回时会写上原因。</summary>
+    public string Note { get; set; } = string.Empty;
+}
+
+/// <summary>一条 KPI 指标（对应 ViewModels.MetricRow）。</summary>
+public sealed class MetricCache
+{
+    public string Title { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
     public string Note { get; set; } = string.Empty;
 }
 
@@ -147,7 +305,7 @@ public sealed class WindowCache
 public static class LocalCache
 {
     /// <summary>当前结构版本。改动 LocalCacheData 的字段含义时必须 +1。</summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>缓存文件名。改名字会让旧文件变成孤儿（不自动删除，需手工清理）。</summary>
     private const string FileName = "local-cache.json";
@@ -406,18 +564,40 @@ public static class LocalCache
         }
     }
 
-    /// <summary>反序列化后的兜底：保证四个子对象都不是 null。</summary>
-    // 手工编辑 JSON 写成 "login": null 是唯一能走到这里的路径，
-    // 但少了这一步，调用方第一次点「记住我」就会 NullReferenceException。
+    /// <summary>反序列化后的兜底：保证所有对象与列表都不是 null，列表里也没有 null 元素。</summary>
+    // 手工编辑 JSON 写成 "login": null / "customers": null 是唯一能走到这里的路径，
+    // 但少了这一步，调用方第一次点「记住我」或读客户列表就会 NullReferenceException。
+    // v2 起 workspace 下面又多了一层嵌套（客户里还有四个列表），逐层兜一遍。
     private static void Normalize(LocalCacheData data)
     {
         data.Login ??= new LoginCache();
-        data.Messages ??= new List<MessageCache>();
-        data.TaskStates ??= new List<TaskStateCache>();
         data.Window ??= new WindowCache();
+        data.Workspace ??= new WorkspaceCache();
+
+        var ws = data.Workspace;
+        ws.Customers ??= new List<CustomerCache>();
+        ws.Tasks ??= new List<TaskCache>();
+        ws.Metrics ??= new List<MetricCache>();
+        ws.Messages ??= new List<MessageCache>();
+
         // 列表里的元素可能被手写成 null，过滤掉，避免回放时崩。
-        data.Messages.RemoveAll(m => m is null);
-        data.TaskStates.RemoveAll(t => t is null);
+        ws.Customers.RemoveAll(c => c is null);
+        ws.Tasks.RemoveAll(t => t is null);
+        ws.Metrics.RemoveAll(m => m is null);
+        ws.Messages.RemoveAll(m => m is null);
+
+        // 客户内部还有四个列表，同样逐层兜底 —— 只写 "name" 不写 "runs" 是最常见的写法。
+        foreach (var c in ws.Customers)
+        {
+            c.Activities ??= new List<ActivityCache>();
+            c.Staff ??= new List<StaffCache>();
+            c.Runs ??= new List<RunCache>();
+            c.Files ??= new List<FileEntryCache>();
+            c.Activities.RemoveAll(x => x is null);
+            c.Staff.RemoveAll(x => x is null);
+            c.Runs.RemoveAll(x => x is null);
+            c.Files.RemoveAll(x => x is null);
+        }
     }
 
     /// <summary>原子写：先写 .tmp 再替换，避免写一半断电留下半截 JSON。</summary>
