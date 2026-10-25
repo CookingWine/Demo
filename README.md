@@ -115,6 +115,9 @@ RID=osx-x64 ./Dome/make-app.sh        # Intel 机器
         ├── Program.cs           入口（AppBuilder + Inter 字体）
         ├── App.axaml(.cs)       Fluent 深色主题、资源与样式装配
         ├── Assets/              应用图标：aster.ico / aster.icns / aster-*.png
+        ├── Services/
+        │   └── LocalCache.cs    本地缓存读写（local-cache.json，唯一的本地数据存储）
+        ├── AppData/             运行时生成，不入库：local-cache.json（已被 .gitignore 忽略）
         ├── Styles/
         │   ├── Theme.axaml      设计令牌 + 6 个自定义 ControlTheme
         │   └── Controls.axaml   按钮 / 输入框 / 导航 / 分段 / 开关 / 标签 / 滚动条样式
@@ -129,6 +132,35 @@ RID=osx-x64 ./Dome/make-app.sh        # Intel 机器
 ```
 
 更细的模块说明见 [`Dome/Aster/README.md`](Dome/Aster/README.md)。
+
+## 本地数据存储
+
+界面状态不是「关掉就没了」：登录记忆、工作台对话、审批结果与窗口尺寸都写在一个 JSON 文件里，
+由 `Dome/Aster/Services/LocalCache.cs` 统一负责，**零第三方依赖**（`System.Text.Json` 在共享框架内）。
+
+| 项 | 说明 |
+| --- | --- |
+| 文件名 | `local-cache.json` |
+| 位置（开发态） | `Dome/Aster/AppData/` —— 已在 `.gitignore` 中忽略，不会推到 GitHub |
+| 位置（发布态） | 用户漫游目录，如 Windows `%APPDATA%\Aster\Cache` |
+| 自定义位置 | 设环境变量 `ASTER_DATA_DIR` 指向任意目录 |
+
+存的内容（字段名 camelCase，中文不转义，可直接打开看）：
+
+- `login` —— 「记住我」的账号名与最近登录时间（**不存密码**）
+- `messages` —— 工作台对话全量快照
+- `taskStates` —— 审批 / 待办的处理结果（按 `id` 与代码里的种子数据对齐）
+- `window` —— 上次正常关闭时的窗口尺寸（只记尺寸，不记坐标）
+
+几个工程上的取舍：
+
+- **原子写**：先写 `.tmp` 再替换，避免写一半断电留下半截 JSON；写失败只记日志不抛异常，缓存坏了不该拖垮界面。
+- **损坏自愈**：文件缺失自动建、结构版本不符或 JSON 解析失败则备份成 `.bak` 后重建。
+- **延迟合并写**：连续操作 700ms 内只落一次盘；登录成功、退出登录、关窗口这三处走同步写，保证「记住」当场生效。
+- **开发态与发布态是两个文件**：调试改坏的数据不会污染用户环境，发布包也不会往只读安装目录里写。
+
+想回到出厂演示状态：删掉 `Dome/Aster/AppData/`（或设置页「存储与备份 → 缓存占用 → 清理」）即可，
+下次启动会自动重建。注意客户 / 人员 / 核对表 / KPI 仍是内置种子数据，本来就不做持久化。
 
 ## 应用图标
 
@@ -183,4 +215,6 @@ python3 tools/make_icon.py --preview   # --preview 额外输出一张多尺寸�
 - 音乐模块为**交互演示**：进度随计时器推进、唱片旋转、柱状图跳动，未接入音频解码与真实播放。
 - 管理页的 Agent 对话为本地模拟（内置 4 条回复话术，Enter 发送），未接大模型；各分区页为演示数据。
 - 文档数据、成员、订单等均为内置演示数据，未接后端。
+- 本地持久化只覆盖登录记忆、工作台对话、审批结果与窗口尺寸（见「本地数据存储」）；
+  客户档案、人员记录、核对表与 KPI 仍是每次启动重建的种子数据。
 - Markdown 预览覆盖标题、引用、列表、表格、代码块与行内加粗/代码，暂不支持图片与嵌套列表。

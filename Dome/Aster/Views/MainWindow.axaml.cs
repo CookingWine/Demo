@@ -1,19 +1,21 @@
 // ============================================================
 // MainWindow.axaml.cs —— 主窗口 code-behind
-// 职责：只处理无边框窗口的「缩放」：把 XAML 里 8 个透明热区的鼠标按下转成系统缩放会话。
+// 职责：① 处理无边框窗口的「缩放」：把 XAML 里 8 个透明热区的鼠标按下转成系统缩放会话；
+//       ② 窗口尺寸的本地记忆：启动时读缓存、关闭时写缓存（数据在 Services.LocalCache）。
 // 协作：热区在 MainWindow.axaml 中声明并带 Tag；标题栏拖动/最大化在 ShellView.axaml.cs，
 //       两者分工是「窗口边缘归窗口，标题栏归视图」。
 // 易踩坑：BeginResizeDrag 必须发生在 PointerPressed 且左键按下时，
 //         并且要传原始事件参数，否则系统拿不到鼠标捕获，缩放会中途丢失。
 // ============================================================
 using System;
+using Aster.Services;
 using Avalonia.Controls;
 using Avalonia.Input;
 
 namespace Aster.Views;
 
 /// <summary>
-/// 主窗口。除 InitializeComponent 外只有缩放逻辑，业务状态全部在 MainWindowViewModel。
+/// 主窗口。除 InitializeComponent、缩放逻辑与尺寸记忆外没有别的职责，业务状态全部在 MainWindowViewModel。
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -29,9 +31,69 @@ public partial class MainWindow : Window
     //   3) 填充 x:Name 生成的字段（Shell 就是这里赋值，之前是 null）；
     //   4) 解析 StaticResource（Bg1、Line2、WindowShadow 等，来自 App.axaml 灌入的令牌）。
     // 做完之后：窗口对象完整但空数据；真正的绑定求值发生在构造返回后由外部赋 DataContext 时。
+    // 本地缓存的两处接线也在构造里完成：先把上次的尺寸套上（要在首次布局之前，
+    // 否则会先按 1320×850 画一帧再跳到大尺寸，肉眼可见），再挂上 Closing 保存。
     public MainWindow()
     {
         InitializeComponent();
+        // 尺寸必须在布局之前覆盖 XAML 里的 Width/Height，改动 XAML 默认值不会影响这里。
+        RestoreWindowSize();
+        // Closing 而不是 Closed：Closed 时窗口对象已经进入销毁流程，
+        // 读 Width/Height 有时能拿到 0（取决于平台实现），Closing 阶段几何信息一定还在。
+        Closing += (_, _) => SaveWindowSize();
+    }
+
+    // ---------- 窗口尺寸记忆 ----------
+    /// <summary>把缓存里的尺寸套到窗口上；没有记录或记录明显非法时保持 XAML 的设计稿尺寸。</summary>
+    // 调用点：构造函数（InitializeComponent 之后）。
+    // 判定用「小于最小值就当没有」而不是「等于 0 才当没有」：
+    // 缓存里可能留着旧版本（那时最小尺寸更小）写下的 1080×700，
+    // 直接套上去会被 MinWidth/MinHeight 顶回去，等于白设，不如干脆走默认值。
+    // NaN 的情况也靠这条比较自然挡掉：任何与 NaN 的比较都是 false。
+    private void RestoreWindowSize()
+    {
+        var cached = LocalCache.Data.Window;
+        if (cached.Width < MinWidth || cached.Height < MinHeight) return;
+        Width = cached.Width;
+        Height = cached.Height;
+    }
+
+    /// <summary>关闭时把当前尺寸写进本地缓存（只在正常状态下记，最大化/最小化不覆盖）。</summary>
+    // 为什么不记最大化状态：恢复最大化需要额外区分「上次是不是最大化」，
+    // 而窗口是居中打开的，恢复成最大化反而会让用户失去「拖到哪就在哪」的直觉；
+    // 只记尺寸 + 居中，行为在任何屏幕配置下都可预期。
+    // 宽度为 NaN 的情况在刚创建、尚未布局时可能出现，因此先判 NaN 再写。
+    private void SaveWindowSize()
+    {
+        if (WindowState != WindowState.Normal) return;
+        if (double.IsNaN(Width) || double.IsNaN(Height)) return;
+        var cached = LocalCache.Data.Window;
+        cached.Width = Width;
+        cached.Height = Height;
+        // 同步写：进程随后就会退出，用延迟写（SaveSoon）大概率来不及执行。
+        LocalCache.Save();
+    }
+
+    /// <summary>
+    /// 首次显示后把尺寸收进当前屏幕可用区域，避免「在 4K 屏存下的 3000 宽，换到 1080p 笔记本后开屏即超框」。
+    /// </summary>
+    // 放在 OnOpened 而不是构造函数里：WorkingArea 与缩放比例要等窗口挂到某个屏幕上才可靠，
+    // 构造函数阶段 Screens.Primary 还不一定有值（多屏热插拔时更明显）。
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+
+        var screen = Screens.Primary;
+        if (screen is null) return;
+        // Scaling 是「逻辑像素 → 物理像素」的倍数，WorkingArea 是物理像素，
+        // 而 Width/Height 是逻辑像素（DIP），必须先除掉缩放才能比较。
+        var scaling = screen.Scaling <= 0 ? 1 : screen.Scaling;
+        var areaWidth = screen.WorkingArea.Width / scaling;
+        var areaHeight = screen.WorkingArea.Height / scaling;
+
+        // 收到区域大小为止，但仍不小于设计稿下限（否则三栏布局会被挤坏）。
+        if (Width > areaWidth) Width = Math.Max(MinWidth, areaWidth);
+        if (Height > areaHeight) Height = Math.Max(MinHeight, areaHeight);
     }
 
     // ---------- 拖拽缩放 ----------

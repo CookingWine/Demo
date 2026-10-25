@@ -40,3 +40,10 @@ desktop.ini
 
 # ---------- 打包产物 ----------
 Dome/dist/
+
+# ---------- 本地缓存 / 运行时数据 ----------
+# Aster 的本地缓存目录（Services.LocalCache 在开发态写到 Aster.csproj 同级）：
+# 里面有 local-cache.json（登录记忆、工作台对话、审批结果、窗口尺寸）以及 .bak / .tmp 中间文件。
+# 内容是「每台机器各一份」的运行期数据、还带着账号名，所以不纳入版本管理；
+# 目录不存在时程序会自己创建，clone 下来直接跑即可。
+Dome/Aster/AppData/

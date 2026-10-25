@@ -38,6 +38,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
+using Aster.Services;
 using Avalonia.Threading;
 
 namespace Aster.ViewModels;
@@ -136,7 +137,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _userName = string.Empty;
     private string _password = string.Empty;
     // 默认勾选：演示时少点一次，也让「记住我」的初始视觉是「已选」。
-    // 注意这个值没有任何持久化行为，退出应用不会记住。
+    // 真实值由本地缓存覆盖（构造函数步骤 0），用户在缓存文件里存过 false 就以缓存为准。
     private bool _remember = true;
     // 密码是否明文显示，由眼睛按钮翻转；它只有两个派生属性（PasswordChar / PasswordRevealChar），
     // 而 LoginView 实际用的是 TextBox.RevealPassword 直接绑这个 bool，见 ShowPassword 的说明。
@@ -146,10 +147,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _isBusy;
 
     /// <summary>
-    /// 构造函数里按顺序做四件事：建命令 → 建子 VM → 初始化导航集合 → 启动 2 秒启动计时器。
+    /// 构造函数里按顺序做五件事：回填缓存里的账号 → 建命令 → 建子 VM → 初始化导航集合 → 启动 2 秒启动计时器。
     /// 所有命令都只在此处创建一次并暴露为只读属性，XAML 侧只负责 {Binding XxxCommand}。
     /// </summary>
     // ── 初始化顺序（顺序不能随便换，每一步都依赖前一步的产物）────────────────────
+    // 步骤 0  从 Services.LocalCache 回填「记住我」的账号 —— 不依赖任何其它成员，放最前面。
     // 步骤 1  建 12 个命令 —— 此时不读任何状态；lambda 只是捕获 this，真正执行要等用户点击。
     // 步骤 2  建 3 个子 VM —— SettingsViewModel 要吃步骤 1 建好的 LogoutCommand，故必须在 1 之后。
     // 步骤 3  建 RailItems 集合 —— 每一项都要传命令实例，故也在 1 之后；
@@ -160,11 +162,17 @@ public sealed class MainWindowViewModel : ObservableObject
     //         5（空集合就绪）。它顺带把 ActiveView 设成 Admin，让 ShellView 即使还不可见也已备好数据。
     // 步骤 7  启动 2 秒 Boot 计时器 —— 依赖 _stage 的初始值 Boot。放最后，
     //         保证前六步全部完成后才可能出现第一次阶段切换。
-    // 依赖链一句话：1 → 2 → 3 → 4 → 5 → 6 → 7，其中 6 同时依赖 1、3、5。
+    // 依赖链一句话：0 → 1 → 2 → 3 → 4 → 5 → 6 → 7，其中 6 同时依赖 1、3、5。
     // 为什么命令要最先建：RailItem 的构造函数要求传 ICommand，而命令体是延迟执行的，
     // 所以「命令体引用了后面才赋值的字段」不构成问题 —— lambda 被调用时才去读字段。
     public MainWindowViewModel()
     {
+        // ===== 步骤 0：从本地缓存回填「记住我」的账号 =====
+        // 放在所有命令 / 子 VM 之前，是为了让 UserName、Remember 在界面第一次绑定取值时就已经是
+        // 上次的值（DataContext 在窗口构造后才赋值，所以这里改不触发任何多余的绑定刷新）。
+        // 读的是内存里的缓存副本；文件本身已在 LocalCache 里惰性加载过（必要时当场创建）。
+        RestoreRememberedLogin();
+
         // ===== 步骤 1：建全部命令（一次建好、永不重建）=====
         // 一级导航命令：由 DataTemplate 通过 CommandParameter 把被点的 RailItem 传进来。
         // 谁触发：ShellView 的 RailTemplate（Button.Command="{Binding Command}"），
@@ -204,6 +212,9 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             IsSettingsOpen = false;
             Stage = AppStage.Login;
+            // 退出登录是「一次会话的结束」，把缓存立刻刷盘：此刻不写，
+            // 之后用户如果直接关窗口，700ms 防抖里的那次写可能来不及发生。
+            LocalCache.Save();
         });
         // 谁触发：LoginView 密码行右侧的眼睛按钮（Classes="ghost"，ToolTip="显示密码"）。
         // 改什么状态：把 ShowPassword 取反。真正生效的绑定是 TextBox.RevealPassword="{Binding ShowPassword}"，
@@ -497,13 +508,26 @@ public sealed class MainWindowViewModel : ObservableObject
         set => Set(ref _password, value);
     }
 
-    /// <summary>「记住我」勾选态，目前只是绑定占位，未做持久化。</summary>
+    /// <summary>
+    /// 「记住我」勾选态。勾选状态与账号名会写进本地缓存，下次启动自动回填（见 RestoreRememberedLogin）。
+    /// </summary>
     // 绑 CheckBox.IsChecked（bool? 与 bool 之间的转换由绑定引擎处理）。
-    // 当前没有任何代码读它 —— 换句话说勾不勾都一样，属于「界面先行」的占位属性。
+    // 行为约定：勾上时立刻把「当前账号 + true」存起来；取消勾选时把账号名一起清掉 ——
+    // 用户点掉「记住我」的意图就是「别再留我的账号」，只改 bool 不清名字等于没记住用户的选择。
+    // 写入走 SaveSoon（延迟合并写），勾选这种一次性动作其实也可以直接 Save，
+    // 这里统一用 SaveSoon 是为了让「勾选 → 输账号 → 登录」这串操作只落一次盘。
     public bool Remember
     {
         get => _remember;
-        set => Set(ref _remember, value);
+        set
+        {
+            if (!Set(ref _remember, value)) return;
+            // 无条件写：取消勾选时 value 为 false，下面的三元会把 UserName 存成空串。
+            var login = LocalCache.Data.Login;
+            login.Remember = value;
+            login.UserName = value ? UserName : string.Empty;
+            LocalCache.SaveSoon();
+        }
     }
 
     /// <summary>
@@ -954,6 +978,10 @@ public sealed class MainWindowViewModel : ObservableObject
             // 切到 App 阶段：IsLogin 变 false、IsApp 变 true，LoginView 隐藏、ShellView 显示。
             // 赋值顺序很重要：先切阶段再重置导航，避免 ShellView 刚显示时内容区还是空的。
             Stage = AppStage.App;
+            // 步骤 7.5：登录成功是「值得记住」的那一刻 —— 把账号名与时间写进本地缓存。
+            // 用 Save（同步落盘）而不是 SaveSoon：用户点完登录很可能马上就去点窗口关闭按钮，
+            // 防抖窗口里没等到 Tick 的话这次「记住我」就白勾了。
+            RememberLogin();
             // 步骤 8：把导航重置到首屏模块。
             // 进入主壳后重置一次一级导航，保证每次都从第一个模块的默认子页开始。
             // 传 true 与构造函数里那次一致（raise 参数实际不参与判断，见 SelectModule 的说明）。
@@ -961,5 +989,40 @@ public sealed class MainWindowViewModel : ObservableObject
         };
         // 步骤 9：启动计时器。Start 之后本方法立刻结束，控制权交回消息循环。
         timer.Start();
+    }
+
+    // ===================== 本地缓存：登录记忆 =====================
+    /// <summary>
+    /// 启动时把「记住我」的账号回填到登录框。只读缓存，不写盘。
+    /// </summary>
+    // 调用点：构造函数步骤 0（早于所有命令与子 VM）。
+    // 两个字段直接赋值而不是走属性：此刻还没有任何绑定挂在 VM 上（DataContext 在窗口构造后才赋），
+    // 走 setter 会多发几条没人听的 PropertyChanged，还容易让人误以为「这里有联动逻辑」。
+    //
+    // 为什么不回填密码：缓存文件里压根没有密码字段（见 LoginCache 的说明）。
+    // 所以「记住我」在这里的语义是「记住账号」，不是「免密码登录」——
+    // 下次启动仍然要输密码，只是不用再打一遍账号。
+    private void RestoreRememberedLogin()
+    {
+        var login = LocalCache.Data.Login;
+        _remember = login.Remember;
+        // 没勾「记住我」时缓存里的名字本来就是空的；这里仍加一层判空，
+        // 是为了容忍手工编辑过的缓存（有名字但 remember 为 false 的矛盾状态）。
+        if (login.Remember && !string.IsNullOrWhiteSpace(login.UserName))
+            _userName = login.UserName;
+    }
+
+    /// <summary>
+    /// 登录成功时写缓存：勾了「记住我」就存账号，没勾就存空串（顺带清掉上次留下的名字）。
+    /// </summary>
+    // 调用点：Login() 里 420ms 计时器的回调（步骤 7.5）。
+    // 用同步 Save：这是「用户可感知的承诺」，必须当场落地。
+    private void RememberLogin()
+    {
+        var login = LocalCache.Data.Login;
+        login.Remember = Remember;
+        login.UserName = Remember ? UserName.Trim() : string.Empty;
+        login.LastLoginAt = DateTimeOffset.Now;
+        LocalCache.Save();
     }
 }

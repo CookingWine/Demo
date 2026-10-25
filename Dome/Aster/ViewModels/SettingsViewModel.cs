@@ -57,6 +57,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
+using Aster.Services;
 using Avalonia.Media;
 
 namespace Aster.ViewModels;
@@ -919,16 +920,13 @@ public sealed class SettingsViewModel : ObservableObject
     // 前置：无。后置：返回未挂载的分区对象；另有一个局部变量 dataDir 被算出来后立刻用掉。
     private SettingSection BuildStorage()
     {
-        // 步骤 1：算数据目录。
-        // SpecialFolder.ApplicationData 在 Windows 上是 %APPDATA%（即 Roaming），
-        // 在 Linux/macOS 上是各自的配置目录；GetFolderPath 可能返回空字符串（极少见的环境），
-        // 此时拼出来的就是 "<sep>Aster"，界面上会显示成一个相对路径——没有额外兜底，属已知瑕疵。
-        // 末尾用 DirectorySeparatorChar 而不是写死 "/"：Windows 是 "\"，类 Unix 是 "/"，
-        // 这样 PathValue 里显示的路径在任何平台都能直接粘贴进资源管理器。
-        // 数据目录按当前用户的 Roaming 目录拼出来，跨机器展示时不会写死某台机器的路径；
-        // 末尾用 DirectorySeparatorChar 而不是 "/"，保证 Windows 与类 Unix 下都正确
-        var dataDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                      System.IO.Path.DirectorySeparatorChar + "Aster";
+        // 步骤 1：取本地缓存真实所在目录。
+        // 由 Services.LocalCache 统一决定（开发态是仓库内的 AppData/，发布态是用户漫游目录），
+        // 这里不重复一遍路径规则 —— 界面显示的位置必须和程序真正写入的位置是同一个，
+        // 否则用户按这个路径去翻文件会找不到。
+        // 末尾的分隔符由 LocalCache.DirectoryPath 给（各平台都用 DirectorySeparatorChar 拼），
+        // 显示的路径可直接粘贴进资源管理器。
+        var dataDir = LocalCache.DirectoryPath;
 
         var s = new SettingSection
         {
@@ -939,10 +937,14 @@ public sealed class SettingsViewModel : ObservableObject
 
         // 同样先建组再逐行 Add：数据目录这一行要复用上面算出的 dataDir
         var location = Group("位置");
-        location.Rows.Add(Row("数据目录", "业务数据库、导出文件与配置的存放位置",
+        location.Rows.Add(Row("数据目录", "本地缓存文件 local-cache.json 的存放位置",
             new PathValue { Text = dataDir }));
-        location.Rows.Add(Row("缓存占用", "报表缩略图、查询结果与临时导出文件",
-            new ButtonValue { Text = "清理" }));
+        // 「缓存占用」这一行现在是真的：描述文案是运行时按文件实际大小拼的，
+        // 右侧「清理」按钮绑 LocalCache.Reset（删文件 → 立刻按默认结构重建）。
+        // 已知瑕疵：清理后文案不会刷新（SettingRow.Desc 是 init-only、没有通知），
+        // 要看到变化得重开设置浮层；动作本身是即时生效的。
+        location.Rows.Add(Row("缓存占用", LocalCache.Describe(),
+            new ButtonValue { Text = "清理", Command = new RelayCommand(LocalCache.Reset) }));
         s.Groups.Add(location);
 
         s.Groups.Add(Group("备份",
@@ -1011,8 +1013,9 @@ public sealed class SettingsViewModel : ObservableObject
             // 「Skia」是 Avalonia 11 在各平台的默认渲染后端，这里写死而不是查询运行时实际后端；
             // 若将来启用其它后端（如某些平台的 GPU 后端），这一行会说谎。
             Row("渲染后端", null, new InfoValue { Text = "Skia" }),
-            // 「本地文件 · JSON」同样是写死的描述：本工程目前没有任何持久化代码，
-            // 这个说法表达的是产品定位而不是实际实现（见文末「发现的问题」）。
+            // 「本地文件 · JSON」现在名副其实：登录记忆、工作台对话、审批结果与窗口尺寸
+            // 都写在 local-cache.json 里（见 Services.LocalCache）。
+            // 该文件不随代码入库 —— 仓库 .gitignore 已忽略 Dome/Aster/AppData/。
             Row("数据存储", null, new InfoValue { Text = "本地文件 · JSON" })));
 
         // Links 塞在分区而不是分组里：右栏会把它单独渲染成「资源」小节，

@@ -18,8 +18,73 @@
 | 运行 | `dotnet run`；登录框任意非空账号密码即可进入（无后端校验） |
 | 当前模块 | 一级入口为 工作台 / 审批 / 客户 / Workflow / 设置；文档、音乐模块已在 rail 中移除，代码仍保留 |
 | 页面状态 | 工作区六个页面由 `AdminPage` 枚举 + `AdminViewModel.Go(page)` 切换，`IsWorkbench` / `IsCustomers` / `IsDetail` / `IsApproval` / `IsWorkflow` / `IsKpi` 六个派生 bool 控制显隐 |
+| 本地存储 | `Dome/Aster/Services/LocalCache.cs` + 运行期文件 `Dome/Aster/AppData/local-cache.json`（**已在 .gitignore 中忽略**），存登录记忆 / 对话 / 审批结果 / 窗口尺寸 |
 
 ---
+
+## 2026-10-25
+
+### 9. 新增本地缓存文件作为本地数据存储（local-cache.json）
+
+- **改动**：工程此前是「零持久化」——所有界面状态关掉程序就没了，「记住我」勾不勾一样（只是绑定占位），
+  设置页写的「数据目录 / 数据存储：本地文件 · JSON」也是没有实现的文案。本次补上一个真正的本地缓存层，
+  用一个 JSON 文件当轻量本地数据库，并把四处真实状态接上去；同时把该文件加进 `.gitignore`，不随代码上传 GitHub。
+- **文件**：
+  - 新增 `Dome/Aster/Services/LocalCache.cs`（约 500 行，含 5 个数据模型 + 读写门面，唯一新增文件）
+  - 新增运行期产物 `Dome/Aster/AppData/local-cache.json`（不入库，首启自动创建）
+  - 改 `Dome/Aster/ViewModels/MainWindowViewModel.cs`：「记住我」落盘与回填（构造函数步骤 0）
+  - 改 `Dome/Aster/ViewModels/AdminViewModel.cs`：对话记录与审批结果落盘与回填（构造函数步骤 3.5）
+  - 改 `Dome/Aster/Views/MainWindow.axaml.cs`：窗口尺寸关闭时保存、启动时恢复，并在首次显示后收进当前屏幕
+  - 改 `Dome/Aster/ViewModels/SettingsViewModel.cs`：数据目录改真实路径、缓存占用显示实际大小、清理按钮接线
+  - 改 `.gitignore`：新增「本地缓存 / 运行时数据」段，忽略 `Dome/Aster/AppData/`
+  - 改 `README.md`：新增「本地数据存储」章节并更新目录结构
+- **缓存文件结构**（字段名 camelCase，中文不转义，可直接用编辑器打开）：
+  ```json
+  {
+    "schemaVersion": 1,
+    "appVersion": "1.0.0.0",
+    "updatedAt": "2026-10-25T18:58:24+08:00",
+    "login":      { "remember": true, "userName": "张客服", "lastLoginAt": "..." },
+    "messages":   [ { "author": "张客服", "text": "...", "isUser": true } ],
+    "taskStates": [ { "id": "t1", "status": "已通过", "note": "..." } ],
+    "window":     { "width": 1600, "height": 900 }
+  }
+  ```
+- **实现要点**
+  - **存放位置分三档**：`ASTER_DATA_DIR` 环境变量 > 从可执行文件目录往上找 `Aster.csproj`（找到＝开发态，写仓库内
+    `AppData/`，正好被 gitignore 忽略）> 用户漫游目录 `%APPDATA%\Aster\Cache`（发布态）。
+    所以**开发态和发布包用的是两个不同的文件**，调试改坏的数据不会污染用户环境。
+  - **原子写**：先写 `local-cache.json.tmp` 再 `File.Move(..., overwrite: true)` 替换目录项，
+    任何时刻读到的都是完整文件；写入失败只记录 `LastError`、绝不抛异常，缓存写不进去也不该让界面崩。
+  - **损坏自愈**：文件缺失 → 建默认结构；`schemaVersion` 不符 → 备份成 `.bak` 后重建；JSON 解析失败 → 同样备份重建；
+    反序列化后再 `Normalize` 一遍（把 `"login": null` 这类手改出来的值补成对象，过滤列表里的 null 元素）。
+  - **延迟合并写**：`SaveSoon()` 用 700ms 防抖计时器合并连续改动（搜索框那种逐字改状态的场景不会产生一串小文件写），
+    `Save()` 同步落盘用于「必须当场记住」的时刻（登录成功、退出登录、关窗口）。
+  - **各处接了哪些状态**
+    - 「记住我」：勾选即存账号、取消勾选即清账号；登录成功再同步写一次（`Save`，不用防抖）。**只存账号名，不存密码**。
+    - 工作台对话：发消息与 Agent 回复各存一次，存的是全量快照，重启后 `Clear` + 回放还原完整顺序。
+    - 审批结果：`Decide()` 后把 `_allTasks` 全量状态写成快照，读取时按 `Id`（t1~t7）回填，
+      所以种子任务顺序变了也不会串行；回填必须卡在 `RefreshTasks()` 之前，否则会先渲染七条再删。
+    - 窗口尺寸：`Closing` 时保存（只在 `WindowState.Normal` 下存），构造时恢复；`OnOpened` 再按屏幕
+      `WorkingArea / Scaling` 收一次，避免 4K 屏存的 3000 宽换到笔记本上开屏即超框。
+      只记尺寸不记位置——窗口本来就是居中打开，记坐标换显示器后可能落在屏幕外。
+  - **设置页**：「存储与备份 → 数据目录」显示的是 `LocalCache.DirectoryPath`（与程序真正写入的位置一致），
+    「缓存占用」的描述按文件实际大小现拼，「清理」按钮绑 `LocalCache.Reset()`（删文件后立刻按默认结构重建）。
+- **注意**
+  - `AppData/` 不入库：`clone` 下来没有这个目录是正常的，首次运行自动创建。想让某台机器的数据隔离，
+    设 `ASTER_DATA_DIR` 指到别处即可（比如演示前清空、或把数据放到网盘目录）。
+  - 改 `LocalCacheData` 的字段含义时**必须**把 `CurrentSchemaVersion` +1，否则老文件会被当成同版本读进来；
+    本项目不做逐版本迁移，版本不符就整份重建（缓存里全是可再生的展示数据，重建比写迁移划算）。
+  - 「清理」按钮点了文案不会刷新：`SettingRow.Desc` 是 init-only 且没有通知，要看到新大小得重开设置浮层，动作本身即时生效。
+  - 回填只覆盖「用户操作过的部分」：客户 / 人员 / 核对表 / KPI 仍是每次从内置种子重建，
+    所以清掉缓存文件后界面会回到出厂演示状态，这两件事都是预期行为。
+  - `LoginCache` 里没有密码字段，这是刻意的——哪怕项目其它地方把密码明文放在内存里，也不落盘。
+- **验证**：`dotnet build` 0 warning 0 error；实机跑了一遍完整闭环（截图 + 直接查 JSON 双确认）：
+  ① 首启自动生成 265 字节的默认文件；② 手工写入 `userName` 后重启，登录框自动回填账号；
+  ③ 写入 `window 1600×900` 后重启，窗口按该尺寸居中打开；④ 登录（账号被写回缓存）→ 发一条对话（
+  `messages` 变 5 条）→ 审批通过一条（`taskStates` 7 条，t1 = 已通过）→ 关窗口（`updatedAt` 更新）；
+  ⑤ 再重启：登录框仍是上次账号、工作台 5 条对话齐全、审批页显示「6 项」且已通过的那条不见了；
+  ⑥ `git check-ignore -v Dome/Aster/AppData/local-cache.json` 命中 `.gitignore:49`，`git status` 里看不到该目录。
 
 ## 2026-10-23
 

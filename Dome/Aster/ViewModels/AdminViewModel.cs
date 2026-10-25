@@ -2,6 +2,8 @@
 // AdminViewModel.cs —— 工作区（工作台 / 协作与审批 / 客户工作空间 / Workflow / KPI）
 // 结构参考 HR Agent 交互原型：侧栏四个入口 + 客户列表 + 客户详情四页签 + 三步核对。
 // 数据全部是内置演示数据，不连后端；页面切换用 AdminPage 枚举 + 一组 bool 供 XAML 绑 IsVisible。
+// 本地持久化：对话记录与审批结果通过 Services.LocalCache 存到本地缓存文件，重启后回填
+// （客户 / 人员 / 核对表仍是每次从内置种子重建，见各自 Build* / FillDetail 的说明）。
 // ============================================================================
 //
 // ── 页面状态机（第二轮补充）─────────────────────────────────────────────
@@ -34,6 +36,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
+using Aster.Services;
 using Avalonia.Media;
 using Avalonia.Threading;
 
@@ -295,6 +298,7 @@ public sealed class AdminViewModel : ObservableObject
     // 步骤 2：建 Cards 与 Messages。Cards 的每一项都指向同一个 CardCommand —— 具体去哪个页面
     //        由命令体按卡片 Title 判断，卡片本身只是展示数据。
     // 步骤 3：BuildCustomers / BuildTasks / BuildMetrics 往私有源列表灌演示数据。
+    // 步骤 3.5：RestoreLocalState 从本地缓存回填上一次的审批结果与对话记录。
     // 步骤 4：建对外集合。Customers 从源列表整体拷贝；People / Run / File / Activities 先空着，
     //        等 OpenCustomer 填充；Tasks 也先空，交给下一步筛选。
     // 步骤 5：RefreshTasks 按默认筛选「待处理」灌入任务，同时发出 TaskSummary / PendingCount。
@@ -378,6 +382,11 @@ public sealed class AdminViewModel : ObservableObject
 
         BuildCustomers();
         BuildTasks();
+        // 步骤 3.5：用本地缓存覆盖种子数据里「用户操作过」的部分（审批状态 + 对话记录）。
+        // 必须卡在 BuildTasks 之后、RefreshTasks 之前：
+        //   前 —— 得先有 _allTasks 才能按 Id 回填状态；
+        //   后 —— RefreshTasks 要按最终状态过滤出「待处理」，晚一步就会先渲染出全部七条再删。
+        RestoreLocalState();
         BuildMetrics();
 
         Customers = new ObservableCollection<CustomerItem>(_allCustomers);
@@ -504,6 +513,10 @@ public sealed class AdminViewModel : ObservableObject
         Messages.Add(new ChatMessage { Author = "张客服", Text = text, IsUser = true });
         // 步骤 3：清空草稿，TextBox 由双向绑定立刻变空。
         Draft = string.Empty;
+        // 步骤 3.5：把对话落盘。用户在输入框里说的话是唯一「不可再生的数据」，
+        // 丢了就真没了；Agent 的回复是规则文案、丢了也无所谓，但为了保持顺序一致一起存。
+        // 用 SaveSoon 而不是 Save：下面 600ms 后还会追加一条 Agent 回复，两次写会被合并成一次。
+        SaveChatMessages();
 
         // 步骤 4：起一个一次性 DispatcherTimer 模拟「Agent 正在输入」。600ms 是演示用的假延迟，
         // 不是为了等任何真实计算；期间界面完全可操作，没有加载态、也没有禁用发送按钮。
@@ -520,6 +533,10 @@ public sealed class AdminViewModel : ObservableObject
                 Author = "Agent",
                 Text = "当前是规则式演示：输入「新建客户」「核对个税」「查看待办」「审批」或「修改资料」可以打开对应面板。"
             });
+            // 步骤 6：补一条落盘。前面 SaveSoon 起的 700ms 防抖还没到期，
+            // 这里再调一次只是把计时重置，最终只有一次写盘 —— 但少了这一句，
+            // 用户「发完消息立刻关掉程序」时这条回复可能来不及存。
+            SaveChatMessages();
         };
         timer.Start();
     }
@@ -769,6 +786,9 @@ public sealed class AdminViewModel : ObservableObject
             : "审批已通过，结果已同步到工作台。";
         // 步骤 3：重建列表。状态已不是「待处理」，于是在「待处理」筛选下这一条会消失。
         RefreshTasks();
+        // 步骤 4：把处理结果写进本地缓存。存的是「全部任务的状态快照」而不是这一条的增量，
+        // 读取时按 Id 回填，天然免疫「种子数据顺序变了导致对错行」的问题。
+        SaveTaskStates();
     }
 
     // ===================== Workflow =====================
@@ -929,6 +949,83 @@ public sealed class AdminViewModel : ObservableObject
         Metrics.Add(new MetricRow { Title = "任务处理", Value = "0 / 12", Note = "随演示操作更新" });
         Metrics.Add(new MetricRow { Title = "考勤异常（固定样例）", Value = "2 项", Note = "缺少打卡记录，需人工核实" });
         Metrics.Add(new MetricRow { Title = "平均响应（固定样例）", Value = "12 分钟", Note = "不用于真实考核" });
+    }
+
+    // ===================== 本地缓存 =====================
+    // 三个方法的职责边界：
+    //   RestoreLocalState —— 只读缓存、只写内存集合，永远在构造函数里跑；
+    //   SaveChatMessages / SaveTaskStates —— 只读内存、只写缓存，不碰任何集合与页面状态。
+    // 之所以不做一个「整体 Save/Load」：两部分数据的生命周期不同 ——
+    // 对话是「只增不改」，审批是「可反复改」，分开存才能各自决定写入时机。
+
+    /// <summary>
+    /// 从本地缓存回填上一次的状态：审批结果按 Id 覆盖种子数据，对话记录整体替换。
+    /// </summary>
+    // 调用点：构造函数步骤 3.5（BuildTasks 之后、RefreshTasks 之前）。
+    // 前提：_allTasks 已灌好种子、Messages 已初始化为内置三条。
+    // 做完之后：被处理过的任务带上旧状态（不再出现在「待处理」筛选里）；
+    //          对话集合变成上次退出时的样子（含内置三条，因为它们也被存过）。
+    //
+    // 三条容错，都是为了让「缓存坏了 / 手改坏了」不至于起不来：
+    //   · 缓存里没有对应 Id → 跳过（新增任务时旧缓存依然可用）；
+    //   · Status 为空 → 跳过（保留种子的「待处理」）；
+    //   · 缓存里一条对话都没有 → 保留内置三条（首次启动走这条路径）。
+    private void RestoreLocalState()
+    {
+        var cache = LocalCache.Data;
+
+        // 审批状态：GroupBy + Last 是为了容忍手工编辑出的重复 Id（后出现的赢）。
+        // 用字典而不是双重循环：七条任务 × 七条缓存，量级无所谓，但字典写法更能表达「按 Id 找」。
+        var saved = cache.TaskStates
+            .Where(t => !string.IsNullOrEmpty(t.Id))
+            .GroupBy(t => t.Id)
+            .ToDictionary(g => g.Key, g => g.Last());
+
+        foreach (var task in _allTasks)
+        {
+            if (!saved.TryGetValue(task.Id, out var state)) continue;
+            if (string.IsNullOrEmpty(state.Status)) continue;
+            // 走 Status 的 setter（而不是改字段）：它连带通知 IsPending / StatusBrush / StatusBackground，
+            // 否则「全部」视图里这一行的标签颜色会停在「待处理」的琥珀色。
+            task.Status = state.Status;
+            // Note 是普通自动属性，不发通知；它能在界面上显示靠后面 RefreshTasks 重建行容器，
+            // 而构造函数末尾恰好会调一次 RefreshTasks，顺序刚好对得上。
+            task.Note = state.Note;
+        }
+
+        // 对话记录：整体替换。用 Clear + Add 而不是换集合实例 ——
+        // XAML 与 code-behind（滚动到底）都订阅了这个实例的 CollectionChanged。
+        if (cache.Messages.Count == 0) return;
+        Messages.Clear();
+        foreach (var m in cache.Messages)
+            Messages.Add(new ChatMessage { Author = m.Author, Text = m.Text, IsUser = m.IsUser });
+    }
+
+    /// <summary>把当前对话列表整体写成缓存快照（延迟合并写）。</summary>
+    // 调用点：Send（用户消息之后、Agent 回复之后各一次）。
+    // 存全部消息而不是只存用户消息：重启后要还原完整对话顺序，
+    // 内置的三条种子消息也在其中 —— 它们会被原样存回去，不会重复叠加
+    // （因为 RestoreLocalState 先 Clear 再回放）。
+    private void SaveChatMessages()
+    {
+        var cache = LocalCache.Data;
+        cache.Messages.Clear();
+        foreach (var m in Messages)
+            cache.Messages.Add(new MessageCache { Author = m.Author, Text = m.Text, IsUser = m.IsUser });
+        LocalCache.SaveSoon();
+    }
+
+    /// <summary>把全部任务的处理结果写成缓存快照（延迟合并写）。</summary>
+    // 调用点：Decide（审批通过 / 退回）。
+    // 存的是 _allTasks（全量源列表）而不是 Tasks（当前筛选结果）——
+    // 后者在「待处理」筛选下只有未处理项，拿它存会把已处理的记录从文件里删掉。
+    private void SaveTaskStates()
+    {
+        var cache = LocalCache.Data;
+        cache.TaskStates.Clear();
+        foreach (var t in _allTasks)
+            cache.TaskStates.Add(new TaskStateCache { Id = t.Id, Status = t.Status, Note = t.Note });
+        LocalCache.SaveSoon();
     }
 
     // ===================== 演示数据 =====================
