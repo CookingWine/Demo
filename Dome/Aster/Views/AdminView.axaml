@@ -485,16 +485,19 @@
                     <TextBlock Text="{Binding CurrentMeta}" FontSize="12.5" Foreground="{StaticResource Text2}"
                                VerticalAlignment="Center" />
                     <Border CornerRadius="5" Padding="8,3" Background="#12FFFFFF">
-                      <TextBlock Text="只读资料" FontSize="11" Foreground="#8B94A8" />
+                      <TextBlock Text="本地档案 · 可编辑" FontSize="11" Foreground="#8B94A8" />
                     </Border>
                   </StackPanel>
                 </StackPanel>
               </StackPanel>
               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
-                <!-- 「让 Agent 更新资料」实际只是 Select("workflow") 跳到交叉验证页，
-                     并不存在资料更新流程；文案与行为不一致，属于演示占位。 -->
-                <Button Content="让 Agent 更新资料" Height="36" Padding="14,0"
-                        Command="{Binding SelectCommand}" CommandParameter="workflow" />
+                <!-- 编辑：以当前客户为初值打开同一张表单浮层（CustomerFormTitle 变成「编辑客户」）。
+                     删除：先弹确认浮层，不在这一下就真删。 -->
+                <Button Content="编辑" Height="36" Padding="14,0"
+                        Command="{Binding EditCustomerCommand}" CommandParameter="{Binding Current}" />
+                <Button Classes="ghost" Content="删除" Height="36" Padding="14,0"
+                        Foreground="{StaticResource Red}"
+                        Command="{Binding DeleteCustomerCommand}" CommandParameter="{Binding Current}" />
                 <Button Classes="pri" Content="发起核对 ↗" Height="36" Padding="14,0"
                         Command="{Binding GoWorkflowCommand}" />
               </StackPanel>
@@ -1085,9 +1088,9 @@
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 BoxShadow="0 18 48 #99000000">
           <StackPanel>
-            <TextBlock Text="新建客户" FontSize="18" FontWeight="Bold" Foreground="{StaticResource Text0}" />
-            <TextBlock Text="只有名称必填，其余留空也能创建；保存后立刻写入本地缓存并出现在列表顶部。"
-                       Classes="col" Margin="0,8,0,18" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding CustomerFormTitle}" FontSize="18" FontWeight="Bold"
+                       Foreground="{StaticResource Text0}" />
+            <TextBlock Text="{Binding CustomerFormHint}" Classes="col" Margin="0,8,0,18" TextWrapping="Wrap" />
 
             <!-- 6 行 × 2 列。RowSpacing / ColumnSpacing 比逐个写 Margin 更省事，
                  也不会出现「某一行忘了加下边距」导致的行高不齐。 -->
@@ -1217,6 +1220,32 @@
               <Button Content="取消" Height="36" Padding="18,0" Command="{Binding CancelTaskFormCommand}" />
               <Button Classes="pri" Content="保存并写入本地" Height="36" Padding="18,0"
                       Command="{Binding SaveTaskCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Panel>
+
+      <!-- 删除确认：只有一个动作是危险的，所以单独一层更小的浮层，把客户名念一遍。
+           删除只作用于客户本身，不会连带删掉关联待办（待办是独立记录，可能还要留档）。 -->
+      <Panel IsVisible="{Binding IsDeleteConfirmOpen}" Background="#B3060810">
+        <Border Width="420" Background="{DynamicResource Bg2}" BorderBrush="{DynamicResource Line}"
+                BorderThickness="1" CornerRadius="16" Padding="24,22"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BoxShadow="0 18 48 #99000000">
+          <StackPanel>
+            <TextBlock Text="删除客户" FontSize="17" FontWeight="Bold" Foreground="{StaticResource Text0}" />
+            <TextBlock Margin="0,10,0,0" FontSize="13" Foreground="{StaticResource Text1}" TextWrapping="Wrap">
+              <Run Text="确定删除" />
+              <Run Text="{Binding DeleteTargetName}" Foreground="{StaticResource Text0}" FontWeight="SemiBold" />
+              <Run Text="吗？客户档案与详情记录会一起移除，且不可撤销。" />
+            </TextBlock>
+            <TextBlock Text="关联的待办不会被一起删除。" FontSize="11.5"
+                       Foreground="{StaticResource Text3}" Margin="0,8,0,0" />
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,20,0,0">
+              <Button Content="取消" Height="36" Padding="18,0" Command="{Binding CancelDeleteCommand}" />
+              <Button Content="确认删除" Height="36" Padding="18,0"
+                      Foreground="{StaticResource Red}" BorderBrush="{StaticResource Red}"
+                      Command="{Binding ConfirmDeleteCommand}" />
             </StackPanel>
           </StackPanel>
         </Border>

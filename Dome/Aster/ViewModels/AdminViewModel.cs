@@ -307,6 +307,13 @@ public sealed class AdminViewModel : ObservableObject
     // 转换集中到 SaveXxx 里做一次，非法输入才能被拦下来给提示，而不是在绑定层静默变成 0。
     private bool _isCustomerFormOpen;
     private bool _isTaskFormOpen;
+    // 编辑态：null = 新建，非 null = 正在改这个 Id 的客户。
+    // 用「编辑目标 Id」而不是「复制一份草稿」，是因为保存时要按 Id 找回原位置、
+    // 并且必须保留详情四张表（人员 / 核对 / 文件 / 最近更新）—— 表单只改基础字段。
+    private string? _editingCustomerId;
+    private bool _isDeleteConfirmOpen;
+    private string _deleteTargetId = string.Empty;
+    private string _deleteTargetName = string.Empty;
     private string _formName = string.Empty;
     private string _formShort = string.Empty;
     private string _formCode = string.Empty;
@@ -393,6 +400,20 @@ public sealed class AdminViewModel : ObservableObject
         OpenCustomerFormCommand = new RelayCommand(OpenCustomerForm);
         CancelCustomerFormCommand = new RelayCommand(CloseCustomerForm);
         SaveCustomerCommand = new RelayCommand(SaveCustomer);
+        // 编辑 / 删除都从客户详情页触发，参数是当前客户（XAML 传 CommandParameter="{Binding Current}"）。
+        // 参数为空时退回 _current：详情页永远有一个 Current，这里只是多一层兜底。
+        EditCustomerCommand = new RelayCommand(o =>
+        {
+            var target = o as CustomerItem ?? _current;
+            if (target is not null) OpenEditCustomerForm(target);
+        });
+        DeleteCustomerCommand = new RelayCommand(o =>
+        {
+            var target = o as CustomerItem ?? _current;
+            if (target is not null) AskDeleteCustomer(target);
+        });
+        ConfirmDeleteCommand = new RelayCommand(ConfirmDelete);
+        CancelDeleteCommand = new RelayCommand(CloseDeleteConfirm);
         OpenTaskFormCommand = new RelayCommand(OpenTaskForm);
         CancelTaskFormCommand = new RelayCommand(CloseTaskForm);
         SaveTaskCommand = new RelayCommand(SaveTask);
@@ -1019,19 +1040,45 @@ public sealed class AdminViewModel : ObservableObject
     public ICommand OpenCustomerFormCommand { get; }
     public ICommand CancelCustomerFormCommand { get; }
     public ICommand SaveCustomerCommand { get; }
+    public ICommand EditCustomerCommand { get; }
+    public ICommand DeleteCustomerCommand { get; }
+    public ICommand ConfirmDeleteCommand { get; }
+    public ICommand CancelDeleteCommand { get; }
     public ICommand OpenTaskFormCommand { get; }
     public ICommand CancelTaskFormCommand { get; }
     public ICommand SaveTaskCommand { get; }
     public ICommand AddMetricCommand { get; }
 
-    /// <summary>新建客户表单是否展开（模态浮层）。</summary>
+    /// <summary>客户表单是否展开（新建与编辑共用同一张浮层）。</summary>
     public bool IsCustomerFormOpen
     {
         get => _isCustomerFormOpen;
         private set => Set(ref _isCustomerFormOpen, value);
     }
 
-    /// <summary>新建待办表单是否展开。</summary>
+    /// <summary>表单标题：新建 / 编辑。打开表单时手发通知（它只依赖 _editingCustomerId）。</summary>
+    public string CustomerFormTitle => _editingCustomerId is null ? "新建客户" : "编辑客户";
+
+    /// <summary>表单副标题。编辑态要额外说明「详情页的四张表不会被动到」。</summary>
+    public string CustomerFormHint => _editingCustomerId is null
+        ? "只有名称必填，其余留空也能创建；保存后立刻写入本地缓存并出现在列表顶部。"
+        : "只修改基础资料；人员记录、核对记录、文件与产出不受影响。";
+
+    /// <summary>删除确认浮层是否展开。</summary>
+    public bool IsDeleteConfirmOpen
+    {
+        get => _isDeleteConfirmOpen;
+        private set => Set(ref _isDeleteConfirmOpen, value);
+    }
+
+    /// <summary>确认框里显示的客户名（让用户看清自己要删的是哪一个）。</summary>
+    public string DeleteTargetName
+    {
+        get => _deleteTargetName;
+        private set => Set(ref _deleteTargetName, value);
+    }
+
+    /// <summary>待办表单是否展开。</summary>
     public bool IsTaskFormOpen
     {
         get => _isTaskFormOpen;
@@ -1127,10 +1174,11 @@ public sealed class AdminViewModel : ObservableObject
         TaskFormCustomer = CustomerOptions.Contains(current) ? current : NoCustomerOption;
     }
 
-    // 调用方：客户页右上角「＋ 新建客户项目」。
-    // 做完之后：表单字段被重置成默认值、编号按现有数据自动递增，浮层展开。
+    // 调用方：客户页右上角「＋ 新建客户」。
+    // 做完之后：_editingCustomerId 清空（表单进入新建态）、字段重置、编号按现有数据自动递增，浮层展开。
     private void OpenCustomerForm()
     {
+        SetEditingTarget(null);
         FormName = string.Empty;
         FormShort = string.Empty;
         FormCode = NextCustomerCode();
@@ -1147,15 +1195,46 @@ public sealed class AdminViewModel : ObservableObject
         IsCustomerFormOpen = true;
     }
 
+    // 调用方：客户详情页「编辑」按钮（EditCustomerCommand）。
+    // 做完之后：同一张浮层以编辑态打开，字段是这条客户的现值（编号也带出来，允许改但会查重）。
+    private void OpenEditCustomerForm(CustomerItem customer)
+    {
+        SetEditingTarget(customer.Id);
+        FormName = customer.Name;
+        FormShort = customer.Short;
+        FormCode = customer.Code;
+        FormType = customer.Type;
+        FormOwner = customer.Owner;
+        FormCity = customer.City;
+        FormContact = customer.Contact;
+        FormService = customer.Service;
+        FormTax = customer.Tax;
+        FormPeople = customer.People.ToString();
+        FormPending = customer.Pending.ToString();
+        FormState = customer.State;
+        FormError = string.Empty;
+        IsCustomerFormOpen = true;
+    }
+
+    // 切换「新建 / 编辑」时同步更新标题与副标题。这两个是计算属性，不手发通知就不会刷新。
+    private void SetEditingTarget(string? id)
+    {
+        _editingCustomerId = id;
+        OnPropertyChanged(nameof(CustomerFormTitle));
+        OnPropertyChanged(nameof(CustomerFormHint));
+    }
+
     private void CloseCustomerForm()
     {
         IsCustomerFormOpen = false;
         FormError = string.Empty;
+        SetEditingTarget(null);
     }
 
-    // 调用方：「保存并新建」按钮（SaveCustomerCommand）。
+    // 调用方：「保存并写入本地」按钮（SaveCustomerCommand），新建与编辑共用。
     // 前提：表单已展开；名称可能为空（会被拦下）。
-    // 做完之后：_allCustomers 首位多一条、文件立即写回、列表刷新、浮层关闭、停在列表页。
+    // 做完之后：新建 → _allCustomers 首位多一条；编辑 → 原位替换该 Id 的条目（详情表原样保留）。
+    //           两种情况都写盘、刷列表、关表单。
     private void SaveCustomer()
     {
         // 步骤 1：必填校验。只校验名称 —— 其余字段留空是有意义的（界面显示空白而不是「未填写」），
@@ -1169,9 +1248,12 @@ public sealed class AdminViewModel : ObservableObject
 
         // 步骤 2：编号。留空就自动生成 KH-001 这种；填了就要查重，否则列表里会出现两行同编号，
         // 后续按编号定位（客户详情深链、文件命名）都会指错。
+        // 编辑态必须把「自己」排除在查重之外，否则原样保存都会报「编号已存在」。
         var code = FormCode.Trim();
         if (code.Length == 0) code = NextCustomerCode();
-        if (_allCustomers.Any(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)))
+        if (_allCustomers.Any(c =>
+                c.Id != _editingCustomerId &&
+                string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)))
         {
             FormError = $"编号 {code} 已存在，换一个或留空自动生成。";
             return;
@@ -1184,8 +1266,68 @@ public sealed class AdminViewModel : ObservableObject
             return;
         }
 
-        // 步骤 4：建领域对象。日期取当前时间，格式与缓存里既有数据保持一致（MM-dd HH:mm）。
         var now = DateTime.Now;
+        var owner = FormOwner.Trim();
+
+        // 步骤 4a：编辑 —— 按 Id 找回原条目，只替换基础字段，详情四张表整体带过去。
+        if (_editingCustomerId is not null)
+        {
+            var index = _allCustomers.FindIndex(c => c.Id == _editingCustomerId);
+            if (index < 0)
+            {
+                // 极端情况：打开表单期间这条客户被别处删掉了（同一进程内只有这里会删）。
+                FormError = "这条客户已不存在，请关闭表单后刷新列表。";
+                return;
+            }
+
+            var old = _allCustomers[index];
+            // 最近更新要补一条「改过什么、什么时候改的」，插到最前面。
+            // Activities 在 CustomerItem 上是 IReadOnlyList，不能就地 Insert，先建新列表再拼旧数据。
+            var activities = new List<ActivityItem>
+            {
+                new() { Text = "更新客户档案", Time = $"{now:MM-dd HH:mm} · {owner}" }
+            };
+            activities.AddRange(old.Activities);
+            var updated = new CustomerItem
+            {
+                Id = old.Id,
+                Name = name,
+                Short = FormShort.Trim().Length > 0 ? FormShort.Trim() : name,
+                Code = code,
+                Type = FormType,
+                Owner = owner,
+                City = FormCity.Trim(),
+                Contact = FormContact.Trim(),
+                Service = FormService.Trim(),
+                Tax = FormTax.Trim(),
+                // 文件名不在这张表单里，原样保留；其余基础字段用新值。
+                File = old.File,
+                Date = now.ToString("MM-dd HH:mm"),
+                State = FormState,
+                People = people,
+                Pending = pending,
+                OpenCommand = OpenCustomerCommand,
+                // 四个详情表直接复用原实例的列表（只读引用，不深拷贝）：
+                // 表单改不到它们，克隆反而会让「界面上的行」和「旧对象里的行」变成两份。
+                Activities = activities,
+                Staff = old.Staff,
+                Runs = old.Runs,
+                Files = old.Files
+            };
+
+            _allCustomers[index] = updated;
+            RefreshCustomers();
+            RefreshCustomerOptions();
+            SaveWorkspace();
+            // 编辑的是当前正在看的那条 → 重新进详情，标题与基础资料立刻换成新值。
+            // 这里必须重建 Current（CustomerItem 的字段是 init-only，改不了原对象）。
+            var reopen = _current is not null && _current.Id == updated.Id;
+            CloseCustomerForm();
+            if (reopen) OpenCustomer(updated, _detailTab);
+            return;
+        }
+
+        // 步骤 4b：新建 —— 建对象、插到最前面（列表按创建时间倒序更符合直觉）。
         var item = new CustomerItem
         {
             Id = NewId("c"),
@@ -1193,7 +1335,7 @@ public sealed class AdminViewModel : ObservableObject
             Short = FormShort.Trim().Length > 0 ? FormShort.Trim() : name,
             Code = code,
             Type = FormType,
-            Owner = FormOwner.Trim(),
+            Owner = owner,
             City = FormCity.Trim(),
             Contact = FormContact.Trim(),
             Service = FormService.Trim(),
@@ -1208,16 +1350,55 @@ public sealed class AdminViewModel : ObservableObject
             // 最近更新补一条「新建客户档案」，让详情页不是完全空白，也留下创建痕迹。
             Activities = new List<ActivityItem>
             {
-                new() { Text = "新建客户档案", Time = $"{now:MM-dd HH:mm} · {FormOwner.Trim()}" }
+                new() { Text = "新建客户档案", Time = $"{now:MM-dd HH:mm} · {owner}" }
             }
         };
 
-        // 步骤 5：插到最前面（列表按创建时间倒序更符合直觉），然后刷新 + 落盘 + 关表单。
+        // 步骤 5：刷新 + 落盘 + 关表单。
         _allCustomers.Insert(0, item);
         RefreshCustomers();
         RefreshCustomerOptions();
         SaveWorkspace();
         CloseCustomerForm();
+    }
+
+    // ===================== 删除客户 =====================
+    // 删除是唯一不可撤销的动作，所以走「确认浮层」而不是二次点击同一个按钮：
+    // 浮层里会把客户名念一遍，用户能确认自己删的不是同名的另一个。
+
+    // 调用方：详情页「删除」按钮（DeleteCustomerCommand）。
+    private void AskDeleteCustomer(CustomerItem customer)
+    {
+        _deleteTargetId = customer.Id;
+        DeleteTargetName = customer.Name;
+        IsDeleteConfirmOpen = true;
+    }
+
+    // 调用方：确认框「确认删除」（ConfirmDeleteCommand）。
+    // 做完之后：_allCustomers 少一条、写盘、刷列表；如果删的正是当前详情页那条，退回列表页。
+    private void ConfirmDelete()
+    {
+        var index = _allCustomers.FindIndex(c => c.Id == _deleteTargetId);
+        // 找不到就当作已删（比如连点两次确认）：照样关浮层，不报错。
+        if (index >= 0) _allCustomers.RemoveAt(index);
+
+        // 删的是正在看的那条 → 先把 Current 置空再回列表，否则详情页会用着已移除的实例。
+        var deletedCurrent = _current is not null && _current.Id == _deleteTargetId;
+        if (deletedCurrent) Current = null;
+
+        RefreshCustomers();
+        RefreshCustomerOptions();
+        SaveWorkspace();
+        CloseDeleteConfirm();
+
+        if (deletedCurrent) Go(AdminPage.Customers);
+    }
+
+    private void CloseDeleteConfirm()
+    {
+        IsDeleteConfirmOpen = false;
+        _deleteTargetId = string.Empty;
+        DeleteTargetName = string.Empty;
     }
 
     // 调用方：审批页右上角「＋ 新建待办」。
