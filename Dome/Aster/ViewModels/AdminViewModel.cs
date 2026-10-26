@@ -285,6 +285,9 @@ public sealed class MetricRow
 //    （Services.LocalCache 的 workspace 段，见 LoadWorkspace / SaveWorkspace）。
 public sealed class AdminViewModel : ObservableObject
 {
+    /// <summary>新建待办时「不关联客户」的占位项。ComboBox 不能绑 null 项，用一个固定字符串占位。</summary>
+    private const string NoCustomerOption = "（不关联客户）";
+
     private AdminPage _page = AdminPage.Workbench;
     private CustomerItem? _current;
     private string _detailTab = "base";
@@ -298,6 +301,35 @@ public sealed class AdminViewModel : ObservableObject
     private string _wfNote = string.Empty;
     private bool _wfAccepted;
     private string _wfError = string.Empty;
+
+    // 新建表单状态（客户 / 待办 / 指标三套）。
+    // 表单字段一律存 string 而不是 int / 枚举：TextBox 与 ComboBox 绑的都是 string，
+    // 转换集中到 SaveXxx 里做一次，非法输入才能被拦下来给提示，而不是在绑定层静默变成 0。
+    private bool _isCustomerFormOpen;
+    private bool _isTaskFormOpen;
+    private string _formName = string.Empty;
+    private string _formShort = string.Empty;
+    private string _formCode = string.Empty;
+    private string _formType = "劳务派遣";
+    private string _formOwner = "张客服";
+    private string _formCity = string.Empty;
+    private string _formContact = string.Empty;
+    private string _formService = string.Empty;
+    private string _formTax = "已登记";
+    private string _formPeople = "0";
+    private string _formPending = "0";
+    private string _formState = "待复核";
+    private string _formError = string.Empty;
+    private string _taskFormTitle = string.Empty;
+    private string _taskFormKind = "审批";
+    private string _taskFormCustomer = NoCustomerOption;
+    private string _taskFormDue = "今日";
+    private string _taskFormNote = string.Empty;
+    private string _taskFormError = string.Empty;
+    private string _metricFormTitle = string.Empty;
+    private string _metricFormValue = string.Empty;
+    private string _metricFormNote = string.Empty;
+    private string _metricFormError = string.Empty;
 
     private readonly List<CustomerItem> _allCustomers = new();
     private readonly List<TaskItem> _allTasks = new();
@@ -356,6 +388,15 @@ public sealed class AdminViewModel : ObservableObject
         {
             if (o is TaskItem t) Decide(t, "已退回");
         });
+        // 新建类命令：三个「打开表单 → 填 → 保存」的入口。
+        // 打开与取消只动表单自己的字段，保存才碰集合与磁盘（见 SaveCustomer / SaveTask / AddMetric）。
+        OpenCustomerFormCommand = new RelayCommand(OpenCustomerForm);
+        CancelCustomerFormCommand = new RelayCommand(CloseCustomerForm);
+        SaveCustomerCommand = new RelayCommand(SaveCustomer);
+        OpenTaskFormCommand = new RelayCommand(OpenTaskForm);
+        CancelTaskFormCommand = new RelayCommand(CloseTaskForm);
+        SaveTaskCommand = new RelayCommand(SaveTask);
+        AddMetricCommand = new RelayCommand(AddMetric);
         WfStartCommand = new RelayCommand(StartRun);
         WfResolveCommand = new RelayCommand(ResolveRun);
         WfArchiveCommand = new RelayCommand(ArchiveRun);
@@ -399,6 +440,8 @@ public sealed class AdminViewModel : ObservableObject
         Activities = new ObservableCollection<ActivityItem>();
 
         RefreshTasks();
+        // 待办表单的客户下拉要跟着已有客户走：构造函数里建一次，新建客户之后再刷一次。
+        RefreshCustomerOptions();
         // 没有任何客户时不能直接下标取第一个（会抛 IndexOutOfRange）：
         // 退化成「停在客户工作空间页」并显示空态提示，详情页自然也就进不去。
         if (_allCustomers.Count > 0) OpenCustomer(_allCustomers[0], "base");
@@ -961,8 +1004,326 @@ public sealed class AdminViewModel : ObservableObject
     // ===================== KPI =====================
     public ObservableCollection<MetricRow> Metrics { get; } = new();
 
+    /// <summary>KPI 列表是否有内容。空态提示绑它。</summary>
+    public bool HasMetrics => Metrics.Count > 0;
+
     // 指标已经不在这里构造了：内容来自本地缓存的 workspace.metrics（见 LoadWorkspace / SaveWorkspace）。
-    // 想加一行指标就改文件，不加就一行都不显示 —— 代码里没有兜底的三条演示值。
+    // 想加一行指标点 KPI 页底部的「新增指标」，或直接改文件 —— 代码里没有兜底的三条演示值。
+
+    // ===================== 新建：客户 / 待办 / 指标 =====================
+    // 这一节是 v2.1 补的「写入端」：v2 把数据全搬进缓存文件后，界面只能读不能写，
+    // 空工作区只能靠手改 JSON 才能有内容。现在三个入口各自把「表单字段 → 领域对象 → 集合 → 磁盘」
+    // 走完整条链，顺序固定为：校验 → 改集合 → RefreshXxx → SaveWorkspace → 关表单。
+    // 反过来（先存盘再刷新）会出现「文件里有、界面没有」的一帧，且保存失败时更难察觉。
+
+    public ICommand OpenCustomerFormCommand { get; }
+    public ICommand CancelCustomerFormCommand { get; }
+    public ICommand SaveCustomerCommand { get; }
+    public ICommand OpenTaskFormCommand { get; }
+    public ICommand CancelTaskFormCommand { get; }
+    public ICommand SaveTaskCommand { get; }
+    public ICommand AddMetricCommand { get; }
+
+    /// <summary>新建客户表单是否展开（模态浮层）。</summary>
+    public bool IsCustomerFormOpen
+    {
+        get => _isCustomerFormOpen;
+        private set => Set(ref _isCustomerFormOpen, value);
+    }
+
+    /// <summary>新建待办表单是否展开。</summary>
+    public bool IsTaskFormOpen
+    {
+        get => _isTaskFormOpen;
+        private set => Set(ref _isTaskFormOpen, value);
+    }
+
+    // ---- 新建客户表单的字段：全部双向绑定，命名统一 Form* ----
+    public string FormName { get => _formName; set => Set(ref _formName, value); }
+    public string FormShort { get => _formShort; set => Set(ref _formShort, value); }
+    public string FormCode { get => _formCode; set => Set(ref _formCode, value); }
+    public string FormType { get => _formType; set => Set(ref _formType, value); }
+    public string FormOwner { get => _formOwner; set => Set(ref _formOwner, value); }
+    public string FormCity { get => _formCity; set => Set(ref _formCity, value); }
+    public string FormContact { get => _formContact; set => Set(ref _formContact, value); }
+    public string FormService { get => _formService; set => Set(ref _formService, value); }
+    public string FormTax { get => _formTax; set => Set(ref _formTax, value); }
+    public string FormPeople { get => _formPeople; set => Set(ref _formPeople, value); }
+    public string FormPending { get => _formPending; set => Set(ref _formPending, value); }
+    public string FormState { get => _formState; set => Set(ref _formState, value); }
+
+    /// <summary>表单内的行内错误提示。空串表示没有错误（对应的 TextBlock 随之隐藏）。</summary>
+    public string FormError
+    {
+        get => _formError;
+        private set
+        {
+            if (!Set(ref _formError, value)) return;
+            OnPropertyChanged(nameof(HasFormError));
+        }
+    }
+
+    public bool HasFormError => _formError.Length > 0;
+
+    // ---- 新建待办表单的字段 ----
+    public string TaskFormTitle { get => _taskFormTitle; set => Set(ref _taskFormTitle, value); }
+    public string TaskFormKind { get => _taskFormKind; set => Set(ref _taskFormKind, value); }
+    public string TaskFormCustomer { get => _taskFormCustomer; set => Set(ref _taskFormCustomer, value); }
+    public string TaskFormDue { get => _taskFormDue; set => Set(ref _taskFormDue, value); }
+    public string TaskFormNote { get => _taskFormNote; set => Set(ref _taskFormNote, value); }
+
+    public string TaskFormError
+    {
+        get => _taskFormError;
+        private set
+        {
+            if (!Set(ref _taskFormError, value)) return;
+            OnPropertyChanged(nameof(HasTaskFormError));
+        }
+    }
+
+    public bool HasTaskFormError => _taskFormError.Length > 0;
+
+    // ---- 新增指标（KPI 页内联一行，不做浮层）----
+    public string MetricFormTitle { get => _metricFormTitle; set => Set(ref _metricFormTitle, value); }
+    public string MetricFormValue { get => _metricFormValue; set => Set(ref _metricFormValue, value); }
+    public string MetricFormNote { get => _metricFormNote; set => Set(ref _metricFormNote, value); }
+
+    public string MetricFormError
+    {
+        get => _metricFormError;
+        private set
+        {
+            if (!Set(ref _metricFormError, value)) return;
+            OnPropertyChanged(nameof(HasMetricFormError));
+        }
+    }
+
+    public bool HasMetricFormError => _metricFormError.Length > 0;
+
+    // ---- 下拉选项：都是静态数组，XAML 直接 ItemsSource 绑 ----
+    public string[] CustomerTypes { get; } = { "劳务派遣", "业务外包", "人事代理" };
+    public string[] CustomerStates { get; } = { "待复核", "已完成", "待补材料", "暂无核对" };
+    public string[] TaskKinds { get; } = { "审批", "核对", "资料", "协作" };
+    public string[] TaskDues { get; } = { "今日", "明日", "本周", "本月" };
+
+    /// <summary>新建待办时的客户下拉项：首项固定是「不关联客户」，其余来自已有客户。</summary>
+    // 用字符串而不是 CustomerItem 做选项：任务只存客户名称（TaskCache.Customer 是 string），
+    // 直接把名称列出来，保存时不用再做对象→字符串的转换，也不会因为换客户实例而绑丢。
+    public ObservableCollection<string> CustomerOptions { get; } = new();
+
+    private void RefreshCustomerOptions()
+    {
+        var current = TaskFormCustomer;
+        CustomerOptions.Clear();
+        CustomerOptions.Add(NoCustomerOption);
+        foreach (var c in _allCustomers)
+        {
+            // 客户名可能重复（不同分公司同名），下拉里允许重复，保存时按名称原样写入。
+            if (!string.IsNullOrWhiteSpace(c.Name)) CustomerOptions.Add(c.Name);
+        }
+        // 重新灌列表会把 ComboBox 的选中项顶掉，这里把原选择还原；
+        // 原选择已经不在列表里（比如客户被删）就退回第一项，避免 ComboBox 出现空白。
+        TaskFormCustomer = CustomerOptions.Contains(current) ? current : NoCustomerOption;
+    }
+
+    // 调用方：客户页右上角「＋ 新建客户项目」。
+    // 做完之后：表单字段被重置成默认值、编号按现有数据自动递增，浮层展开。
+    private void OpenCustomerForm()
+    {
+        FormName = string.Empty;
+        FormShort = string.Empty;
+        FormCode = NextCustomerCode();
+        FormType = CustomerTypes[0];
+        FormOwner = "张客服";
+        FormCity = string.Empty;
+        FormContact = string.Empty;
+        FormService = string.Empty;
+        FormTax = "已登记";
+        FormPeople = "0";
+        FormPending = "0";
+        FormState = CustomerStates[0];
+        FormError = string.Empty;
+        IsCustomerFormOpen = true;
+    }
+
+    private void CloseCustomerForm()
+    {
+        IsCustomerFormOpen = false;
+        FormError = string.Empty;
+    }
+
+    // 调用方：「保存并新建」按钮（SaveCustomerCommand）。
+    // 前提：表单已展开；名称可能为空（会被拦下）。
+    // 做完之后：_allCustomers 首位多一条、文件立即写回、列表刷新、浮层关闭、停在列表页。
+    private void SaveCustomer()
+    {
+        // 步骤 1：必填校验。只校验名称 —— 其余字段留空是有意义的（界面显示空白而不是「未填写」），
+        // 强行要求全部填满只会让用户为了点保存而胡乱输入。
+        var name = FormName.Trim();
+        if (name.Length == 0)
+        {
+            FormError = "客户名称必填。";
+            return;
+        }
+
+        // 步骤 2：编号。留空就自动生成 KH-001 这种；填了就要查重，否则列表里会出现两行同编号，
+        // 后续按编号定位（客户详情深链、文件命名）都会指错。
+        var code = FormCode.Trim();
+        if (code.Length == 0) code = NextCustomerCode();
+        if (_allCustomers.Any(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)))
+        {
+            FormError = $"编号 {code} 已存在，换一个或留空自动生成。";
+            return;
+        }
+
+        // 步骤 3：数字字段。空串当 0，写了非数字才报错 —— 这是「空表单直接保存」也能成功的唯一前提。
+        if (!TryParseCount(FormPeople, out var people) || !TryParseCount(FormPending, out var pending))
+        {
+            FormError = "在册人数与待处理数请填 0 或正整数。";
+            return;
+        }
+
+        // 步骤 4：建领域对象。日期取当前时间，格式与缓存里既有数据保持一致（MM-dd HH:mm）。
+        var now = DateTime.Now;
+        var item = new CustomerItem
+        {
+            Id = NewId("c"),
+            Name = name,
+            Short = FormShort.Trim().Length > 0 ? FormShort.Trim() : name,
+            Code = code,
+            Type = FormType,
+            Owner = FormOwner.Trim(),
+            City = FormCity.Trim(),
+            Contact = FormContact.Trim(),
+            Service = FormService.Trim(),
+            Tax = FormTax.Trim(),
+            File = string.Empty,
+            Date = now.ToString("MM-dd HH:mm"),
+            State = FormState,
+            People = people,
+            Pending = pending,
+            OpenCommand = OpenCustomerCommand,
+            // 详情页四个页签先给空表：新建时还没有人员、核对与文件。
+            // 最近更新补一条「新建客户档案」，让详情页不是完全空白，也留下创建痕迹。
+            Activities = new List<ActivityItem>
+            {
+                new() { Text = "新建客户档案", Time = $"{now:MM-dd HH:mm} · {FormOwner.Trim()}" }
+            }
+        };
+
+        // 步骤 5：插到最前面（列表按创建时间倒序更符合直觉），然后刷新 + 落盘 + 关表单。
+        _allCustomers.Insert(0, item);
+        RefreshCustomers();
+        RefreshCustomerOptions();
+        SaveWorkspace();
+        CloseCustomerForm();
+    }
+
+    // 调用方：审批页右上角「＋ 新建待办」。
+    private void OpenTaskForm()
+    {
+        TaskFormTitle = string.Empty;
+        TaskFormKind = TaskKinds[0];
+        TaskFormDue = TaskDues[0];
+        TaskFormNote = string.Empty;
+        TaskFormError = string.Empty;
+        // 客户下拉每次打开都重建一次：期间可能在别的页面刚建过客户。
+        RefreshCustomerOptions();
+        IsTaskFormOpen = true;
+    }
+
+    private void CloseTaskForm()
+    {
+        IsTaskFormOpen = false;
+        TaskFormError = string.Empty;
+    }
+
+    // 调用方：「保存待办」按钮（SaveTaskCommand）。
+    // 做完之后：_allTasks 首位多一条（状态固定「待处理」）、切回「待处理」筛选、写盘、关表单。
+    private void SaveTask()
+    {
+        var title = TaskFormTitle.Trim();
+        if (title.Length == 0)
+        {
+            TaskFormError = "待办标题必填。";
+            return;
+        }
+
+        var item = new TaskItem
+        {
+            Id = NewId("t"),
+            Title = title,
+            Kind = TaskFormKind,
+            // 「不关联客户」是界面占位，落盘时存空串：缓存里的 Customer 字段没有「占位」这个概念。
+            CustomerName = TaskFormCustomer == NoCustomerOption ? string.Empty : TaskFormCustomer,
+            Due = TaskFormDue,
+            Status = "待处理",
+            Note = TaskFormNote.Trim(),
+            // 命令按实例注入，和 LoadWorkspace 里读到旧任务时保持一致（DataTemplate 靠条目自身拿命令）。
+            ApproveCommand = ApproveCommand,
+            RejectCommand = RejectCommand
+        };
+
+        _allTasks.Insert(0, item);
+        // 新建的待办一定是「待处理」，如果当前停在「全部记录」筛选，切回去才能让用户看到它。
+        TaskFilter = "待处理";
+        RefreshTasks();
+        SaveWorkspace();
+        CloseTaskForm();
+    }
+
+    // 调用方：KPI 页底部「新增指标」按钮（AddMetricCommand）。
+    // 做完之后：Metrics 末尾多一行、写盘、输入框清空；页面不跳转。
+    private void AddMetric()
+    {
+        var title = MetricFormTitle.Trim();
+        if (title.Length == 0)
+        {
+            MetricFormError = "指标名称必填。";
+            return;
+        }
+
+        Metrics.Add(new MetricRow
+        {
+            Title = title,
+            Value = MetricFormValue.Trim(),
+            Note = MetricFormNote.Trim()
+        });
+        // HasMetrics 是计算属性，加完必须手动通知，否则空态提示不会消失。
+        OnPropertyChanged(nameof(HasMetrics));
+        SaveWorkspace();
+        MetricFormTitle = string.Empty;
+        MetricFormValue = string.Empty;
+        MetricFormNote = string.Empty;
+        MetricFormError = string.Empty;
+    }
+
+    // ---- 小工具 ----
+
+    /// <summary>空串/纯空白视为 0；非数字或负数返回 false（由调用方转成提示文案）。</summary>
+    private static bool TryParseCount(string text, out int value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(text)) return true;
+        return int.TryParse(text.Trim(), out value) && value >= 0;
+    }
+
+    /// <summary>生成 KH-001 形式的客户编号：取现有编号里的最大数字 +1，三位补零。</summary>
+    private string NextCustomerCode()
+    {
+        var max = 0;
+        foreach (var c in _allCustomers)
+        {
+            var code = c.Code ?? string.Empty;
+            var dash = code.LastIndexOf('-');
+            if (dash >= 0 && int.TryParse(code[(dash + 1)..], out var n) && n > max) max = n;
+        }
+        return $"KH-{max + 1:000}";
+    }
+
+    /// <summary>内部 Id：不需要跨机器唯一，只要在同一份缓存里不重复即可，取 Guid 前 8 位够用。</summary>
+    private static string NewId(string prefix) => prefix + Guid.NewGuid().ToString("N")[..8];
 
     // ===================== 本地缓存（唯一数据源） =====================
     // v2 起工作区不再有硬编码演示数据：构造函数里的 LoadWorkspace 把缓存读成内存集合，

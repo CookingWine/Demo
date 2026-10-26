@@ -326,11 +326,12 @@
                 <TextBlock Text="按客户查看已保存的数据、核对记录与交付文件。" Classes="lead" />
               </StackPanel>
               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
-                <!-- 「＋ 新建客户项目」只是再调一次 Select("clients")，并没有新建表单，
-                     属于演示占位；右侧按钮走 GoWorkflowCommand 直接进 Workflow。 -->
-                <Button Content="＋ 新建客户项目" Height="36" Padding="14,0"
-                        Command="{Binding SelectCommand}" CommandParameter="clients" />
-                <Button Classes="pri" Content="前往 Workflow ↗" Height="36" Padding="14,0"
+                <!-- 「＋ 新建客户」打开新建表单（OpenCustomerFormCommand），保存后写入本地缓存。
+                     主按钮放在新建上：这是本页唯一会改变数据的动作；
+                     「前往 Workflow」降级成普通按钮，避免两个强调色按钮互相抢注意力。 -->
+                <Button Classes="pri" Content="＋ 新建客户" Height="36" Padding="14,0"
+                        Command="{Binding OpenCustomerFormCommand}" />
+                <Button Content="前往 Workflow ↗" Height="36" Padding="14,0"
                         Command="{Binding GoWorkflowCommand}" />
               </StackPanel>
             </Grid>
@@ -429,9 +430,9 @@
                 </ItemsControl>
 
                 <!-- 空态提示：v2 起客户数据完全来自本地缓存，一个客户都没有是完全合法的状态。
-                     只在没有数据时出现，文案直接告诉用户数据在哪、怎么补 ——
-                     不写「暂无数据」这种让人以为程序坏了的话。 -->
-                <TextBlock Text="本地缓存里还没有客户。打开 Dome/Aster/AppData/local-cache.json，在 workspace.customers 里加一条即可。"
+                     文案指向「新建」按钮而不是让人去改 JSON：v2.1 起界面就能建，
+                     只有批量导入这种场景才需要手工编辑文件。 -->
+                <TextBlock Text="还没有客户。点右上角「＋ 新建客户」创建第一条 —— 数据会立刻写入本地缓存，下次启动自动恢复。"
                            FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
                            Margin="18,22,18,24" IsVisible="{Binding !HasCustomers}" />
               </StackPanel>
@@ -761,7 +762,8 @@
                          FontSize="12.5" Foreground="#A9BAFF" TextWrapping="Wrap" />
             </Border>
 
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,18,0,4">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,18,0,4">
+              <StackPanel Orientation="Horizontal" Spacing="8">
               <!-- 两枚筛选胶囊共用 TaskFilterCommand，靠 CommandParameter 传目标值（"待处理" / "全部"）。
                    selected 条件类绑的是 IsTaskPending / IsTaskAll —— 这两个是计算属性，
                    所以 TaskFilter 的 setter 里必须补发通知，否则胶囊高亮不会跟着走。 -->
@@ -773,7 +775,11 @@
                       Command="{Binding TaskFilterCommand}" CommandParameter="全部" />
               <TextBlock Text="{Binding TaskSummary}" FontSize="12" Foreground="{StaticResource Text2}"
                          VerticalAlignment="Center" Margin="8,0,0,0" />
-            </StackPanel>
+              </StackPanel>
+              <!-- 新建待办：保存后状态固定「待处理」，并自动切回「待处理」筛选，保证新条目可见 -->
+              <Button Grid.Column="1" Classes="pri" Content="＋ 新建待办" Height="32" Padding="14,0"
+                      FontSize="12.5" Command="{Binding OpenTaskFormCommand}" VerticalAlignment="Center" />
+            </Grid>
 
             <ItemsControl ItemsSource="{Binding Tasks}" Margin="0,10,0,0">
               <ItemsControl.ItemTemplate>
@@ -820,7 +826,7 @@
 
             <!-- 空态提示：任务同样只来自本地缓存（workspace.tasks），审批完最后一条后这里会露出来。
                  注意判断的是「当前筛选下有没有任务」，所以切到「全部记录」看到旧记录时它是隐藏的。 -->
-            <TextBlock Text="当前筛选下没有待办。数据来自 local-cache.json 的 workspace.tasks。"
+            <TextBlock Text="当前筛选下没有待办。点右上角「＋ 新建待办」添加一条，审批结果同样只写本地缓存。"
                        FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
                        Margin="0,14,0,0" IsVisible="{Binding !HasTasks}" />
           </StackPanel>
@@ -1011,6 +1017,7 @@
             <TextBlock Text="本次演示概览：任务完成率随演示操作更新，考勤与响应为固定样例。" Classes="lead" />
 
             <Border Classes="panel" Margin="0,20,0,0" Padding="0">
+              <StackPanel>
               <ItemsControl ItemsSource="{Binding Metrics}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type vm:MetricRow}">
@@ -1028,6 +1035,33 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+              <!-- 空态：指标同样只来自本地缓存，一条都没有时给一句引导，而不是留一块空白面板 -->
+              <TextBlock Text="还没有指标。填下面一行的名称就能加第一条，数值与说明都可以留空。"
+                         FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
+                         Margin="20,18,20,18" IsVisible="{Binding !HasMetrics}" />
+              </StackPanel>
+            </Border>
+
+            <!-- 新增指标：内联一行而不是弹窗 —— 只有三个短字段，弹一层浮层反而更重。
+                 名称必填，数值与说明可空；保存后写入 Metrics 并落盘。 -->
+            <Border Classes="panel" Margin="0,14,0,0">
+              <StackPanel>
+                <TextBlock Text="新增指标" FontSize="13.5" FontWeight="SemiBold"
+                           Foreground="{StaticResource Text0}" />
+                <TextBlock Text="写入本地缓存，随工作区数据一起保存。" Classes="col" Margin="0,6,0,12" />
+                <Grid ColumnDefinitions="1.6*,0.8*,2*,Auto" ColumnSpacing="10">
+                  <TextBox Text="{Binding MetricFormTitle, Mode=TwoWay}" Height="38"
+                           Watermark="指标名称，如：任务处理" />
+                  <TextBox Grid.Column="1" Text="{Binding MetricFormValue, Mode=TwoWay}" Height="38"
+                           Watermark="数值" />
+                  <TextBox Grid.Column="2" Text="{Binding MetricFormNote, Mode=TwoWay}" Height="38"
+                           Watermark="说明（可空）" />
+                  <Button Grid.Column="3" Classes="pri" Content="新增" Height="38" Padding="18,0"
+                          Command="{Binding AddMetricCommand}" />
+                </Grid>
+                <TextBlock Text="{Binding MetricFormError}" IsVisible="{Binding HasMetricFormError}"
+                           FontSize="12" Foreground="{StaticResource Red}" Margin="0,8,0,0" />
+              </StackPanel>
             </Border>
 
             <Border Classes="note" Margin="0,16,0,0">
@@ -1037,6 +1071,156 @@
           </StackPanel>
         </Grid>
       </ScrollViewer>
+
+      <!-- ============================================================ -->
+      <!-- 7. 新建表单浮层（客户 / 待办）                                 -->
+      <!-- ============================================================ -->
+      <!-- 放在内容 Panel 的最后一个子元素：Z 序按声明顺序，后声明者在上，所以能盖住六个页面；
+           又因为它在这个 Panel 内部，顶栏与窗口缩放热区不受影响。
+           遮罩用 #B3060810（约 70% 深色）：只压暗，不做模糊 —— 背景内容仍然可辨认，
+           用户能看出「自己是在哪一页上填表」。 -->
+      <Panel IsVisible="{Binding IsCustomerFormOpen}" Background="#B3060810">
+        <Border Width="680" Background="{DynamicResource Bg2}" BorderBrush="{DynamicResource Line}"
+                BorderThickness="1" CornerRadius="16" Padding="24,22"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BoxShadow="0 18 48 #99000000">
+          <StackPanel>
+            <TextBlock Text="新建客户" FontSize="18" FontWeight="Bold" Foreground="{StaticResource Text0}" />
+            <TextBlock Text="只有名称必填，其余留空也能创建；保存后立刻写入本地缓存并出现在列表顶部。"
+                       Classes="col" Margin="0,8,0,18" TextWrapping="Wrap" />
+
+            <!-- 6 行 × 2 列。RowSpacing / ColumnSpacing 比逐个写 Margin 更省事，
+                 也不会出现「某一行忘了加下边距」导致的行高不齐。 -->
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+                  ColumnSpacing="12" RowSpacing="14">
+              <StackPanel Grid.Row="0" Grid.Column="0">
+                <TextBlock Text="客户名称 *" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormName, Mode=TwoWay}" Height="38"
+                         Watermark="如：青禾新能源有限公司" />
+              </StackPanel>
+              <StackPanel Grid.Row="0" Grid.Column="1">
+                <TextBlock Text="客户编号" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormCode, Mode=TwoWay}" Height="38"
+                         Watermark="留空自动生成 KH-001" />
+              </StackPanel>
+
+              <StackPanel Grid.Row="1" Grid.Column="0">
+                <TextBlock Text="客户简称" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormShort, Mode=TwoWay}" Height="38"
+                         Watermark="留空则与全称一致" />
+              </StackPanel>
+              <StackPanel Grid.Row="1" Grid.Column="1">
+                <TextBlock Text="服务类型" Classes="col" Margin="0,0,0,6" />
+                <ComboBox ItemsSource="{Binding CustomerTypes}"
+                          SelectedItem="{Binding FormType, Mode=TwoWay}" Height="38"
+                          HorizontalAlignment="Stretch" Background="{DynamicResource Bg3}" />
+              </StackPanel>
+
+              <StackPanel Grid.Row="2" Grid.Column="0">
+                <TextBlock Text="负责人" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormOwner, Mode=TwoWay}" Height="38" Watermark="张客服" />
+              </StackPanel>
+              <StackPanel Grid.Row="2" Grid.Column="1">
+                <TextBlock Text="所在城市" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormCity, Mode=TwoWay}" Height="38" Watermark="如：郑州" />
+              </StackPanel>
+
+              <StackPanel Grid.Row="3" Grid.Column="0">
+                <TextBlock Text="联系人" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormContact, Mode=TwoWay}" Height="38" Watermark="如：客户联系人 A" />
+              </StackPanel>
+              <StackPanel Grid.Row="3" Grid.Column="1">
+                <TextBlock Text="服务内容" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormService, Mode=TwoWay}" Height="38" Watermark="如：工资代发、社保服务" />
+              </StackPanel>
+
+              <StackPanel Grid.Row="4" Grid.Column="0">
+                <TextBlock Text="在册人数" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormPeople, Mode=TwoWay}" Height="38" Watermark="0" />
+              </StackPanel>
+              <StackPanel Grid.Row="4" Grid.Column="1">
+                <TextBlock Text="待处理事项" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormPending, Mode=TwoWay}" Height="38" Watermark="0" />
+              </StackPanel>
+
+              <StackPanel Grid.Row="5" Grid.Column="0">
+                <TextBlock Text="税务登记" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding FormTax, Mode=TwoWay}" Height="38" Watermark="如：已登记" />
+              </StackPanel>
+              <StackPanel Grid.Row="5" Grid.Column="1">
+                <TextBlock Text="核对状态" Classes="col" Margin="0,0,0,6" />
+                <ComboBox ItemsSource="{Binding CustomerStates}"
+                          SelectedItem="{Binding FormState, Mode=TwoWay}" Height="38"
+                          HorizontalAlignment="Stretch" Background="{DynamicResource Bg3}" />
+              </StackPanel>
+            </Grid>
+
+            <TextBlock Text="{Binding FormError}" IsVisible="{Binding HasFormError}" TextWrapping="Wrap"
+                       FontSize="12" Foreground="{StaticResource Red}" Margin="0,14,0,0" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,18,0,0">
+              <Button Content="取消" Height="36" Padding="18,0" Command="{Binding CancelCustomerFormCommand}" />
+              <Button Classes="pri" Content="保存并写入本地" Height="36" Padding="18,0"
+                      Command="{Binding SaveCustomerCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Panel>
+
+      <Panel IsVisible="{Binding IsTaskFormOpen}" Background="#B3060810">
+        <Border Width="620" Background="{DynamicResource Bg2}" BorderBrush="{DynamicResource Line}"
+                BorderThickness="1" CornerRadius="16" Padding="24,22"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BoxShadow="0 18 48 #99000000">
+          <StackPanel>
+            <TextBlock Text="新建待办" FontSize="18" FontWeight="Bold" Foreground="{StaticResource Text0}" />
+            <TextBlock Text="保存后状态为「待处理」，会自动切回待处理筛选并写入本地缓存。"
+                       Classes="col" Margin="0,8,0,18" TextWrapping="Wrap" />
+
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                  ColumnSpacing="12" RowSpacing="14">
+              <StackPanel Grid.Row="0" Grid.ColumnSpan="2">
+                <TextBlock Text="待办标题 *" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding TaskFormTitle, Mode=TwoWay}" Height="38"
+                         Watermark="如：核对结果归档确认" />
+              </StackPanel>
+
+              <StackPanel Grid.Row="1" Grid.Column="0">
+                <TextBlock Text="类型" Classes="col" Margin="0,0,0,6" />
+                <ComboBox ItemsSource="{Binding TaskKinds}" SelectedItem="{Binding TaskFormKind, Mode=TwoWay}"
+                          Height="38" HorizontalAlignment="Stretch" Background="{DynamicResource Bg3}" />
+              </StackPanel>
+              <StackPanel Grid.Row="1" Grid.Column="1">
+                <TextBlock Text="期限" Classes="col" Margin="0,0,0,6" />
+                <ComboBox ItemsSource="{Binding TaskDues}" SelectedItem="{Binding TaskFormDue, Mode=TwoWay}"
+                          Height="38" HorizontalAlignment="Stretch" Background="{DynamicResource Bg3}" />
+              </StackPanel>
+
+              <StackPanel Grid.Row="2" Grid.ColumnSpan="2">
+                <TextBlock Text="关联客户" Classes="col" Margin="0,0,0,6" />
+                <ComboBox ItemsSource="{Binding CustomerOptions}"
+                          SelectedItem="{Binding TaskFormCustomer, Mode=TwoWay}"
+                          Height="38" HorizontalAlignment="Stretch" Background="{DynamicResource Bg3}" />
+              </StackPanel>
+
+              <StackPanel Grid.Row="3" Grid.ColumnSpan="2">
+                <TextBlock Text="说明" Classes="col" Margin="0,0,0,6" />
+                <TextBox Text="{Binding TaskFormNote, Mode=TwoWay}" Height="76" AcceptsReturn="True"
+                         TextWrapping="Wrap" Watermark="补充说明（可空）" />
+              </StackPanel>
+            </Grid>
+
+            <TextBlock Text="{Binding TaskFormError}" IsVisible="{Binding HasTaskFormError}" TextWrapping="Wrap"
+                       FontSize="12" Foreground="{StaticResource Red}" Margin="0,14,0,0" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,18,0,0">
+              <Button Content="取消" Height="36" Padding="18,0" Command="{Binding CancelTaskFormCommand}" />
+              <Button Classes="pri" Content="保存并写入本地" Height="36" Padding="18,0"
+                      Command="{Binding SaveTaskCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Panel>
     </Panel>
   </Grid>
 </UserControl>

@@ -18,7 +18,43 @@
 | 运行 | `dotnet run`；登录框任意非空账号密码即可进入（无后端校验） |
 | 当前模块 | 一级入口为 工作台 / 审批 / 客户 / Workflow / 设置；文档、音乐模块已在 rail 中移除，代码仍保留 |
 | 页面状态 | 工作区六个页面由 `AdminPage` 枚举 + `AdminViewModel.Go(page)` 切换，`IsWorkbench` / `IsCustomers` / `IsDetail` / `IsApproval` / `IsWorkflow` / `IsKpi` 六个派生 bool 控制显隐 |
-| 本地存储 | `Dome/Aster/Services/LocalCache.cs` + 运行期文件 `Dome/Aster/AppData/local-cache.json`（**已在 .gitignore 中忽略**）：登录记忆、窗口尺寸，以及工作区全部数据（客户 / 详情四页签 / 待办 / KPI / 对话）；**界面内容完全由该文件决定，代码里无演示数据** |
+| 本地存储 | `Dome/Aster/Services/LocalCache.cs` + 运行期文件 `Dome/Aster/AppData/local-cache.json`（**已在 .gitignore 中忽略**）：登录记忆、窗口尺寸，以及工作区全部数据（客户 / 详情四页签 / 待办 / KPI / 对话）；**界面内容完全由该文件决定，代码里无演示数据**；界面上可新建客户 / 待办 / 指标，也可改审批状态与对话 |
+
+---
+
+## 2026-10-26
+
+### 12. 空工作区可在界面上新建写入（客户 / 待办 / 指标），数据全部留在本机
+
+- **改动**：v2 把工作区数据搬进缓存文件之后，界面只能读不能写 —— 新环境第一次打开是一片空态，
+  想有内容必须自己编辑 `local-cache.json`。本次补齐「写入端」：客户页加「＋ 新建客户」（6 行表单浮层）、
+  审批页加「＋ 新建待办」（4 行表单浮层）、KPI 页加内联「新增指标」一行。三条路径都是
+  **校验 → 改内存集合 → 刷新列表 → 整体写回缓存 → 关表单**，全流程只碰本机文件，不联网。
+- **文件**：`Dome/Aster/ViewModels/AdminViewModel.cs`（+约 380 行：表单状态、7 个命令、3 个 Save 方法、编号生成）、
+  `Dome/Aster/Views/AdminView.axaml`（两个模态浮层 + 三处入口 + 空态文案 + KPI 空态）、
+  `.gitignore`（新增「示例数据」段：`samples/`、`*.sample.json`）、`README.md`、`CHANGELOG.md`。
+- **实现要点**
+  - **表单字段全存 string**：TextBox / ComboBox 绑的都是字符串，数字转换只在 `SaveCustomer` 里做一次
+    （`TryParseCount`：空串当 0、非数字或负数退回报错）。这样「空表单直接保存」也能成功，非法输入不会被静默吃掉。
+  - **写盘顺序固定**：先改集合、再 `RefreshXxx`、再 `SaveWorkspace()`、最后关表单。反过来会出现
+    「文件里有、界面还没有」的一帧，且写失败时更难察觉。`SaveWorkspace` 走 `SaveSoon`（700ms 防抖、整体写回）。
+  - **编号自增与查重**：`NextCustomerCode()` 扫现有 `KH-xxx` 取最大值 +1（三位补零）；用户手填编号会查重，
+    重了就报错 —— 列表里两行同编号会让「按编号定位」全部指错。
+  - **客户下拉随数据变**：`CustomerOptions` 首项固定「（不关联客户）」占位（ComboBox 不能绑 null 项），
+    新建客户后调 `RefreshCustomerOptions()` 重建，并还原原来的选中项（选中项不在列表时退回第一项，避免空白）。
+  - **新建待办后切回「待处理」筛选**：新任务状态固定「待处理」，如果用户正停在「全部记录」，不切回来就看不到刚建的那条。
+  - **计算属性手动补通知**：`HasFormError` / `HasTaskFormError` / `HasMetricFormError` / `HasMetrics` 都不是自动属性，
+    setter 里或使用处必须 `OnPropertyChanged` —— 否则空态提示与错误行不会出现/消失。
+  - **KPI 用内联行而不是弹窗**：只有三个短字段，弹一层浮层反而更重；客户/待办字段多，才需要模态卡片。
+- **注意**
+  - 只能**新建**，还不能编辑或删除已有条目（`CustomerItem` 的字段都是 init-only，改值要新建实例再替换，
+    属于下一步工作）；批量修改仍然建议关掉程序后编辑文件。
+  - 新建客户的详情页四页签（人员 / 核对 / 文件）是空的，只写了一条「新建客户档案」到「最近更新」。
+  - 界面上没有任何网络调用（全工程搜不到 `HttpClient` / `WebRequest` / `Socket`），
+    缓存目录 `Dome/Aster/AppData/` 与示例数据 `samples/` 都在 `.gitignore` 里，不会推到远端。
+- **验证**：`dotnet build` 0 warning 0 error；用临时自测入口（`ASTER_SELFTEST=1`，验证后已移除）构造
+  `AdminViewModel` + `AdminView` 并依次执行三个新建命令，控制台无任何绑定错误，`local-cache.json` 里出现
+  客户（`KH-001`）、待办（`待处理`）、指标三条记录；清空缓存后正常启动，工作区回到空态且不报错。
 
 ---
 
