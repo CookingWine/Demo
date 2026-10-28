@@ -1,7 +1,7 @@
 // =============================================================================
-// AdminView.axaml.cs：AdminView 的 code-behind，只做 View 层无法用绑定表达的三件事
+// AdminView.axaml.cs：AdminView 的 code-behind，只做 View 层无法用绑定表达的四件事
 // 1) 宽度：窗口尺寸变化时把各页面内容列收敛到 min(1080, 宽 - 96) 并居中；
-// 2) 滚动：工作台对话集合一有新消息就滚到底；
+// 2) 滚动：工作台对话集合一有新消息就滚到底（AI 流式刷新走 VM 的 ChatContentAppended 事件）；
 // 3) 输入：Enter 发送、Shift+Enter 换行（Avalonia 的 TextBox 默认把 Enter 当换行）。
 // =============================================================================
 
@@ -43,10 +43,20 @@ public partial class AdminView : UserControl
         // 步骤 1：先交给基类，DataContext 到这一步已经是新值。
         base.OnDataContextChanged(e);
         // 步骤 2：退订旧的、记住新的、订阅新的。顺序固定，保证同一时刻这个视图只挂在一个 VM 上。
-        if (_vm is not null) _vm.Messages.CollectionChanged -= OnMessagesChanged;
+        // ChatContentAppended 是 AI 流式刷新专用事件：流式期间集合不增元素，CollectionChanged
+        // 不会响，VM 在每次合并刷新正文后发它，视图收到同样滚到底。
+        if (_vm is not null)
+        {
+            _vm.Messages.CollectionChanged -= OnMessagesChanged;
+            _vm.ChatContentAppended -= OnChatContentAppended;
+        }
 
         _vm = DataContext as AdminViewModel;
-        if (_vm is not null) _vm.Messages.CollectionChanged += OnMessagesChanged;
+        if (_vm is not null)
+        {
+            _vm.Messages.CollectionChanged += OnMessagesChanged;
+            _vm.ChatContentAppended += OnChatContentAppended;
+        }
 
         // 步骤 3：延后滚到底。DataContext 刚变时视觉树往往还没 Measure/Arrange，
         // ScrollViewer 的 Extent 与 Viewport 都还是 0，此刻 ScrollToEnd 等于原地不动。
@@ -64,6 +74,12 @@ public partial class AdminView : UserControl
     // 结果等价（都是滚到底），代价只是几次多余调用。
     // 监听的是工作台的 Messages，与客户详情 / 审批列表无关。
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => Dispatcher.UIThread.Post(() => ScrollToEnd("ChatScroll"), DispatcherPriority.Loaded);
+
+    // AI 流式刷新的滚动入口：VM 每 33ms 合并一批增量就发一次事件。事件一定在 UI 线程上
+    // （VM 的刷新计时器 Tick），这里仍然走 Post，让滚动排在布局之后执行 —— 否则新文本
+    // 还没参与 Measure，Extent 未变，ScrollToEnd 等于空转。
+    private void OnChatContentAppended(object? sender, EventArgs e)
         => Dispatcher.UIThread.Post(() => ScrollToEnd("ChatScroll"), DispatcherPriority.Loaded);
 
     // 按名字字符串查找。相对于直接使用 x:Name 生成的字段，这种写法把名字退化成运行期字符串：

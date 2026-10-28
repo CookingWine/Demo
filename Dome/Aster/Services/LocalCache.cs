@@ -85,6 +85,9 @@ public sealed class LocalCacheData
     /// <summary>上一次正常状态下的窗口尺寸。</summary>
     public WindowCache Window { get; set; } = new();
 
+    /// <summary>AI 模型接入配置（OpenAI 兼容协议的端点、密钥与模型名）。</summary>
+    public AiConfigCache Ai { get; set; } = new();
+
     /// <summary>工作区的全部展示数据 —— 界面画什么完全由它决定。</summary>
     public WorkspaceCache Workspace { get; set; } = new();
 }
@@ -294,6 +297,29 @@ public sealed class WindowCache
 
     /// <summary>上次关闭时的窗口高度（逻辑像素）；0 表示未记录。</summary>
     public double Height { get; set; }
+}
+
+/// <summary>
+/// AI 模型接入配置：OpenAI 兼容协议的端点、密钥与模型名。
+/// ApiKey 为空 = 未配置，工作台对话退回「未配置」提示，不发请求。
+/// </summary>
+// BaseUrl 存「根地址」而不是完整的 /chat/completions 路径：
+// DeepSeek 是 https://api.deepseek.com、通义兼容模式是 https://dashscope.aliyuncs.com/compatible-mode/v1、
+// Ollama 是 http://localhost:11434/v1，各家的路径前缀本来就不一样，拼路径的责任放在
+// AiChatService 里（自动补 /chat/completions，容忍末尾斜杠）。
+// 密钥明文落盘是与 local-cache.json 同级的取舍：文件含账号名与操作记录且已被 .gitignore 忽略，
+// 本机留存即可；该文件规则「不存密码」仅针对登录密码，AI Key 是用户自己填的服务凭据，
+// 想清掉走设置页或删文件。默认值指向 DeepSeek，与 README 的演示语境一致。
+public sealed class AiConfigCache
+{
+    /// <summary>API 密钥；空串表示未配置。</summary>
+    public string ApiKey { get; set; } = string.Empty;
+
+    /// <summary>OpenAI 兼容端点的根地址，如 https://api.deepseek.com。</summary>
+    public string BaseUrl { get; set; } = "https://api.deepseek.com";
+
+    /// <summary>模型名，如 deepseek-chat / deepseek-reasoner / qwen-plus。</summary>
+    public string Model { get; set; } = "deepseek-chat";
 }
 
 /// <summary>
@@ -572,6 +598,7 @@ public static class LocalCache
     {
         data.Login ??= new LoginCache();
         data.Window ??= new WindowCache();
+        data.Ai ??= new AiConfigCache();
         data.Workspace ??= new WorkspaceCache();
 
         var ws = data.Workspace;

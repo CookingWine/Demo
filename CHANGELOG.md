@@ -18,11 +18,76 @@
 | 运行 | `dotnet run`；登录框任意非空账号密码即可进入（无后端校验） |
 | 当前模块 | 一级入口为 工作台 / 审批 / 客户 / Workflow / 设置；文档、音乐模块已在 rail 中移除，代码仍保留 |
 | 页面状态 | 工作区六个页面由 `AdminPage` 枚举 + `AdminViewModel.Go(page)` 切换，`IsWorkbench` / `IsCustomers` / `IsDetail` / `IsApproval` / `IsWorkflow` / `IsKpi` 六个派生 bool 控制显隐 |
-| 本地存储 | `Dome/Aster/Services/LocalCache.cs` + 运行期文件 `Dome/Aster/AppData/local-cache.json`（**已在 .gitignore 中忽略**）：登录记忆、窗口尺寸，以及工作区全部数据（客户 / 详情四页签 / 待办 / KPI / 对话）；**界面内容完全由该文件决定，代码里无演示数据**；界面上可新建客户 / 待办 / 指标，也可改审批状态与对话 |
+| AI 对话 | 工作台 Agent 已接真实大模型：`Services/AiChatService.cs` 走 OpenAI 兼容协议（SSE 流式 + Function Calling），在「设置 → AI 模型」配 API Key / Base URL / 模型名（存 local-cache.json 的 `ai` 段）；未配置 Key 时只提示不发请求 |
+| 本地存储 | `Dome/Aster/Services/LocalCache.cs` + 运行期文件 `Dome/Aster/AppData/local-cache.json`（**已在 .gitignore 中忽略**）：登录记忆、窗口尺寸、AI 接入配置，以及工作区全部数据（客户 / 详情四页签 / 待办 / KPI / 对话）；**界面内容完全由该文件决定，代码里无演示数据**；界面上可新建客户 / 待办 / 指标，也可改审批状态与对话 |
 
 ---
 
 ## 2026-10-28
+
+### 16. 工作台输入框工具行增加会话级模型选择器
+
+- **改动**：把工具行右侧「5.5 Medium」静态装饰换成真的模型下拉（ghost 风格 ComboBox）。
+  清单 = 内置预设（deepseek-chat / deepseek-reasoner / qwen-plus / kimi-k2）∪ 设置页自定义模型，
+  OrdinalIgnoreCase 合并去重；选中**仅当前会话生效**——只写内存字段、不碰 local-cache.json，
+  重启后回落设置页的全局默认模型；AI 回复期间选择器禁用（IsEnabled 绑 !IsAiBusy），
+  避免同一轮工具循环前后段用了不同模型。
+- **文件**：`Dome/Aster/Services/AiChatService.cs`（StreamChatAsync 增加可选参数 modelOverride）、
+  `Dome/Aster/ViewModels/AdminViewModel.cs`（PresetModels / ModelOptions / SelectedModel 可写属性 /
+  RefreshModelOptions；RunAgentLoopAsync 传会话模型）、
+  `Dome/Aster/Views/AdminView.axaml`（工具行 ComboBox + modelPick ghost 样式）、`CHANGELOG.md`、`README.md`。
+- **实现要点**
+  - **服务层向后兼容**：modelOverride 是带默认值的尾参（null），非空时覆盖请求体的 model 字段，
+    留空走设置页默认；只有 AdminViewModel 一处调用方，改签名无兼容面。
+  - **SelectedModel 是可写属性而不是命令**：getter 回落链「会话字段 → 设置默认 → 预设首项」，
+    setter 只写 `_sessionModel` 并发通知——与 Filter/TaskFilter 的 setter 模式一致，
+    ComboBox 的 SelectedItem TwoWay 直绑即可，不需要 SelectionChanged 事件或逐项 Command
+    （ComboBoxItem 由 ComboBox 内部生成，本来也没法逐项绑命令）。
+  - **样式只覆盖控件自身**：`ComboBox.modelPick` 改透明底/无边框/26 高/13 号字/Text2 前景，
+    不动全局 ComboBoxItem 样式，下拉弹层仍走全局紧凑菜单样式；
+    悬停态用 `:pointerover /template/ Border#ContentBackground` 只描 8% 白，不出现突兀色块。
+  - **已知边界**：切换到其它服务商（如通义）时，预设里的 deepseek 系模型名会得到 HTTP 4xx
+    并以红色错误消息呈现——预设清单离线可用的代价，选设置里填的模型名即可避开。
+- **验证**：`dotnet build` 0 warning 0 error；冒烟运行 12 秒启动无异常。
+
+### 15. 工作台 Agent 接入真实大模型：OpenAI 兼容流式对话 + Function Calling 操作工作区
+
+- **改动**：工作台的 Agent 对话从「600ms 定时器 + 固定话术」升级为真实大模型：
+  走 OpenAI 兼容协议（DeepSeek / Kimi / 通义兼容模式 / Ollama 均可），SSE 流式逐字输出、
+  带多轮上下文；模型可通过 Function Calling 真实操作工作区——查询客户 / 待办、新建客户、
+  新建待办、审批通过 / 退回，操作与界面按钮共用同一批数据函数并写回 `local-cache.json`。
+  设置浮层新增「AI 模型」分区（API Key / Base URL / 模型名 + 保存），配置即存即生效。
+- **文件**：`Dome/Aster/Services/AiChatService.cs`（新增，约 380 行）、
+  `Dome/Aster/Services/LocalCache.cs`（+AiConfigCache 配置段与 Normalize 兜底）、
+  `Dome/Aster/ViewModels/AdminViewModel.cs`（ChatMessage 改可变通知；Send 换成 AI 循环；
+  新增 5 个工具与调度器；SaveWorkspace 跳过错误消息）、
+  `Dome/Aster/ViewModels/SettingsViewModel.cs`（新增 BuildAi 分区）、
+  `Dome/Aster/Views/AdminView.axaml(.cs)`（流式消息样式 + ChatContentAppended 滚动事件）、
+  `README.md`、`CHANGELOG.md`。
+- **实现要点**
+  - **零第三方依赖不破**：AI 客户端只用 BCL 的 `HttpClient` + `System.Text.Json` 手写 SSE
+    行解析（`data:` 行 → 增量 chunk → `[DONE]`），tool_calls 按 `index` 聚合分片
+    （id / name / arguments 都可能拆在多个 chunk 里）；`HttpClient.Timeout=Infinite`，
+    单轮 120s 超时用 linked CTS 控制，否则长流式回复会被默认 100s 腰斩。
+  - **流式上屏**：`ChatMessage` 从 init-only 改为继承 ObservableObject（Text 可变可通知）；
+    增量先缓冲，UI 线程 33ms 合并刷新一次（onDelta 在后台读流线程，经
+    `Dispatcher.UIThread.Post` 搬运），首段增量整段替换「正在输入…」占位文案；
+    正文变了但集合没变，View 滚动靠 VM 新事件 `ChatContentAppended`（code-behind 订阅）。
+  - **工具循环**：`Send` → 快照历史（system 提示 + 最近 20 条，剔除错误 / 工具回执 / 占位消息）
+    → 每轮流式请求；返回 tool_calls 则先把 assistant 声明回放进对话（服务端按
+    tool_call_id 对账），执行后以 role=tool 回传结果，最多 8 轮防死循环。
+    五个工具：`list_customers` / `list_tasks` / `create_customer` / `create_task` / `decide_task`，
+    执行体复用 `RefreshCustomers` / `RefreshTasks` / `NextCustomerCode` / `SaveWorkspace` 等现有函数，
+    刻意不走 `Go(page)`、不碰表单字段（Form*）。
+  - **防重入**：`IsAiBusy` 是唯一真值，`SendCommand` 的 CanExecute 绑它
+    （RelayCommand 无自动重查，setter 里手动 `RaiseCanExecuteChanged`），Enter 路径在 Send 内再拦一道。
+  - **缓存兼容**：`LocalCacheData` 新增 `Ai` 段但 `schemaVersion` 保持 2——旧文件缺字段时
+    反序列化取属性默认值，任何一次落盘会把 `ai` 段补进文件，老数据无损升级。
+  - **错误处理**：未配置 Key / 网络失败 / 超时都转成红色错误消息（`IsError`，作者名与正文变红），
+    错误消息不落盘、不进上下文；工具参数非法返回结构化 `{ok:false}` 让模型自己纠正。
+- **验证**：`dotnet build` 0 warning 0 error；冒烟运行 12 秒无异常退出，
+  `local-cache.json` 自动补出 `"ai"` 段（默认 deepseek 端点），`schemaVersion` 仍为 2。
+  真实对话需在「设置 → AI 模型」填入有效 API Key 后于工作台输入框验证。
 
 ### 14. 验证本地数据不入库 + 模拟首次启动自动建文件，还原误改的 BuildAvaloniaApp 可见性 — `76e3091`
 

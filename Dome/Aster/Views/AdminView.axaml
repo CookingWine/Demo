@@ -95,6 +95,28 @@
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
+    <!-- 模型选择器（工作台输入框工具行）：ghost 外观覆盖全局 ComboBox 样式
+         （Controls.axaml 里全局是 W06 底 + 1px Line2 边 + MinHeight 30，适合表单行；
+         工具行里要的是与「5.5 Medium」一样的轻量文字标签观感）。
+         只覆盖 ComboBox 控件自身的属性，不动全局 ComboBoxItem 样式 —— 展开的下拉列表
+         仍走全局紧凑菜单样式，与设置页的弹层观感一致。
+         :pointerover /template/ Border#ContentBackground 是 Fluent 模板里承载底色的那层
+         Border：悬停时不给整块底色，只描一圈 8% 白，避免工具行出现突兀的色块；
+         disabled（AI 回复中）由 Fluent 主题自带的降透明度处理，无需额外样式。 -->
+    <Style Selector="ComboBox.modelPick">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="MinWidth" Value="86" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{DynamicResource Text2}" />
+    </Style>
+    <Style Selector="ComboBox.modelPick:pointerover /template/ Border#ContentBackground">
+      <Setter Property="Background" Value="#0DFFFFFF" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
     <Style Selector="Border.note">
       <Setter Property="Background" Value="#0F6C8BFF" />
       <Setter Property="BorderBrush" Value="#266C8BFF" />
@@ -227,10 +249,15 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type vm:ChatMessage}">
                     <Grid Margin="0,0,0,18">
+                      <!-- Agent 分支的作者名与正文颜色改绑 VM 计算属性：
+                           DisplayName 在流式期间显示「Agent · 正在输入…」；
+                           AuthorBrush / TextBrush 让错误消息整条变红、工具回执变弱灰。
+                           普通消息的取值与原来的 StaticResource（Text2 / Text0）完全一致，
+                           视觉上零变化。 -->
                       <StackPanel IsVisible="{Binding IsAgent}" MaxWidth="720" HorizontalAlignment="Left">
-                        <TextBlock Text="{Binding Author}" FontSize="12" FontWeight="Bold"
-                                   Foreground="{StaticResource Text2}" Margin="0,0,0,7" />
-                        <TextBlock Text="{Binding Text}" FontSize="14.5" Foreground="{StaticResource Text0}"
+                        <TextBlock Text="{Binding DisplayName}" FontSize="12" FontWeight="Bold"
+                                   Foreground="{Binding AuthorBrush}" Margin="0,0,0,7" />
+                        <TextBlock Text="{Binding Text}" FontSize="14.5" Foreground="{Binding TextBrush}"
                                    TextWrapping="Wrap" LineHeight="23" />
                       </StackPanel>
                       <Border IsVisible="{Binding IsUser}" MaxWidth="600" HorizontalAlignment="Right"
@@ -280,15 +307,25 @@
                 <TextBlock Text="Full access" FontSize="11.5" FontWeight="Medium"
                            Foreground="{DynamicResource Amber}" />
               </Border>
-              <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"
-                          VerticalAlignment="Center" Margin="0,0,14,0">
-                <TextBlock Text="5.5 Medium" FontSize="13" Foreground="{StaticResource Text2}" />
-                <ctrl:Icon Data="{x:Static ctrl:Icons.ChevronDown}" Width="11" Height="11"
-                           Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
-              </StackPanel>
-              <!-- 右侧工具行：+ 附件、权限标签、模型名都是静态装饰，只有最后的按钮可点。
-                   发送按钮绑 SendCommand，和 Enter 键走同一个入口；命令没有 CanExecute，
-                   空草稿由 Send 内部早退兜住，所以按钮始终可点。 -->
+              <!-- 模型选择器：原「5.5 Medium」静态装饰改成了真的下拉。
+                   ItemsSource 绑预设∪设置自定义的合并清单（ModelOptions）；
+                   SelectedItem 双向绑 SelectedModel：写的是 VM 的会话字段（仅当前会话生效，
+                   不写 local-cache.json，重启回落设置页默认）。Fluent 模板自带下拉箭头，
+                   不再需要单独的 ChevronDown 图标；ghost 外观由 Classes="modelPick" 覆盖
+                   （样式声明见本文件顶部 UserControl.Styles）。
+                   IsEnabled 绑 !IsAiBusy：AI 回复期间禁止换模型，避免同一轮工具循环
+                   前后段用了不同模型。 -->
+              <ComboBox Grid.Column="3" Classes="modelPick"
+                        VerticalAlignment="Center" Margin="0,0,14,0"
+                        IsEnabled="{Binding !IsAiBusy}"
+                        ToolTip.Tip="选择本次会话使用的模型（仅当前会话生效）"
+                        ItemsSource="{Binding ModelOptions}"
+                        SelectedItem="{Binding SelectedModel, Mode=TwoWay}" />
+              <!-- 右侧工具行：+ 附件、权限标签是静态装饰；模型下拉仅当前会话生效（不写缓存），
+                   AI 回复期间 IsEnabled 绑 !IsAiBusy 禁止切换。只有最后的发送按钮提交对话。
+                   发送按钮绑 SendCommand，和 Enter 键走同一个入口；CanExecute 绑的是 !IsAiBusy，
+                   AI 回复期间按钮置灰（RelayCommand 的 CanExecuteChanged 由 IsAiBusy setter 手动触发），
+                   空草稿仍由 Send 内部早退兜住。 -->
               <Button Grid.Column="4" Width="42" Height="36" Padding="0" CornerRadius="8"
                       Background="{StaticResource PrimaryGrad}" BorderThickness="0"
                       Command="{Binding SendCommand}" ToolTip.Tip="发送（Enter）">

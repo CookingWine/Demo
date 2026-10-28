@@ -17,8 +17,8 @@
 | **工作台** | 问候区、四张指标卡、最近编辑、快捷操作、继续播放、今日节奏面积图 |
 | **文档**（暂未启用，代码保留） | 四级目录树（分组折叠 / 关键字搜索 / 按收藏·最近·未保存·回收站筛选）、多标签页、行号编辑器、Markdown 实时预览、编辑·分栏·预览三档视图 |
 | **音乐**（暂未启用，代码保留） | 歌单（全部/收藏/最近/专辑）、旋转唱片舞台、歌词、可拖动进度与音量、随机·循环、音频可视化柱状图、播放队列 |
-| **工作区** | 侧栏四个入口：**工作台**（3 张快捷卡 + Agent 对话 + 指令输入框）、**协作与审批**（待办列表，可新建、逐条通过/退回）、**客户工作空间**（搜索 + 筛选 + 客户列表，可新建 / 编辑 / 删除客户；客户详情含基础资料 / 人员记录 / 核对记录 / 文件与产出四个页签）、**Workflow**（确认范围 → 复核差异 → 归档 三步交叉验证）；KPI 与考勤为独立页，可新增指标 |
-| **设置** | 全屏模态，账号 / 通用 / 数据看板 / 成员与权限 / 通知 / 存储与备份 / 关于 七个分区 |
+| **工作区** | 侧栏四个入口：**工作台**（3 张快捷卡 + Agent 对话 + 指令输入框，对话已接真实大模型，Agent 可用工具直接新建客户 / 待办、审批、查询；输入框右下角可切换会话模型，预设 + 设置自定义合并）、**协作与审批**（待办列表，可新建、逐条通过/退回）、**客户工作空间**（搜索 + 筛选 + 客户列表，可新建 / 编辑 / 删除客户；客户详情含基础资料 / 人员记录 / 核对记录 / 文件与产出四个页签）、**Workflow**（确认范围 → 复核差异 → 归档 三步交叉验证）；KPI 与考勤为独立页，可新增指标 |
+| **设置** | 全屏模态，账号 / 通用 / 数据看板 / 成员与权限 / 通知 / **AI 模型** / 存储与备份 / 关于 八个分区 |
 
 > 当前构建只开放 **工作区** 与 **设置**：登录后默认进入「工作台」，左侧一级导航不再列出文档与音乐（视图与 ViewModel 仍在仓库中，去掉入口屏蔽即可恢复）。
 >
@@ -120,7 +120,8 @@ RID=osx-x64 ./Dome/make-app.sh        # Intel 机器
         ├── App.axaml(.cs)       Fluent 深色主题、资源与样式装配
         ├── Assets/              应用图标：aster.ico / aster.icns / aster-*.png
         ├── Services/
-        │   └── LocalCache.cs    本地缓存读写（local-cache.json，唯一的本地数据存储）
+        │   ├── LocalCache.cs    本地缓存读写（local-cache.json，唯一的本地数据存储）
+        │   └── AiChatService.cs OpenAI 兼容流式客户端（SSE + Function Calling，零第三方依赖）
         ├── AppData/             运行时生成，不入库：local-cache.json（已被 .gitignore 忽略）
         ├── Styles/
         │   ├── Theme.axaml      设计令牌 + 6 个自定义 ControlTheme
@@ -158,6 +159,7 @@ RID=osx-x64 ./Dome/make-app.sh        # Intel 机器
   "updatedAt": "2026-10-25T19:15:16+08:00",
   "login":  { "remember": true, "userName": "张客服", "lastLoginAt": "..." },   // 不存密码
   "window": { "width": 1320, "height": 850 },                                   // 只记尺寸
+  "ai":     { "apiKey": "sk-…", "baseUrl": "https://api.deepseek.com", "model": "deepseek-chat" },  // OpenAI 兼容接入配置
   "workspace": {
     "customers": [{
       "id": "c1", "name": "青禾新能源有限公司", "short": "青禾新能源", "code": "KH-001",
@@ -235,6 +237,13 @@ python3 tools/make_icon.py --preview   # --preview 额外输出一张多尺寸�
 - **零第三方 UI 依赖**：未引入 AvaloniaEdit / Markdig / LibVLCSharp / LiveCharts。
   编辑器用 `TextBox` + 自绘行号（滚动偏移同步），预览把 Markdown 解析成控件树，
   图表与可视化全部走 `DrawingContext`，因此 `restore` 只需要 Avalonia 官方包。
+- **AI 对话同样零依赖**：工作台 Agent 走 OpenAI 兼容协议（`Services/AiChatService.cs`），
+  用 BCL 的 `HttpClient` + `System.Text.Json` 手写 SSE 流式解析与 Function Calling 聚合，
+  不引入任何 AI SDK。模型可调用 5 个工具真实操作工作区（查询客户 / 待办、新建客户 / 待办、审批），
+  操作与界面按钮共用同一批数据函数并写回 `local-cache.json`。
+  在「设置 → AI 模型」里配 API Key / Base URL / 模型名即可接入 DeepSeek、Kimi、通义兼容模式、Ollama 等；
+  输入框右下角还能切换**会话级模型**（预设清单 + 设置自定义合并，仅当前会话生效，重启回落默认）；
+  未配置 Key 时对话只给引导提示，**不发任何网络请求**。
 - **MVVM**：手写 `ObservableObject` / `RelayCommand`，列表项自带命令与选中态，
   视图通过 `DataTemplate` 按 ViewModel 类型自动匹配。
 - **无边框窗口**：`SystemDecorations=None` + 透明窗口，自绘标题栏负责拖拽、双击最大化与窗口按钮；
@@ -246,13 +255,15 @@ python3 tools/make_icon.py --preview   # --preview 额外输出一张多尺寸�
 ## 已知限制
 
 - 音乐模块为**交互演示**：进度随计时器推进、唱片旋转、柱状图跳动，未接入音频解码与真实播放。
-- 管理页的 Agent 对话为本地模拟（固定回复话术，Enter 或发送按钮触发），未接大模型。
+- Agent 对话已接真实大模型（OpenAI 兼容协议 + Function Calling）：流式逐字输出、连续多轮上下文
+  （最多 20 条）、工具调用上限 8 轮、单次请求超时 120 秒；未配置 Key 时只给引导提示，不发请求。
 - 文档数据、成员、订单等均为内置演示数据，未接后端。
 - 工作区数据全部来自本地缓存文件（客户 / 详情四页签 / 待办 / KPI / 对话），**没有内置演示数据**；
   文件为空时界面就是空的。界面上可以**新建、编辑、删除**客户，新建待办与 KPI 指标，也能改审批状态与对话；
   但待办条目本身还不能编辑/删除，客户详情四页签（人员 / 核对 / 文件）仍需编辑文件补齐。
 - 删除客户**不可撤销**（没有软删除与回收站），且不会连带删除关联待办。
-- 全应用**没有任何网络请求**（无 HttpClient / WebSocket / 遥测），数据只写本机 JSON；
+- 全应用唯一的网络请求是 AI 对话（`Services/AiChatService.cs` → 用户配置的 OpenAI 兼容端点），
+  无遥测上报；其余数据只写本机 JSON；
   缓存与示例数据（`AppData/`、`samples/`）都在 `.gitignore` 里，不会随代码上传。
 - 工作区数据由程序整体写回（发消息 / 审批时）：**运行期编辑文件会被内存覆盖**，手工维护请先关闭程序。
 - Markdown 预览覆盖标题、引用、列表、表格、代码块与行内加粗/代码，暂不支持图片与嵌套列表。

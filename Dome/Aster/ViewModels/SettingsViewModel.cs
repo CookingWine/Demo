@@ -11,12 +11,12 @@
 // ============================ 数据流链路 ============================
 // 一次点击从左栏传到右栏某个控件的完整回路，共 7 跳。每一跳都标出「谁通知谁」：
 //
-// 跳 1  Sections（左栏 7 项）
+// 跳 1  Sections（左栏 8 项）
 //       本类构造时一次性 Add 进去的 ObservableCollection<SettingSection>，运行期不再增删，
 //       所以左栏的 ItemsControl 只会渲染一次，之后只靠元素的 IsSelected 变色。
 //
 // 跳 2  点按钮 → SelectCommand（本类构造函数里 new 的 RelayCommand）
-//       Button.Command 绑的是「分区对象自己的 Command」（7 个分区共用同一个 SelectCommand），
+//       Button.Command 绑的是「分区对象自己的 Command」（8 个分区共用同一个 SelectCommand），
 //       CommandParameter="{Binding}" 把被点的那个 SettingSection 作为参数交出去。
 //       通知方向：视图 → VM，由 Button 主动调用 ICommand.Execute。
 //
@@ -429,7 +429,7 @@ public sealed class SettingSection : SelectableItem
 }
 
 /// <summary>
-/// 设置浮层的视图模型：构造 7 个分区、维护当前选中项、提供左栏底部文案。
+/// 设置浮层的视图模型：构造 8 个分区、维护当前选中项、提供左栏底部文案。
 /// 构造函数入参是外部传入的「退出登录」命令，见字段 _logoutCommand 的注释。
 /// </summary>
 // 生命周期：MainWindowViewModel 在构造时 new 一次（Settings 属性是只读的），此后整个进程复用同一个实例。
@@ -457,7 +457,7 @@ public sealed class SettingsViewModel : ObservableObject
     // 谁是调用者：MainWindowViewModel 的构造函数（Settings = new SettingsViewModel(LogoutCommand)），
     //   全进程只执行一次。
     // 前置状态：无。本类不依赖任何外部状态，唯一入参可以是 null。
-    // 执行完的状态：Sections 里已有 7 个分区（顺序即左栏从上到下的顺序）、
+    // 执行完的状态：Sections 里已有 8 个分区（顺序即左栏从上到下的顺序）、
     //   Current 指向第 1 个分区、Sections[0].IsSelected 为 true 其余为 false。
     // 谁会被通知：构造期还没绑任何界面，所有 PropertyChanged 都没有订阅者，等于空发；
     //   界面是在之后才通过 DataContext 拿到这个实例的，第一次读到的就是已经配好的最终状态。
@@ -467,7 +467,7 @@ public sealed class SettingsViewModel : ObservableObject
     //         `o is SettingSection s` 这层模式匹配同时做了判空与转型，
     //         参数不是 SettingSection（理论上不会发生）时静默忽略，不抛异常。
     // 步骤 3：建 SwatchCommand，做色块互斥。
-    // 步骤 4：按左栏顺序依次 Build 七个分区。顺序即业务优先级：账号 → 通用 → 看板 → 成员 → 通知 → 存储 → 关于，
+    // 步骤 4：按左栏顺序依次 Build 八个分区。顺序即业务优先级：账号 → 通用 → 看板 → 成员 → 通知 → AI 模型 → 存储 → 关于，
     //         常用项在前、信息项在最后，与设计稿一致。每次 Build 都新建独立对象，分区之间不共享行或组。
     // 步骤 5：逐个 Add 进 Sections。用 Add 而不是构造新集合：Sections 是只读属性且已初始化，
     //         Add 会触发集合变更事件；此时即使已有绑定也能逐项刷新。
@@ -501,7 +501,7 @@ public sealed class SettingsViewModel : ObservableObject
         });
 
         // 分区顺序即左栏顺序；每个 BuildXxx 独立构造成一组行，彼此不共享状态
-        // 步骤 4：七个分区在这里一次性造好。数组的先后就是左栏从上到下的顺序；
+        // 步骤 4：八个分区在这里一次性造好。数组的先后就是左栏从上到下的顺序；
         // 每个 BuildXxx 内部自己决定卡片数与行数，本构造函数不关心细节。
         var sections = new[]
         {
@@ -510,6 +510,7 @@ public sealed class SettingsViewModel : ObservableObject
             BuildBoard(),
             BuildMembers(),
             BuildNotify(),
+            BuildAi(),
             BuildStorage(),
             BuildAbout()
         };
@@ -579,7 +580,7 @@ public sealed class SettingsViewModel : ObservableObject
     //   两者都在同一次布局周期里完成，所以视觉上是「高亮和内容一起跳」，不会先亮后换。
     private void Select(SettingSection section)
     {
-        // 步骤 1：把 7 个分区的选中态全部重算一遍，只有等于 section 的那个留下 true。
+        // 步骤 1：把 8 个分区的选中态全部重算一遍，只有等于 section 的那个留下 true。
         // 用 ReferenceEquals 而不是比较 Key 字符串：分区对象构造后从不复制，
         // 引用相等就是「是不是同一个」的准确语义，也免了 Key 拼错导致的静默失效。
         // 刻意不用 ==，是为了避免将来给 SettingSection 重载相等运算符时语义被悄悄改掉。
@@ -963,11 +964,74 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// AI 模型分区：接入 OpenAI 兼容的大模型服务（DeepSeek / Kimi / 通义兼容模式 / Ollama 等）。
+    /// 三个输入行（API Key / Base URL / 模型名）+「保存配置」按钮，写入 LocalCache.Data.Ai；
+    /// 这是本类少数真正持久化的地方 —— 与工作台对话功能共用 Services.LocalCache 这一份配置。
+    /// </summary>
+    // 调用者：构造函数步骤 4，进程内只执行一次；位置在「通知」与「存储与备份」之间。
+    // 界面映射：左栏「AI 模型」；右栏 = 1 张分组卡片「接入配置」4 行（Key / URL / 模型 / 保存）
+    //   + 1 张说明卡片「使用说明」2 行（纯文案，无右侧控件）。
+    // 与其它分区的差别：其它分区的输入框只是摆设（内存态、不落盘），本分区「保存配置」
+    // 是真写盘（LocalCache.Save 立即落盘），且 AdminViewModel.Send 每次发消息都现读
+    // LocalCache.Data.Ai —— 所以保存即生效，不需要重启应用。
+    // 前置：无。后置：返回未挂载的分区对象；三个 TextValue 的实例被闭包捕获给保存命令。
+    private SettingSection BuildAi()
+    {
+        var s = new SettingSection
+        {
+            Key = "ai", Title = "AI 模型", Icon = Controls.Icons.Lightning,
+            Subtitle = "接入 OpenAI 兼容的大模型服务（DeepSeek、Kimi、通义、Ollama）",
+            Command = SelectCommand
+        };
+
+        // 步骤 1：读当前配置灌进输入框。cfg 在 Normalize 后必非 null（见 LocalCache.Normalize）。
+        var cfg = LocalCache.Data.Ai;
+        var keyBox = new TextValue { Text = cfg.ApiKey, Placeholder = "sk-…" };
+        var urlBox = new TextValue { Text = cfg.BaseUrl };
+        var modelBox = new TextValue { Text = cfg.Model };
+
+        // 步骤 2：「接入配置」组。三个输入行 + 一个保存按钮。
+        // TextValue 实例必须先存局部变量再进 Row：保存命令的闭包要读它们,
+        // 写在 Row(...) 实参里就拿不到引用了。
+        var connect = Group("接入配置");
+        connect.Rows.Add(Row("API Key", "只保存在本机的 local-cache.json，不随代码入库、不上传", keyBox));
+        connect.Rows.Add(Row("Base URL", "OpenAI 兼容端点根地址，如 https://api.deepseek.com", urlBox));
+        connect.Rows.Add(Row("模型名", "如 deepseek-chat / deepseek-reasoner / qwen-plus", modelBox));
+        connect.Rows.Add(Row("应用", "修改后点一次「保存配置」即生效，无需重启",
+            new ButtonValue
+            {
+                Text = "保存配置",
+                IsPrimary = true,
+                Command = new RelayCommand(() => SaveAiConfig(keyBox, urlBox, modelBox))
+            }));
+        s.Groups.Add(connect);
+
+        // 步骤 3：「使用说明」组，纯文案行（value 传 null，右侧留空）。
+        s.Groups.Add(Group("使用说明",
+            Row("对话入口", "工作台底部的指令输入框，Agent 可对话并直接操作工作区数据（新建客户 / 待办、审批等）", null),
+            Row("未配置时", "对话会提示先在本分区填写 API Key，不会发出网络请求", null)));
+        return s;
+    }
+
+    // 调用者：仅 BuildAi 里「保存配置」按钮的命令闭包。
+    // 做完之后：三个输入框的值修剪后写回 LocalCache.Data.Ai 并立即落盘（Save 而非 SaveSoon：
+    // 用户点「保存」就是要看到「已保存」的确定性，防抖的 700ms 在这里反而制造不确定）。
+    // BaseUrl / Model 留空时回落默认值，避免存进一个肯定发不出请求的空串。
+    private static void SaveAiConfig(TextValue keyBox, TextValue urlBox, TextValue modelBox)
+    {
+        var cfg = LocalCache.Data.Ai;
+        cfg.ApiKey = keyBox.Text.Trim();
+        cfg.BaseUrl = urlBox.Text.Trim().Length == 0 ? "https://api.deepseek.com" : urlBox.Text.Trim();
+        cfg.Model = modelBox.Text.Trim().Length == 0 ? "deepseek-chat" : modelBox.Text.Trim();
+        LocalCache.Save();
+    }
+
+    /// <summary>
     /// 关于分区：顶部 AboutCard，下面「运行环境」组展示框架/运行时/渲染后端/存储方式，
     /// 末尾 Links 追加 4 条资源链接（官网、更新日志、反馈、许可），由右栏单独渲染。
     /// </summary>
     // 调用者：构造函数步骤 4，进程内只执行一次。它是左栏最后一项，也是唯一带 Links 的分区。
-    // 界面映射：左栏第 7 项「关于」；右栏 = 顶部 AboutCard（Logo + 应用名 + 版本 + 「已是最新」）
+    // 界面映射：左栏第 8 项「关于」；右栏 = 顶部 AboutCard（Logo + 应用名 + 版本 + 「已是最新」）
     //   + 1 张分组卡片「运行环境」4 行（界面框架 / 运行时 / 渲染后端 / 数据存储）
     //   + 1 个资源区（4 条 LinkItem：官网 / 更新日志 / 反馈 / 许可），共 4 行 + 4 条链接。
     // 前置：无。后置：返回未挂载的分区对象；两次读程序集/运行时元数据，没有别的副作用。
