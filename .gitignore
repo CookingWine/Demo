@@ -36,6 +36,7 @@ desktop.ini
 
 # ---------- 工具 ----------
 .workbuddy/
+.codebuddy/
 *.log
 
 # ---------- 打包产物 ----------
