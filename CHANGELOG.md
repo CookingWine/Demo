@@ -25,7 +25,10 @@
 
 ## 2026-10-28
 
-### 16. 工作台输入框工具行增加会话级模型选择器
+### 16. 工作台输入框工具行增加会话级模型选择器 — `0dae53f`
+
+> 本条与第 15 条共用 AdminViewModel / AdminView / AiChatService 等同一批文件，
+> 无法按文件拆成两次提交，故两条记录合并为一次提交 `0dae53f`，共用同一 hash。
 
 - **改动**：把工具行右侧「5.5 Medium」静态装饰换成真的模型下拉（ghost 风格 ComboBox）。
   清单 = 内置预设（deepseek-chat / deepseek-reasoner / qwen-plus / kimi-k2）∪ 设置页自定义模型，
@@ -50,7 +53,7 @@
     并以红色错误消息呈现——预设清单离线可用的代价，选设置里填的模型名即可避开。
 - **验证**：`dotnet build` 0 warning 0 error；冒烟运行 12 秒启动无异常。
 
-### 15. 工作台 Agent 接入真实大模型：OpenAI 兼容流式对话 + Function Calling 操作工作区
+### 15. 工作台 Agent 接入真实大模型：OpenAI 兼容流式对话 + Function Calling 操作工作区 — `0dae53f`
 
 - **改动**：工作台的 Agent 对话从「600ms 定时器 + 固定话术」升级为真实大模型：
   走 OpenAI 兼容协议（DeepSeek / Kimi / 通义兼容模式 / Ollama 均可），SSE 流式逐字输出、
