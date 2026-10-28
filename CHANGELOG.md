@@ -24,7 +24,7 @@
 
 ## 2026-10-28
 
-### 14. 验证本地数据不入库 + 模拟首次启动自动建文件，还原误改的 BuildAvaloniaApp 可见性
+### 14. 验证本地数据不入库 + 模拟首次启动自动建文件，还原误改的 BuildAvaloniaApp 可见性 — `76e3091`
 
 - **改动**：三件事。① 排查「git 上传是否会把本地数据带上」——结论是不会，`Dome/Aster/AppData/`
   与 `samples/` 均已被仓库根 `.gitignore` 忽略，`git ls-files` 中没有任何 AppData 跟踪项，
