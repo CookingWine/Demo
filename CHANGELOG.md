@@ -22,6 +22,29 @@
 
 ---
 
+## 2026-10-28
+
+### 14. 验证本地数据不入库 + 模拟首次启动自动建文件，还原误改的 BuildAvaloniaApp 可见性
+
+- **改动**：三件事。① 排查「git 上传是否会把本地数据带上」——结论是不会，`Dome/Aster/AppData/`
+  与 `samples/` 均已被仓库根 `.gitignore` 忽略，`git ls-files` 中没有任何 AppData 跟踪项，
+  `git check-ignore` 确认 `local-cache.json` 命中第 49 行规则；② 把工作区一个遗留未提交改动
+  （`BuildAvaloniaApp` 从 `public` 改成 `private`）还原为 `public`——Program.cs 头部注释明确约定
+  该方法必须 public static，XAML 预览器与设计器要反射调用它；③ 模拟「clone 下来第一次跑」：
+  备份现有缓存到 `samples/appdata-backup-1028/`（也被 gitignore，不会入库）→ 删除 `AppData/`
+  → `dotnet build` + `dotnet run` → 程序自动创建全新默认结构的 `local-cache.json`。
+- **文件**：`Dome/Aster/Program.cs`（仅还原可见性，1 行）、`CHANGELOG.md`；
+  `samples/appdata-backup-1028/AppData/local-cache.json` 为旧数据备份（本地留存，不入库）。
+- **实现要点**
+  - 首次建文件的链路在 `LocalCache.LoadFromDisk`：文件缺失 → `new LocalCacheData()`（默认结构）
+    → `WriteToDisk` 先 `Directory.CreateDirectory` 再原子写（.tmp + Move 替换），所以目录不存在也能直接跑。
+  - 全新默认文件长这样：`schemaVersion=2`、`login.userName` 为空、`window` 宽高为 0
+    （MainWindow 会回退 XAML 设计稿尺寸）、`workspace` 四个列表全空 —— 设置页/工作区都会走各自的空态。
+  - `git status` 在清空 AppData 后完全干净，等价于 GitHub 上 clone 下来的原始状态，可直接复现本次验证。
+- **验证**：`dotnet build` 0 warning 0 error；`dotnet run --no-build` 启动后 1 秒内
+  `Dome/Aster/AppData/local-cache.json` 自动生成（310 B，默认结构，中文不转义），
+  应用运行 13 秒无异常后正常关闭；`git status -sb` 无任何未跟踪/已修改条目。
+
 ## 2026-10-26
 
 ### 13. 客户支持编辑与删除（复用同一张表单 + 删除二次确认） — `5ae8d3d`
