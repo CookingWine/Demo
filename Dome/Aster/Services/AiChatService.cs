@@ -33,9 +33,11 @@ namespace Aster.Services;
 public sealed class AiChatMessage
 {
     /// <summary>角色：system / user / assistant / tool。</summary>
+    [JsonPropertyName("role")]
     public string Role { get; init; } = "user";
 
     /// <summary>正文。assistant 发起工具调用的那轮可能只有 ToolCalls 没有 Content。</summary>
+    [JsonPropertyName("content")]
     public string? Content { get; init; }
 
     /// <summary>role=tool 时必填：这条结果对应哪一次调用。</summary>
