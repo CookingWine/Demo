@@ -176,6 +176,11 @@
               </Border>
               <!-- 13.5 比正文 12.5 略大、比标题小，作为「品牌字标」介于两者之间。 -->
               <TextBlock Text="Aster" FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <!-- DEMO 胶囊：登录页第一眼就能看出这是演示构建，不是生产环境。 -->
+              <Border CornerRadius="10" Padding="7,2" Background="#2A6C8BFF"
+                      BorderBrush="#406C8BFF" BorderThickness="1" VerticalAlignment="Center">
+                <TextBlock Text="DEMO" FontSize="9.5" FontWeight="SemiBold" Foreground="#A9BAFF" />
+              </Border>
             </StackPanel>
 
             <!-- 主标语：Foreground 也可以用画刷，所以两行文字各挂一段线性渐变；
@@ -215,7 +220,8 @@
                    超出的文字会被直接裁掉而不是折行。
                    #9BA5C2 是品牌区专用的浅蓝灰：全局 Text2（#626A7D）压在紫色渐变上对比度不够。
                    Margin 顶部 16 与上面两行标语拉开一个呼吸距离。 -->
-              <TextBlock Text="成员、订单与增长指标集中在一处，随时掌握业务的真实状态。"
+              <!-- 品牌区文案也按 Demo 定位写：不承诺真实业务数据与后端能力。 -->
+              <TextBlock Text="单机 Demo 演示：客户、待办与 Agent 协作，数据只保存在本机。"
                          FontSize="12.5" Foreground="#9BA5C2" LineHeight="22" MaxWidth="272"
                          TextWrapping="Wrap" Margin="0,16,0,0" />
             </StackPanel>
@@ -227,7 +233,7 @@
                  版权年份与版本号都是硬编码文案，不来自 VM —— 它们与业务状态无关。 -->
             <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
               <TextBlock Text="© 2026 Aster" FontSize="10.5" Foreground="#4E5670" />
-              <TextBlock Grid.Column="1" Text="v1.4.2" FontSize="10.5" Foreground="#4E5670" />
+              <TextBlock Grid.Column="1" Text="v1.0.0 · Demo" FontSize="10.5" Foreground="#4E5670" />
             </Grid>
           </Grid>
         </Panel>
@@ -273,7 +279,8 @@
           <!-- 22 是页面级标题字号（与弹窗里的 14 形成两个层级）；副标题 12 + Text2（#626A7D）
                弱一档，底部 Margin 24 是「标题区」与「表单区」之间的分段距离，比字段间 15 大一档。 -->
           <TextBlock Text="欢迎回来" FontSize="22" FontWeight="SemiBold" />
-          <TextBlock Text="登录你的账户以继续" FontSize="12" Foreground="{StaticResource Text2}" Margin="0,7,0,24" />
+          <TextBlock Text="演示登录：任意非空账号密码即可进入" FontSize="12"
+                     Foreground="{StaticResource Text2}" Margin="0,7,0,24" />
 
           <!-- 账号：外层 Border.field 负责描边/圆角/内边距，内层 Grid 为「图标 Auto + 输入框 *」，
                图标宽度固定、输入框吃掉剩余空间，二者因此基线对齐 -->
@@ -296,7 +303,7 @@
                      Margin 左 9 是图标与文字的间距（图标 15 之后留 9，视觉上约等于一个字符宽）。
                      Watermark 只是空值时的灰色提示，不会写进 Text，因此不会污染 VM。 -->
                 <TextBox Grid.Column="1" Text="{Binding UserName, Mode=TwoWay}" Margin="9,0,0,0"
-                         Watermark="name@aster.io" />
+                         Watermark="任意账号，如 admin" />
               </Grid>
             </Border>
           </StackPanel>
@@ -552,12 +559,13 @@
                        #3D6C8BFF 的 A=0x3D=61≈24%（同色描边），文字用更亮的 #A9BAFF 保证可读。
                        三个色值同属品牌蓝，所以标签整体是「一块蓝」而不是三种颜色的拼贴。 -->
                   <StackPanel Orientation="Horizontal" Spacing="7">
-                    <TextBlock Text="陈墨" FontSize="12.5" FontWeight="SemiBold" />
+                    <TextBlock Text="演示管理员" FontSize="12.5" FontWeight="SemiBold" />
                     <Border Classes="roleTag" Background="#266C8BFF" BorderBrush="#3D6C8BFF" VerticalAlignment="Center">
-                      <TextBlock Text="管理员" FontSize="9.5" Foreground="#A9BAFF" />
+                      <TextBlock Text="Demo" FontSize="9.5" Foreground="#A9BAFF" />
                     </Border>
                   </StackPanel>
-                  <TextBlock Text="chenmo@aster.io" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,2,0,0" />
+                  <!-- 名片信息是演示占位：以前写死「陈墨 / chenmo@aster.io」会被当成真实管理员。 -->
+                  <TextBlock Text="demo@example.com" FontSize="11" Foreground="{StaticResource Text2}" Margin="0,2,0,0" />
                 </StackPanel>
                 <!-- 复制按钮：Content 绑 AdminCopyText（"复制"/"已复制"），
                      状态由 IsAdminCopied 决定，关闭弹窗时会被复位 -->
@@ -600,7 +608,8 @@
             <!-- 文案里写死了「陈墨 / chenmo@aster.io」，与上面名片里的数据是两份独立的硬编码，
                  没有共用数据源 —— 改管理员信息时两处都要改，否则会出现「名片上一个邮箱、
                  成功提示里另一个邮箱」的不一致。 -->
-            <TextBlock Text="我们已向管理员 陈墨 发送协助申请，请留意 chenmo@aster.io 的回复"
+            <!-- 演示环境不会真的发邮件：只展示弹窗第二步的样子，不做任何网络请求。 -->
+            <TextBlock Text="演示环境不会真的发送邮件，这里只展示「联系管理员」流程的第二步。"
                        FontSize="11.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
                        TextAlignment="Center" HorizontalAlignment="Center" />
             <Button Classes="pri" Content="知道了" Height="34" Padding="20,0" HorizontalAlignment="Right"

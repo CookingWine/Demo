@@ -39,6 +39,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -99,7 +100,7 @@ public sealed class ChatMessage : ObservableObject
     private bool _isStreaming;
     private bool _isError;
 
-    /// <summary>发送者显示名（"Agent" / "张客服"）。</summary>
+    /// <summary>发送者显示名（"Agent" / "我"）。</summary>
     public string Author { get; init; } = "Agent";
 
     /// <summary>消息正文。流式期间由 AI 循环原位追加（每次 Set 都会触发界面刷新）。</summary>
@@ -113,6 +114,9 @@ public sealed class ChatMessage : ObservableObject
     public bool IsUser { get; init; }
 
     public bool IsAgent => !IsUser;
+
+    /// <summary>普通 Agent 气泡是否显示；确认卡片由单独的块渲染，不能同时显示一条空正文。</summary>
+    public bool ShowAgentBubble => IsAgent && !IsConfirmCard;
 
     /// <summary>错误提示消息（作者名与正文走红色）。不持久化、不进入下轮对话上下文。</summary>
     public bool IsError
@@ -130,6 +134,45 @@ public sealed class ChatMessage : ObservableObject
     /// <summary>工具执行回执（"已执行：新建客户 …"）。持久化，但不回传给模型当对话历史。</summary>
     public bool IsToolNote { get; init; }
 
+    // ---- 写操作确认卡片 ----
+    // 它不是普通消息：不落盘、不进上下文，只在界面上临时存在，承载「确认执行 / 取消」两个按钮。
+    // 放在 ChatMessage 上而不是单独集合里，是为了复用消息列表的模板与滚动逻辑。
+
+    /// <summary>true = 这是写操作确认卡片（不是对话正文）。</summary>
+    public bool IsConfirmCard { get; init; }
+
+    /// <summary>卡片正文：逐条列出「将执行的操作 + 关键参数」。</summary>
+    public string ConfirmDetail { get; init; } = string.Empty;
+
+    private bool _isConfirmExpired;
+    private string _confirmState = string.Empty;
+
+    /// <summary>卡片是否已结束（已确认 / 已取消 / 已过期）。true 时按钮禁用。</summary>
+    public bool IsConfirmExpired
+    {
+        get => _isConfirmExpired;
+        set
+        {
+            if (!Set(ref _isConfirmExpired, value)) return;
+            // 作者行文案读它（「待确认」→「已结束」），必须连带通知。
+            OnPropertyChanged(nameof(DisplayName));
+        }
+    }
+
+    /// <summary>结束原因（已确认 / 已取消 / 已过期），显示在卡片按钮上方。</summary>
+    public string ConfirmState
+    {
+        get => _confirmState;
+        set
+        {
+            if (!Set(ref _confirmState, value)) return;
+            OnPropertyChanged(nameof(HasConfirmState));
+        }
+    }
+
+    /// <summary>是否有结束原因可显示。</summary>
+    public bool HasConfirmState => !string.IsNullOrEmpty(_confirmState);
+
     /// <summary>Agent 回复是否仍在流式生成中。驱动作者行的「正在输入」提示。</summary>
     public bool IsStreaming
     {
@@ -141,8 +184,10 @@ public sealed class ChatMessage : ObservableObject
         }
     }
 
-    /// <summary>作者行显示的文案：流式期间标注「正在输入」，其余时刻就是 Author。</summary>
-    public string DisplayName => _isStreaming ? $"{Author} · 正在输入…" : Author;
+    /// <summary>作者行显示的文案：确认卡片标注「待确认」、流式期间标注「正在输入」，其余时刻就是 Author。</summary>
+    public string DisplayName => IsConfirmCard
+        ? (_isConfirmExpired ? $"{Author} · 已结束" : $"{Author} · 待确认")
+        : _isStreaming ? $"{Author} · 正在输入…" : Author;
 
     /// <summary>作者行的颜色：错误红、工具回执更弱的 Text3 灰、普通与原 XAML 样式一致的 Text2。</summary>
     public IBrush AuthorBrush => IsError
@@ -165,6 +210,11 @@ public sealed class WorkbenchCard
     public string Tone { get; init; } = "accent";
     public string Title { get; init; } = string.Empty;
     public string Desc { get; init; } = string.Empty;
+
+    /// <summary>点击后去哪个入口：customer-new / kpi / approval。</summary>
+    // 用稳定标识而不是 Title 当分派键：改文案（「新建项目」→「新建客户」）不会再静默改掉点击行为。
+    public string Target { get; init; } = string.Empty;
+
     public ICommand Command { get; init; } = null!;
 
     public IBrush ChipBackground => Tone switch
@@ -382,7 +432,8 @@ public sealed class AdminViewModel : ObservableObject
     private string _formShort = string.Empty;
     private string _formCode = string.Empty;
     private string _formType = "劳务派遣";
-    private string _formOwner = "张客服";
+    // 负责人默认留空：以前预填「张客服」会让人以为系统里真有一个叫这名字的登录用户。
+    private string _formOwner = string.Empty;
     private string _formCity = string.Empty;
     private string _formContact = string.Empty;
     private string _formService = string.Empty;
@@ -444,16 +495,16 @@ public sealed class AdminViewModel : ObservableObject
         {
             if (o is CustomerItem c) OpenCustomer(c, "base");
         });
-        // 快捷卡命令：三张卡共用一个命令，靠 Title 字符串分派。
-        // 「新建项目」没有独立页面，落到 default 的客户工作空间；另外两张各去一页。
-        // 用文案当分派键是演示代码的取巧之处：改 Cards 里的 Title 会静默改变点击行为。
+        // 快捷卡命令：三张卡共用一个命令，靠 Target 标识分派。
+        // customer-new 与二级导航的「＋ 新建客户」走同一条路径：先切到客户页，再展开新建表单。
         CardCommand = new RelayCommand(o =>
         {
             if (o is not WorkbenchCard card) return;
-            switch (card.Title)
+            switch (card.Target)
             {
-                case "KPI 考勤": Go(AdminPage.Kpi); break;
-                case "待办事项": Go(AdminPage.Approval); break;
+                case "kpi": Go(AdminPage.Kpi); break;
+                case "approval": Go(AdminPage.Approval); break;
+                case "customer-new": Go(AdminPage.Customers); OpenCustomerForm(); break;
                 default: Go(AdminPage.Customers); break;
             }
         });
@@ -470,6 +521,10 @@ public sealed class AdminViewModel : ObservableObject
         // 发送命令带 CanExecute：AI 忙碌期间按钮置灰。注意 RelayCommand 没有自动重查机制，
         // IsAiBusy 变化时必须手动 RaiseCanExecuteChanged（见 IsAiBusy 的 setter）。
         SendCommand = new RelayCommand(Send, () => !_isAiBusy);
+        // 确认卡片的两个动作。CanExecute 不参与判断：卡片结束后由 IsConfirmExpired 把按钮置灰，
+        // 命令内部还会再校验一次状态，避免计时器与点击之间的竞态。
+        ConfirmPendingCommand = new RelayCommand(ConfirmPending);
+        CancelPendingCommand = new RelayCommand(CancelPending);
         GoWorkflowCommand = new RelayCommand(() => Go(AdminPage.Workflow));
         // 审批命令：参数是 XAML 用 CommandParameter 传回的 TaskItem，两条只差目标状态字符串，
         // 具体改状态与刷新列表都交给 Decide。
@@ -526,14 +581,19 @@ public sealed class AdminViewModel : ObservableObject
         {
             // Chip 改成了中性文案（原来写死「3 项」「12 条」）：v2 起待办数量由文件决定，
             // 卡片上再挂一个硬编码数字就会和实际列表对不上。
-            new() { Chip = "创建", Tone = "accent", Title = "新建项目", Desc = "创建客户或项目工作空间。", Command = CardCommand },
-            new() { Chip = "查看", Tone = "green", Title = "KPI 考勤", Desc = "查看绩效、考勤异常、响应时效。", Command = CardCommand },
-            new() { Chip = "查看", Tone = "red", Title = "待办事项", Desc = "审批、核对、资料更新与协作请求。", Command = CardCommand }
+            // 术语统一为「客户」：仓库里没有独立的「项目」实体，之前叫「新建项目」会让人以为还有一套项目模型。
+            new() { Chip = "创建", Tone = "accent", Target = "customer-new", Title = "新建客户", Desc = "创建客户档案，数据只写入本机演示缓存。", Command = CardCommand },
+            new() { Chip = "查看", Tone = "green", Target = "kpi", Title = "KPI 考勤", Desc = "查看演示指标与考勤数据。", Command = CardCommand },
+            new() { Chip = "查看", Tone = "red", Target = "approval", Title = "待办事项", Desc = "演示审批流程，结果只更新本地状态。", Command = CardCommand }
         };
 
         // 对话从空集合起步：缓存里有几条就画几条，没有再冷启动问候语 ——
         // 「界面内容全部来自本地文件」这条原则不给自己留例外。
         Messages = new ObservableCollection<ChatMessage>();
+        // 工作台会话区与左侧「最近会话」都靠 HasMessages 判空。
+        // 这里只补属性通知，不重建导航：导航重建统一由 WorkspaceChanged 负责，
+        // 否则一轮对话里每次 Add 都会让壳层重排一次侧栏。
+        Messages.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasMessages));
 
         // 步骤 3：从本地缓存读出工作区全部数据（客户及其详情、待办、KPI、对话）。
         // 这里是整条链上唯一读文件的地方；缓存为空时四个集合就是空的，属于合法状态。
@@ -599,14 +659,14 @@ public sealed class AdminViewModel : ObservableObject
     // 前提：构造函数已跑完（依赖 _allCustomers 至少有一条）。重复调用安全，最终状态只由 key 决定。
     // 做完之后：_page 落到目标页并发通知，XAML 切换布局。
     //
-    // key 的三种语义：
+    // key 的四种语义：
     // 1) 页面 key：approval / clients / customers / workflow / kpi，直接 Go。
     //    clients 与 customers 是同一个页面的别名（rail 用 clients，内部习惯用 customers）。
-    // 2) 详情 key：customer-qinghe / detail / detail-people / detail-runs / detail-files，
-    //    都是「打开第一个客户 + 指定页签」；demo 只有一个项目条目，所以全部指向青禾。
-    // 3) 其余（recent-1..3 / recent-tax / thread-new / workbench）落到 default → 工作台。
-    //    「最近会话」是壳层的占位条目，没有独立页面，点它等价于回工作台：
-    //    这是有意的降级，不是漏写分支。
+    // 2) 客户 key：customer:{Id} —— 二级导航「客户」区块按真实缓存数据生成，点谁开谁。
+    //    customer-new 是「＋ 新建客户」入口：切到客户页并当场展开新建表单。
+    // 3) 旧详情 key：customer-qinghe / detail / detail-people / detail-runs / detail-files，
+    //    都是「打开第一个客户 + 指定页签」。保留是为了兼容旧调用点，新代码不再生成这些 key。
+    // 4) workbench 以及任何拼错的 key 落到 default → 工作台；空工作区里点「最近会话」也走这里。
     //
     // 为什么不用字典：分支只有十来个，且详情分支要传不同的 tab 字符串，字典的值就得是 lambda，
     // 可读性反而不如一个 switch。
@@ -629,20 +689,36 @@ public sealed class AdminViewModel : ObservableObject
             case "workflow": Go(AdminPage.Workflow); break;
             // KPI：纯只读页，数据在构造函数 LoadWorkspace 里一次性建好。
             case "kpi": Go(AdminPage.Kpi); break;
-            // 二级导航的「项目」条目：打开第一个客户的详情首页。
+            // 二级导航「客户」区块：key 里带 Id，按 Id 精确打开对应客户。
+            case string k when k.StartsWith("customer:", StringComparison.Ordinal):
+                OpenCustomerById(k["customer:".Length..]);
+                break;
+            // 「＋ 新建客户」：先切到客户页，再打开新建浮层。
+            case "customer-new": Go(AdminPage.Customers); OpenCustomerForm(); break;
+            // 以下五个旧 key 是兼容分支，统一落到「第一个客户」，新代码不再生成。
             case "customer-qinghe": OpenFirstCustomer("base", hasFirst); break;
-            // 「8 月个税交叉验证」这条会话：打开同一个客户，但直接落在核对记录页签。
             case "thread-tax": OpenFirstCustomer("runs", hasFirst); break;
-            // 下面四个 detail-* 是详情页内部深链；detail 与 customer-qinghe 等价。
-            // 它们不做「当前客户」判断，永远打开第一个客户，多客户时需要改成带 id 的 key。
             case "detail": OpenFirstCustomer("base", hasFirst); break;
             case "detail-people": OpenFirstCustomer("people", hasFirst); break;
             case "detail-runs": OpenFirstCustomer("runs", hasFirst); break;
             case "detail-files": OpenFirstCustomer("files", hasFirst); break;
-            // 兜底：recent-* / thread-new / workbench 以及任何拼错的 key 都回工作台。
+            // 兜底：workbench 及任何拼错的 key 都回工作台。
             // 兜底而不抛异常，是为了让壳层新增占位条目时不会把演示点崩。
             default: Go(AdminPage.Workbench); break;
         }
+    }
+
+    /// <summary>按 Id 打开客户详情；找不到（例如刚被删除）就退回客户列表，不抛异常。</summary>
+    // 调用方：Select 的 customer:{Id} 分支。tab 固定 base：侧栏条目只承诺「打开这位客户」。
+    public void OpenCustomerById(string id, string tab = "base")
+    {
+        var target = _allCustomers.Find(c => c.Id == id);
+        if (target is null)
+        {
+            Go(AdminPage.Customers);
+            return;
+        }
+        OpenCustomer(target, tab);
     }
 
     /// <summary>打开第一个客户并落到指定页签；没有客户时退到客户工作空间页。</summary>
@@ -661,6 +737,47 @@ public sealed class AdminViewModel : ObservableObject
     public ObservableCollection<WorkbenchCard> Cards { get; }
     public ObservableCollection<ChatMessage> Messages { get; }
     public ICommand CardCommand { get; }
+
+    /// <summary>确认卡片上的「确认执行」：把暂存的写操作真正落盘，然后继续对话循环。</summary>
+    public ICommand ConfirmPendingCommand { get; }
+
+    /// <summary>确认卡片上的「取消」：不执行任何写操作，只回一条说明并写审计。</summary>
+    public ICommand CancelPendingCommand { get; }
+
+    // ---- 壳层（左侧二级导航）需要的只读视图 ----
+    // 壳层不直接碰 LocalCache，也不复制一份客户列表：它只读这里暴露的全量源数据 + 变化事件。
+    // 注意不能用 Customers（那是筛选后的结果），否则搜索框一敲，左侧客户列表就会跟着少几条。
+
+    /// <summary>全量客户（不受搜索 / 筛选影响）。</summary>
+    public IReadOnlyList<CustomerItem> AllCustomers => _allCustomers;
+
+    /// <summary>本地缓存里有没有客户。左侧「客户」区块与工作台空态都用它判空。</summary>
+    public bool HasAnyCustomer => _allCustomers.Count > 0;
+
+    /// <summary>对话记录里有没有消息。工作台会话区与左侧「最近会话」用它判空。</summary>
+    public bool HasMessages => Messages.Count > 0;
+
+    /// <summary>
+    /// 工作区结构发生变化：客户增删改、待办变化、指标变化、对话落盘之后触发。
+    /// 壳层订阅它重建左侧二级导航（客户条目 / 最近会话 / 空态）。
+    /// </summary>
+    // 只在 SaveWorkspace 末尾触发，也就是所有写入路径的唯一收口；
+    // 流式增量只改 ChatMessage.Text、不落盘，因此不会造成高频重建。
+    public event EventHandler? WorkspaceChanged;
+
+    // ---- 当前操作者 ----
+    // 壳层在构造与登录成功时注入登录账号；Agent 的系统提示与新建客户的默认负责人都读它。
+    // 以前这两处写死「张客服」，登录账号却是 admin —— 演示时一眼假，也会把假人名写进缓存。
+    private string _operatorName = "演示账号";
+
+    /// <summary>当前操作者显示名；未注入或注入空白时为「演示账号」。</summary>
+    public string OperatorName => _operatorName;
+
+    /// <summary>由壳层注入当前操作者（登录账号）。空白回落「演示账号」。</summary>
+    public void SetOperatorName(string? name)
+    {
+        _operatorName = string.IsNullOrWhiteSpace(name) ? "演示账号" : name.Trim();
+    }
 
     // 声明成 RelayCommand 而不是 ICommand：IsAiBusy 变化时要调 RaiseCanExecuteChanged()
     // 刷新发送按钮的可用态，那是具体类型才有的成员（见 ObservableObject.cs 的说明）。
@@ -758,6 +875,9 @@ public sealed class AdminViewModel : ObservableObject
         // 因为用户可能只是误触 Enter，清空会让他丢掉正在写的半句话。
         var text = Draft?.Trim();
         if (string.IsNullOrEmpty(text)) return;
+        // 步骤 1.5：上一轮还挂着未确认的写操作时，发新指令视为放弃它 ——
+        // 否则卡片会一直悬在对话里，用户以为已经执行（或以为还能执行）。
+        AbandonPendingIfAny();
         // 步骤 2：防重入。按钮的 CanExecute 已经拦了一层，这里兜住 Enter 键路径；
         // 忙碌时连草稿都不清，让用户的话留在输入框里等下一轮。
         if (_isAiBusy) return;
@@ -769,7 +889,9 @@ public sealed class AdminViewModel : ObservableObject
 
         // 步骤 4：追加用户消息并清空草稿。集合 Add 会发 CollectionChanged，消息列表自动刷新，
         // code-behind 也订阅了同一事件用来把 ChatScroll 滚到底。
-        Messages.Add(new ChatMessage { Author = "张客服", Text = text, IsUser = true });
+        // 作者用「我」而不是写死的人名：右侧蓝色气泡本身已经表明是当前用户，
+        // 写死「张客服」会与登录账号（admin）对不上，属于误导性默认内容。
+        Messages.Add(new ChatMessage { Author = "我", Text = text, IsUser = true });
         Draft = string.Empty;
         // 用户的消息是「不可再生的数据」，先落一次盘；Agent 的回复生成完再补一次，
         // LocalCache.SaveSoon 的 700ms 防抖会把这几次合并成真正的磁盘写。
@@ -790,19 +912,8 @@ public sealed class AdminViewModel : ObservableObject
         }
 
         // 步骤 6：进入忙态 → 建占位消息（「正在输入…」）→ 起后台对话循环。
-        // 占位消息先入集合：用户立刻能看到 Agent 在响应；后续增量全部原位写进这一条。
-        IsAiBusy = true;
-        _aiCts?.Dispose();
-        _aiCts = new CancellationTokenSource();
-        var placeholder = new ChatMessage { Author = "Agent", Text = "正在输入…", IsStreaming = true };
-        _streamTarget = placeholder;
-        _streamStarted = false;
-        Messages.Add(placeholder);
-        EnsureFlushTimer().Start();
-
-        // Send 本体保持同步（RelayCommand 只收 Action），异步工作放到独立方法里；
-        // 返回值故意丢弃：RunAgentLoopAsync 内部已把一切异常转成错误消息。
-        _ = RunAgentLoopAsync(history, placeholder, _aiCts.Token);
+        // 具体动作抽到 StartAgentRun，确认后续跑也复用它。
+        StartAgentRun(history, 0);
     }
 
     // ===================== AI 对话循环 =====================
@@ -810,15 +921,20 @@ public sealed class AdminViewModel : ObservableObject
     // tool_calls 的最终回复，或达到 MaxToolRounds 上限。所有 await 都会回到 UI 线程
     // （Avalonia 安装了同步上下文），所以集合与 VM 状态的读写是线程安全的；
     // 唯独 onDelta 回调发生在后台读流线程，它只做 Dispatcher.Post 转发。
-    private async Task RunAgentLoopAsync(List<AiChatMessage> history, ChatMessage placeholder, CancellationToken ct)
+    // startRound：确认续跑时传入已消耗的轮数，避免「确认一次就重置 8 轮上限」。
+    private async Task RunAgentLoopAsync(List<AiChatMessage> history, ChatMessage placeholder, CancellationToken ct, int startRound = 0)
     {
         try
         {
             var conversation = history;
-            for (var round = 0; round < MaxToolRounds; round++)
+            for (var round = startRound; round < MaxToolRounds; round++)
             {
                 // 最后一个参数是会话级模型覆盖：输入框下拉选了就传，null 走设置页默认。
+                var requestWatch = Stopwatch.StartNew();
                 var result = await _ai.StreamChatAsync(conversation, Tools, OnDelta, ct, _sessionModel);
+                requestWatch.Stop();
+                WriteRequestAudit(result, requestWatch.ElapsedMilliseconds);
+
                 if (!result.Ok)
                 {
                     FailPlaceholder(placeholder, result.Error!);
@@ -835,6 +951,7 @@ public sealed class AdminViewModel : ObservableObject
                 // —— 模型要求执行工具 ——
                 // 1) 先把 assistant 的调用声明原样回放进对话：服务端靠 assistant.tool_calls
                 //    与后续 tool 消息的 tool_call_id 一一对应，跳过这步下一轮请求会被拒。
+                //    注意这里必须回放**全部**调用；写工具的回执等确认后才补。
                 conversation.Add(new AiChatMessage
                 {
                     Role = "assistant",
@@ -846,16 +963,34 @@ public sealed class AdminViewModel : ObservableObject
                     }).ToList()
                 });
 
-                // 2) 逐个执行工具，结果以 role=tool 追加；写操作在界面上补一条回执
-                //    （查询类不回执，避免刷屏）。工具改动的数据在整批执行完后统一落盘。
+                // 2) 读写分离：查询类立即执行（只读、可重复），写类先攒起来等用户确认。
+                var writes = new List<AiToolCall>();
                 foreach (var call in result.ToolCalls)
                 {
-                    var (payload, note) = ExecuteTool(call);
+                    if (IsWriteTool(call.Name))
+                    {
+                        writes.Add(call);
+                        continue;
+                    }
+
+                    var (payload, note) = ExecuteToolAudited(call);
                     conversation.Add(new AiChatMessage { Role = "tool", ToolCallId = call.Id, Content = payload });
                     if (note is not null)
                         Messages.Add(new ChatMessage { Author = "Agent", Text = note, IsToolNote = true });
                 }
-                SaveWorkspace();
+
+                if (writes.Count == 0)
+                {
+                    SaveWorkspace();
+                    continue;
+                }
+
+                // 3) 有写操作：本轮到此为止，界面出确认卡片。
+                //    此时写工具还没有回执，不能继续请求模型（协议要求每个 tool_call 都有 tool 消息）。
+                //    说明文本先正常收尾（落盘），再进入待确认状态。
+                ShowConfirmCard(writes, conversation, round + 1);
+                FinalizePlaceholder(placeholder);
+                return;
             }
 
             // 轮次耗尽：把原因说清楚，用户可以选择继续对话让模型接着处理。
@@ -871,6 +1006,377 @@ public sealed class AdminViewModel : ObservableObject
             // 只会静默吞掉，这里显式转成界面反馈，用户至少知道「刚才没回成」。
             FailPlaceholder(placeholder, $"AI 对话出错：{ex.Message}");
         }
+    }
+
+    // ===================== 写操作确认 =====================
+    // 状态机：模型返回写工具 → 只读工具先执行 → 暂存写工具与对话快照 → 出卡片 →
+    // 确认（执行 + 补齐 tool 回执 + 续跑） / 取消（不执行） / 3 分钟超时 / 发新指令视为放弃。
+    // 为什么必须暂存 conversation：assistant 的 tool_calls 已经回放进请求上下文，
+    // 确认后要在这个上下文上继续，模型才知道自己刚才请求了什么。
+
+    private PendingWrite? _pendingWrite;
+    private DispatcherTimer? _pendingTimer;
+
+    /// <summary>一批已声明、尚未执行的写工具调用及其对话快照。</summary>
+    private sealed class PendingWrite
+    {
+        public List<AiToolCall> Calls { get; init; } = new();
+        public List<AiChatMessage> Conversation { get; init; } = new();
+        public int RoundsUsed { get; init; }
+        public DateTimeOffset ExpiresAt { get; init; }
+        public ChatMessage? Card { get; init; }
+    }
+
+    /// <summary>把写工具调用变成界面卡片，并启动 3 分钟有效期计时。</summary>
+    private void ShowConfirmCard(List<AiToolCall> writes, List<AiChatMessage> conversation, int roundsUsed)
+    {
+        var detail = string.Join("\n", writes.Select((c, i) => $"{i + 1}. {DescribeCall(c)}"));
+        var card = new ChatMessage
+        {
+            Author = "Agent",
+            IsConfirmCard = true,
+            ConfirmDetail = detail
+        };
+        Messages.Add(card);
+
+        _pendingWrite = new PendingWrite
+        {
+            Calls = writes,
+            Conversation = conversation,
+            RoundsUsed = roundsUsed,
+            ExpiresAt = DateTimeOffset.Now.AddMinutes(3),
+            Card = card
+        };
+        StartPendingTimer();
+    }
+
+    /// <summary>确认执行：逐条执行写工具、补齐 tool 回执、落盘，然后从原轮次继续对话。</summary>
+    private void ConfirmPending()
+    {
+        var pending = _pendingWrite;
+        if (pending is null) return;
+        // 计时器可能因 UI 线程繁忙而延迟触发，这里再校验一次绝对时间。
+        if (DateTimeOffset.Now >= pending.ExpiresAt)
+        {
+            ExpirePending();
+            return;
+        }
+
+        _pendingWrite = null;
+        StopPendingTimer();
+        FinishCard(pending.Card, "已确认，正在执行…");
+        WriteConfirmAudit(pending, confirmed: true);
+
+        try
+        {
+            foreach (var call in pending.Calls)
+            {
+                var (payload, note) = ExecuteToolAudited(call);
+                pending.Conversation.Add(new AiChatMessage { Role = "tool", ToolCallId = call.Id, Content = payload });
+                if (note is not null)
+                    Messages.Add(new ChatMessage { Author = "Agent", Text = note, IsToolNote = true });
+            }
+            // 整批执行完统一落盘一次：与界面按钮保存走同一条链路。
+            SaveWorkspace();
+        }
+        catch (Exception ex)
+        {
+            // 工具执行体理论上只会返回结构化错误，这里是最后一道兜底：
+            // 已经改过的内存数据先落盘，再明确告知用户「部分可能已生效」，不继续请求模型。
+            SaveWorkspace();
+            AgentAudit.Append(new AgentAuditEntry
+            {
+                Kind = "tool",
+                ToolName = "confirm_batch",
+                Ok = false,
+                Error = Truncate(ex.Message, 200)
+            });
+            Messages.Add(new ChatMessage
+            {
+                Author = "Agent",
+                IsError = true,
+                Text = $"执行写操作时出错：{ex.Message}。已中止后续步骤，已生效的改动已保存到本机缓存。"
+            });
+            IsAiBusy = false;
+            return;
+        }
+
+        StartAgentRun(pending.Conversation, pending.RoundsUsed);
+    }
+
+    /// <summary>取消：不执行任何写操作，只留一条可见说明并写审计。</summary>
+    private void CancelPending()
+    {
+        var pending = _pendingWrite;
+        if (pending is null) return;
+        _pendingWrite = null;
+        StopPendingTimer();
+        FinishCard(pending.Card, "已取消，未写入任何数据");
+        WriteConfirmAudit(pending, confirmed: false);
+        Messages.Add(new ChatMessage
+        {
+            Author = "Agent",
+            IsToolNote = true,
+            Text = "已取消。本次没有写入任何数据。"
+        });
+    }
+
+    /// <summary>3 分钟未确认：卡片失效，写审计，不执行。</summary>
+    private void ExpirePending()
+    {
+        var pending = _pendingWrite;
+        if (pending is null) return;
+        _pendingWrite = null;
+        StopPendingTimer();
+        FinishCard(pending.Card, "已过期，未执行");
+        WriteConfirmAudit(pending, confirmed: false);
+        Messages.Add(new ChatMessage
+        {
+            Author = "Agent",
+            IsToolNote = true,
+            Text = "确认已超时（3 分钟），本次操作未执行。需要的话请重新发送指令。"
+        });
+    }
+
+    /// <summary>用户直接发了新指令：静默放弃待确认，不执行、不刷屏。</summary>
+    private void AbandonPendingIfAny()
+    {
+        var pending = _pendingWrite;
+        if (pending is null) return;
+        _pendingWrite = null;
+        StopPendingTimer();
+        FinishCard(pending.Card, "已放弃，未执行");
+        WriteConfirmAudit(pending, confirmed: false);
+    }
+
+    /// <summary>把卡片置为结束态并写明原因；按钮由 IsConfirmExpired 置灰。</summary>
+    private static void FinishCard(ChatMessage? card, string state)
+    {
+        if (card is null) return;
+        card.IsConfirmExpired = true;
+        card.ConfirmState = state;
+    }
+
+    private void StartPendingTimer()
+    {
+        StopPendingTimer();
+        _pendingTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(3) };
+        _pendingTimer.Tick += (_, _) => ExpirePending();
+        _pendingTimer.Start();
+    }
+
+    private void StopPendingTimer()
+    {
+        _pendingTimer?.Stop();
+        _pendingTimer = null;
+    }
+
+    /// <summary>起一轮 Agent 请求：置忙态、建占位消息、订阅流式刷新。</summary>
+    // 抽出来供 Send 与 ConfirmPending 共用，避免两处各写一遍忙态与占位消息。
+    private void StartAgentRun(List<AiChatMessage> conversation, int startRound)
+    {
+        IsAiBusy = true;
+        _aiCts?.Dispose();
+        _aiCts = new CancellationTokenSource();
+        var placeholder = new ChatMessage { Author = "Agent", Text = "正在输入…", IsStreaming = true };
+        _streamTarget = placeholder;
+        _streamStarted = false;
+        Messages.Add(placeholder);
+        EnsureFlushTimer().Start();
+        _ = RunAgentLoopAsync(conversation, placeholder, _aiCts.Token, startRound);
+    }
+
+    // ===================== Agent 审计 =====================
+    // 所有审计都是旁路：写失败只记 AgentAudit.LastError，不影响对话。
+
+    private void WriteRequestAudit(AiStreamResult result, long durationMs)
+    {
+        var cfg = LocalCache.Data.Ai;
+        AgentAudit.Append(new AgentAuditEntry
+        {
+            Kind = "request",
+            Model = string.IsNullOrWhiteSpace(_sessionModel) ? cfg?.Model : _sessionModel,
+            BaseUrlHost = HostOf(cfg?.BaseUrl),
+            Ok = result.Ok,
+            Error = result.Ok ? null : Truncate(result.Error, 200),
+            DurationMs = durationMs
+        });
+    }
+
+    /// <summary>执行一个工具并写审计；返回值与 ExecuteTool 完全一致。</summary>
+    private (string Payload, string? Note) ExecuteToolAudited(AiToolCall call)
+    {
+        var watch = Stopwatch.StartNew();
+        var result = ExecuteTool(call);
+        watch.Stop();
+
+        var ok = PayloadOk(result.Payload);
+        AgentAudit.Append(new AgentAuditEntry
+        {
+            Kind = "tool",
+            ToolName = call.Name,
+            ArgsSummary = SummarizeArgs(call),
+            Ok = ok,
+            Error = ok ? null : Truncate(PayloadMessage(result.Payload), 200),
+            DurationMs = watch.ElapsedMilliseconds,
+            Target = TargetOf(call.Name, result.Payload)
+        });
+        return result;
+    }
+
+    private static void WriteConfirmAudit(PendingWrite pending, bool confirmed)
+    {
+        AgentAudit.Append(new AgentAuditEntry
+        {
+            Kind = "confirm",
+            Confirmed = confirmed,
+            ToolName = string.Join(",", pending.Calls.Select(c => c.Name)),
+            ArgsSummary = Truncate(string.Join(" | ", pending.Calls.Select(SummarizeArgs)), 200),
+            Ok = confirmed,
+            Error = confirmed ? null : "用户未确认"
+        });
+    }
+
+    private static string? HostOf(string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl)) return null;
+        return Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var uri)
+            ? uri.Host
+            : Truncate(baseUrl, 60);
+    }
+
+    /// <summary>写操作白名单：只有这三个工具需要用户确认。</summary>
+    private static bool IsWriteTool(string name) =>
+        name is "create_customer" or "create_task" or "decide_task";
+
+    /// <summary>payload 里的 ok 字段为 false 才算失败；查询结果没有 ok 字段，视为成功。</summary>
+    private static bool PayloadOk(string payload)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            return !doc.RootElement.TryGetProperty("ok", out var ok) || ok.ValueKind != JsonValueKind.False;
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
+    }
+
+    private static string PayloadMessage(string payload)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            return doc.RootElement.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String
+                ? m.GetString() ?? payload
+                : payload;
+        }
+        catch (JsonException)
+        {
+            return payload;
+        }
+    }
+
+    /// <summary>从工具结果里推导审计目标：create_* / decide_task 的 id。</summary>
+    private static string? TargetOf(string toolName, string payload)
+    {
+        if (toolName is not ("create_customer" or "create_task" or "decide_task")) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (!doc.RootElement.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String)
+                return null;
+            var value = id.GetString();
+            return toolName == "create_customer" ? $"customer:{value}" : $"task:{value}";
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>参数摘要：只保留关键标识，自由文本截断，绝不记录完整对话或密钥。</summary>
+    private static string SummarizeArgs(AiToolCall call)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(call.Arguments) ? "{}" : call.Arguments);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return "{}";
+
+            var parts = new List<string>();
+            void Add(string key, int max = 40)
+            {
+                if (!root.TryGetProperty(key, out var el)) return;
+                if (el.ValueKind == JsonValueKind.String)
+                {
+                    var value = el.GetString();
+                    if (!string.IsNullOrWhiteSpace(value)) parts.Add($"{key}={Truncate(value.Trim(), max)}");
+                }
+                else if (el.ValueKind is JsonValueKind.True or JsonValueKind.False or JsonValueKind.Number)
+                {
+                    parts.Add($"{key}={el}");
+                }
+            }
+
+            switch (call.Name)
+            {
+                case "list_customers": Add("query"); break;
+                case "list_tasks": Add("status"); break;
+                case "create_customer": Add("name"); Add("code"); Add("type"); break;
+                case "create_task": Add("title"); Add("customer"); Add("kind"); break;
+                case "decide_task": Add("task_id"); Add("title"); Add("approve"); break;
+            }
+
+            return parts.Count == 0 ? "{}" : Truncate(string.Join(", ", parts), 200);
+        }
+        catch (JsonException)
+        {
+            return "<invalid-json>";
+        }
+    }
+
+    /// <summary>确认卡片上的一行操作描述（面向用户，不暴露 JSON）。</summary>
+    private static string DescribeCall(AiToolCall call)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(call.Arguments) ? "{}" : call.Arguments);
+            var root = doc.RootElement;
+
+            string S(string key) => root.ValueKind == JsonValueKind.Object
+                                    && root.TryGetProperty(key, out var v)
+                                    && v.ValueKind == JsonValueKind.String
+                ? v.GetString() ?? string.Empty
+                : string.Empty;
+
+            return call.Name switch
+            {
+                "create_customer" => $"新建客户「{S("name")}」"
+                    + (S("code").Length > 0 ? $"（编号 {S("code")}）" : "（编号自动生成）"),
+                "create_task" => $"新建待办「{S("title")}」"
+                    + (S("customer").Length > 0 ? $"，关联客户「{S("customer")}」" : "，不关联客户"),
+                "decide_task" => (root.ValueKind == JsonValueKind.Object
+                                    && root.TryGetProperty("approve", out var ap)
+                                    && ap.ValueKind == JsonValueKind.False
+                        ? "退回待办"
+                        : "通过待办")
+                    + (S("task_id").Length > 0 ? $"（{S("task_id")}）"
+                        : S("title").Length > 0 ? $"（{S("title")}）" : string.Empty),
+                _ => call.Name
+            };
+        }
+        catch (JsonException)
+        {
+            return call.Name;
+        }
+    }
+
+    private static string Truncate(string? text, int max)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        return text.Length <= max ? text : text[..max] + "…";
     }
 
     // 结束一轮流式（正常完成 / 取消 / 超限）：清空缓冲剩余增量、停刷新计时器、
@@ -939,14 +1445,15 @@ public sealed class AdminViewModel : ObservableObject
     private const int MaxContextMessages = 20;
 
     // 把界面上的对话整理成协议消息：system 提示 + 最近至多 MaxContextMessages 条。
-    // 三类消息不进上下文：IsError（错误提示）、IsToolNote（工具回执，业务结论已并入
-    // 后续 assistant 文本）、IsStreaming（尚在生成中的占位消息）。
+    // 四类消息不进上下文：IsError（错误提示）、IsToolNote（工具回执，业务结论已并入
+    // 后续 assistant 文本）、IsStreaming（尚在生成中的占位消息）、IsConfirmCard（确认卡片，
+    // 它的内容已经以 assistant tool_calls + tool 回执的形式留在 conversation 里）。
     private List<AiChatMessage> BuildAiHistory()
     {
         var history = new List<AiChatMessage> { new() { Role = "system", Content = BuildSystemPrompt() } };
         foreach (var m in Messages)
         {
-            if (m.IsError || m.IsToolNote || m.IsStreaming) continue;
+            if (m.IsError || m.IsToolNote || m.IsStreaming || m.IsConfirmCard) continue;
             history.Add(new AiChatMessage { Role = m.IsUser ? "user" : "assistant", Content = m.Text });
         }
         // 只保留最近 N 条：RemoveRange(1, …) 是因为下标 0 是 system，永远保留。
@@ -961,7 +1468,7 @@ public sealed class AdminViewModel : ObservableObject
     {
         var pending = _allTasks.Count(t => t.IsPending);
         return $"""
-            你是「Aster」工作台的 AI 助手 Agent，运行在一套客户服务 / 人事外包工作台桌面应用里，当前操作者是「张客服」。
+            你是「Aster」工作台的 AI 助手 Agent，运行在一套客户服务 / 人事外包工作台的 Demo 演示应用里，当前操作者是「{OperatorName}」。
             今天是 {DateTime.Now:yyyy-MM-dd}。当前工作区共有 {_allCustomers.Count} 个客户、{_allTasks.Count} 条待办（其中 {pending} 条待处理）、{Metrics.Count} 条 KPI 指标。
             你可以调用工具直接查询和操作工作区数据，操作会立即保存到本地：
             - list_customers / list_tasks：先查再改，不要凭空猜测客户名、编号或待办标题；
@@ -1014,7 +1521,7 @@ public sealed class AdminViewModel : ObservableObject
                     short_name = new { type = "string", description = "简称，缺省用全称" },
                     code = new { type = "string", description = "客户编号，缺省自动生成" },
                     type = new { type = "string", description = "服务类型：劳务派遣 / 业务外包 / 人事代理" },
-                    owner = new { type = "string", description = "负责人，缺省为当前操作者（张客服）" },
+                    owner = new { type = "string", description = "负责人，缺省为当前登录账号" },
                     city = new { type = "string", description = "所在城市" },
                     contact = new { type = "string", description = "客户联系人" },
                     service = new { type = "string", description = "服务内容" },
@@ -1145,7 +1652,8 @@ public sealed class AdminViewModel : ObservableObject
 
         var now = DateTime.Now;
         var owner = GetStr(root, "owner");
-        if (owner.Length == 0) owner = "张客服";
+        // 默认负责人取当前登录账号，而不是写死的人名：否则 AI 新建的客户会挂到一个不存在的用户上。
+        if (owner.Length == 0) owner = OperatorName;
         var type = GetStr(root, "type");
         if (type.Length == 0) type = CustomerTypes[0];
         var state = GetStr(root, "state");
@@ -1243,9 +1751,10 @@ public sealed class AdminViewModel : ObservableObject
         // 与界面 Decide 同一状态机：Status 的 setter 会连带刷新标签配色与按钮可见性；
         // Note 用模型给的原因，缺省时沿用界面同款文案。
         task.Status = approve ? "已通过" : "已退回";
+        // 缺省说明与界面保持一致：演示环境不会真的派生补材料待办，文案不能那样承诺。
         task.Note = reason.Length > 0
             ? reason
-            : approve ? "审批已通过，结果已同步到工作台。" : "已记录退回原因，并新增一条补材料待办。";
+            : approve ? "审批已通过，结果只写入本机演示缓存。" : "已记录退回原因；演示环境不会自动新增待办。";
         RefreshTasks();
         return (JsonSerializer.Serialize(new { ok = true, id = task.Id, title = task.Title, status = task.Status }),
                 $"已{(approve ? "通过" : "退回")}待办「{task.Title}」。");
@@ -1300,7 +1809,8 @@ public sealed class AdminViewModel : ObservableObject
         var list = _allCustomers.Where(c =>
             (q.Length == 0 || c.Name.ToLowerInvariant().Contains(q) || c.Code.ToLowerInvariant().Contains(q))
             && (_filter != "有待处理事项" || c.Pending > 0)
-            && (_filter != "我负责的客户" || c.Owner == "张客服"));
+            // 「我负责的客户」跟当前登录账号走：以前固定比「张客服」，换个账号登录就永远筛不出数据。
+            && (_filter != "我负责的客户" || c.Owner == OperatorName));
 
         // 步骤 3：Clear + 逐条 Add，而不是整体换实例 —— XAML 绑的是这个只读属性，换实例界面收不到。
         // ObservableCollection 的 Reset/Add 事件会让 ItemsControl 自己重建行。
@@ -1332,6 +1842,10 @@ public sealed class AdminViewModel : ObservableObject
             OnPropertyChanged(nameof(CurrentService));
             OnPropertyChanged(nameof(CurrentTax));
             OnPropertyChanged(nameof(CurrentPeopleText));
+            // Workflow 顶部「关联客户」也读 Current，换客户时不补发就会停在上一家。
+            OnPropertyChanged(nameof(WfCustomerName));
+            OnPropertyChanged(nameof(WfCustomerCode));
+            OnPropertyChanged(nameof(HasWfCustomer));
         }
     }
 
@@ -1358,6 +1872,12 @@ public sealed class AdminViewModel : ObservableObject
     public ObservableCollection<RunRow> RunRows { get; }
     public ObservableCollection<FileRow> FileRows { get; }
     public bool HasRunRows => RunRows.Count > 0;
+
+    // 另外三个页签的空态判据。以前只有核对页有提示，人员 / 文件 / 最近更新为空时是纯白板，
+    // 在空演示数据下看起来像界面坏了；这里补成和 HasRunRows 同一套写法。
+    public bool HasPeopleRows => PeopleRows.Count > 0;
+    public bool HasFileRows => FileRows.Count > 0;
+    public bool HasActivities => Activities.Count > 0;
 
     // 唯一进入客户详情的路径：OpenCustomerCommand、Select 的详情 key 都最终走这里。
     // 四个步骤的顺序不能换，否则会出现一帧「标题已是新客户、表格还是旧数据」或反过来。
@@ -1436,6 +1956,11 @@ public sealed class AdminViewModel : ObservableObject
                 Time = f.Time,
                 Tone = f.Tone
             });
+
+        // 步骤 6：另外三个空态判据同样要手动通知，否则切换客户后提示行不会显隐。
+        OnPropertyChanged(nameof(HasPeopleRows));
+        OnPropertyChanged(nameof(HasFileRows));
+        OnPropertyChanged(nameof(HasActivities));
     }
 
     // ===================== 协作与审批 =====================
@@ -1578,16 +2103,25 @@ public sealed class AdminViewModel : ObservableObject
     public ICommand WfArchiveCommand { get; }
     public ICommand WfRestartCommand { get; }
 
-    // 向导顶部「关联客户」显示的名字。Current 在构造函数末尾必不为 null，
-    // 所以 ?? 的右侧实际走不到，只是给「将来允许未选客户直接进 Workflow」留的兜底。
-    public string WfCustomerName => Current?.Name ?? "青禾新能源有限公司";
-    public string WfCustomerCode => Current?.Code ?? "KH-001";
+    // 向导顶部「关联客户」显示的名字。没有客户时明确写「未选择客户」，
+    // 以前兜底成「青禾新能源有限公司 / KH-001」会让空工作区看起来像真有一家客户。
+    public string WfCustomerName => Current?.Name ?? "未选择客户";
+    public string WfCustomerCode => Current?.Code ?? "—";
+
+    /// <summary>Workflow 是否已关联到一个真实客户（空工作区里为 false）。</summary>
+    public bool HasWfCustomer => Current is not null;
 
     // 调用方：「开始样例核对」按钮（WfStartCommand）。
     // 前提：WfAccepted 必须为 true —— 这是「不读取真实附件」的免责勾选，没勾就不让跑。
     // 做完之后：生成 3 条样例结果、清空错误、WfStep 从 0 推到 1，面板由第一步切到第二步。
     private void StartRun()
     {
+        // 没有客户就没有可关联的核对任务：给一句可操作的提示，而不是拿假客户名继续跑。
+        if (Current is null)
+        {
+            WfError = "演示提示：当前还没有客户。请先在「客户工作空间」新建一位客户，再发起核对。";
+            return;
+        }
         if (!WfAccepted)
         {
             // 校验失败也要有反馈：WfError 一非空，HasWfError 跟着变 true，红色提示行显形。
@@ -1808,7 +2342,8 @@ public sealed class AdminViewModel : ObservableObject
         FormShort = string.Empty;
         FormCode = NextCustomerCode();
         FormType = CustomerTypes[0];
-        FormOwner = "张客服";
+        // 新建表单的负责人预填当前登录账号；账号为空时 SetOperatorName 已回落「演示账号」。
+        FormOwner = OperatorName;
         FormCity = string.Empty;
         FormContact = string.Empty;
         FormService = string.Empty;
@@ -2274,13 +2809,20 @@ public sealed class AdminViewModel : ObservableObject
         ws.Messages.Clear();
         foreach (var m in Messages)
         {
-            // 错误提示是瞬时反馈（未配置 Key、网络失败），不落盘：下次启动的对话里
-            // 不会残留失败记录，BuildAiHistory 同样跳过它们。
-            if (m.IsError) continue;
+            // 两类消息不落盘：
+            //   · 错误提示（未配置 Key、网络失败）是瞬时反馈；
+            //   · 确认卡片是一次性的交互态，重启后按钮对应的 PendingWrite 已经不存在，
+            //     落盘只会留下点不动的死卡片。
+            if (m.IsError || m.IsConfirmCard) continue;
             ws.Messages.Add(new MessageCache { Author = m.Author, Text = m.Text, IsUser = m.IsUser });
         }
 
         LocalCache.SaveSoon();
+
+        // 数据已经写进 LocalCache.Data，再通知壳层重建左侧导航：
+        // 客户新建 / 编辑 / 删除、发消息、审批都能在这里一次覆盖。
+        // 放最后是为了让订阅者读到的 AllCustomers / HasMessages 已经是新值。
+        WorkspaceChanged?.Invoke(this, EventArgs.Empty);
     }
 }
 

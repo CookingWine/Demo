@@ -136,7 +136,7 @@ public sealed class CustomerCache
     /// <summary>服务类型：劳务派遣 / 业务外包 / 人事代理。</summary>
     public string Type { get; set; } = string.Empty;
 
-    /// <summary>负责人（也用于「我负责的客户」筛选，按 "张客服" 匹配）。</summary>
+    /// <summary>负责人（也用于「我负责的客户」筛选，按当前登录账号匹配）。</summary>
     public string Owner { get; set; } = string.Empty;
 
     /// <summary>所在城市。</summary>
@@ -241,7 +241,7 @@ public sealed class LoginCache
 // 存储层只认「原始字段」，转换在 AdminViewModel 里显式做，两边互不污染。
 public sealed class MessageCache
 {
-    /// <summary>发送者显示名（"Agent" / "张客服"）。</summary>
+    /// <summary>发送者显示名（"Agent" / "我"）。</summary>
     public string Author { get; set; } = "Agent";
 
     /// <summary>消息正文。</summary>

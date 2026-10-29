@@ -161,7 +161,7 @@
     <!-- #3F4657 比 Text3(#434A5C) 还要暗一档，相当于「令牌之下」的一档自造灰；
          它不放进 Theme 是因为只服务这一处。底部留 22 与标题栏上下留白同值，
          视觉上闪屏的上下边界因此是对称的。 -->
-    <TextBlock Text="v1.4.2 · Avalonia 11" FontSize="10.5" Foreground="#3F4657"
+    <TextBlock Text="v1.0.0 · Demo" FontSize="10.5" Foreground="#3F4657"
                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,22" />
   </Panel>
 </UserControl>

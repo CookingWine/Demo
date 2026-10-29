@@ -126,6 +126,19 @@
                  Margin="14,26,14,8" />
     </DataTemplate>
 
+    <!-- 二级导航：空态提示 -->
+    <!-- 本地缓存没有数据时占一行，只说明「为什么空、下一步做什么」。
+         刻意不用 Button：没有 Command、没有悬停反馈，避免看起来能点却点了没反应。
+         12px + Text3 比可点击条目（14px / Text0）更弱一级，读起来是说明而不是导航。 -->
+    <DataTemplate DataType="{x:Type vm:SubNavEmptyEntry}">
+      <TextBlock Text="{Binding Text}"
+                 FontSize="12"
+                 Foreground="{StaticResource Text3}"
+                 TextWrapping="Wrap"
+                 LineHeight="18"
+                 Margin="24,4,14,8" />
+    </DataTemplate>
+
     <!-- 二级导航：条目 -->
     <!-- 高度、字号、字重、是否显示图标与徽标全部由 VM 计算，
          视图只做呈现，避免在 XAML 里堆条件判断 -->
@@ -366,7 +379,8 @@
                   Background="{StaticResource AvatarGrad}"
                   BorderBrush="{StaticResource W10}" BorderThickness="2"
                   Margin="0,14,0,0" HorizontalAlignment="Center">
-            <TextBlock Text="L" FontSize="11" FontWeight="Bold" Foreground="#080A0F"
+            <!-- 首字母与二级栏底部同源（SubNavUserInitial），不再写死 "L"。 -->
+            <TextBlock Text="{Binding SubNavUserInitial}" FontSize="11" FontWeight="Bold" Foreground="#080A0F"
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
         </Grid>
@@ -418,7 +432,8 @@
                            Foreground="#0A0B10" HorizontalAlignment="Center" VerticalAlignment="Center" />
               </Border>
               <TextBlock Grid.Column="1" Text="{Binding SubNavUserName}" FontSize="14" FontWeight="Medium"
-                         Foreground="{StaticResource Text0}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                         Foreground="{StaticResource Text0}" Margin="10,0,8,0" VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis" />
               <TextBlock Grid.Column="2" Text="{Binding SubNavUserRole}" FontSize="11"
                          Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
             </Grid>

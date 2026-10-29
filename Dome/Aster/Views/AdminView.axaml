@@ -195,7 +195,9 @@
                  HorizontalAlignment=Center 让窗口比内容列宽时左右均匀留白。 -->
             <StackPanel x:Name="WorkbenchContent" HorizontalAlignment="Center" Margin="0,30,0,10">
               <TextBlock Text="今日工作台" Classes="h1" />
-              <TextBlock Text="从常用入口开始，也可以直接在下方对话中交办工作。" Classes="lead" />
+              <!-- 副标题把 Demo 定位说清楚：数据只在本机、没有后端，避免演示时被当成真实业务系统。 -->
+              <TextBlock Text="演示工作区：数据只保存在本机。可以新建客户与待办，或直接在下方对话中交办。"
+                         Classes="lead" />
 
               <!-- 快捷卡区：UniformGrid Columns=3 把宽度均分，和 Cards 的 3 条数据强绑定
                    （多一条会换行，少一条右侧留空，两个数字必须一起改）。
@@ -241,6 +243,17 @@
               </ItemsControl>
 
               <TextBlock Text="会话" Classes="eyebrow" Margin="0,34,0,4" />
+
+              <!-- 会话空态：Messages 为空时显示。
+                   以前这里只剩一个「会话」标签，看起来像加载失败；现在明确说明「现在为什么空、能做什么」，
+                   并把 Demo 边界写清楚（未配置 Key 不发网络请求）。 -->
+              <StackPanel IsVisible="{Binding !HasMessages}" Margin="0,10,0,2" MaxWidth="720"
+                          HorizontalAlignment="Left">
+                <TextBlock Text="还没有对话记录。" FontSize="13" Foreground="{StaticResource Text1}" />
+                <TextBlock Text="演示环境：未配置 AI Key 时只给操作引导，不会发起网络请求。可以在下方输入框开始一段对话，或先点上方「新建客户」造一条演示数据。"
+                           FontSize="12" Foreground="{StaticResource Text3}" TextWrapping="Wrap"
+                           LineHeight="18" Margin="0,6,0,0" />
+              </StackPanel>
               <!-- 消息列表：绑 Messages（ObservableCollection），Add 时靠集合变更事件自动追加一行。
                    模板按 ChatMessage 匹配，同一条数据渲染两份互斥布局：
                    IsAgent 为 true 走左侧无气泡（MaxWidth 720），IsUser 为 true 走右侧蓝气泡（MaxWidth 600）。
@@ -254,12 +267,46 @@
                            AuthorBrush / TextBrush 让错误消息整条变红、工具回执变弱灰。
                            普通消息的取值与原来的 StaticResource（Text2 / Text0）完全一致，
                            视觉上零变化。 -->
-                      <StackPanel IsVisible="{Binding IsAgent}" MaxWidth="720" HorizontalAlignment="Left">
+                      <!-- 普通 Agent 气泡：ShowAgentBubble = IsAgent && !IsConfirmCard，
+                           否则确认卡片会同时出现一条空的作者行 + 空正文。 -->
+                      <StackPanel IsVisible="{Binding ShowAgentBubble}" MaxWidth="720" HorizontalAlignment="Left">
                         <TextBlock Text="{Binding DisplayName}" FontSize="12" FontWeight="Bold"
                                    Foreground="{Binding AuthorBrush}" Margin="0,0,0,7" />
                         <TextBlock Text="{Binding Text}" FontSize="14.5" Foreground="{Binding TextBrush}"
                                    TextWrapping="Wrap" LineHeight="23" />
                       </StackPanel>
+
+                      <!-- 写操作确认卡片：模型已声明写工具但还没执行。
+                           按钮命令挂在最近的 ItemsControl（DataContext = AdminViewModel）上：
+                           这一行的 DataContext 是 ChatMessage，本身没有命令。 -->
+                      <Border IsVisible="{Binding IsConfirmCard}" MaxWidth="720" HorizontalAlignment="Left"
+                              Background="{DynamicResource Bg2}" BorderBrush="{StaticResource Line2}"
+                              BorderThickness="1" CornerRadius="12" Padding="18,15">
+                        <StackPanel>
+                          <TextBlock Text="{Binding DisplayName}" FontSize="12" FontWeight="Bold"
+                                     Foreground="{StaticResource Text2}" />
+                          <TextBlock Text="以下操作将写入本机数据，确认后才会执行："
+                                     FontSize="13" Foreground="{StaticResource Text0}" Margin="0,8,0,0" />
+                          <TextBlock Text="{Binding ConfirmDetail}" FontSize="12.5"
+                                     Foreground="{StaticResource Text1}" TextWrapping="Wrap"
+                                     LineHeight="20" Margin="0,8,0,0" />
+                          <TextBlock Text="{Binding ConfirmState}" FontSize="11.5"
+                                     Foreground="{StaticResource Amber}" IsVisible="{Binding HasConfirmState}"
+                                     Margin="0,10,0,0" />
+                          <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,14,0,0">
+                            <!-- 取命令：沿视觉树找到最近的 ItemsControl（DataContext = AdminViewModel）。
+                                 这里不能写 ((vm:AdminViewModel)DataContext) —— 反射绑定在运行期解析不了
+                                 XAML 里的 vm: 前缀，会抛「Unable to resolve type vm:AdminViewModel」；
+                                 直接逐段取属性即可，DataContext 是 object 也能继续反射。 -->
+                            <Button Classes="pri" Content="确认执行" Height="34" Padding="18,0"
+                                    IsEnabled="{Binding !IsConfirmExpired}"
+                                    Command="{Binding $parent[ItemsControl].DataContext.ConfirmPendingCommand}" />
+                            <Button Classes="ghost" Content="取消" Height="34" Padding="18,0"
+                                    IsEnabled="{Binding !IsConfirmExpired}"
+                                    Command="{Binding $parent[ItemsControl].DataContext.CancelPendingCommand}" />
+                          </StackPanel>
+                        </StackPanel>
+                      </Border>
                       <Border IsVisible="{Binding IsUser}" MaxWidth="600" HorizontalAlignment="Right"
                               Background="#1F6C8BFF" CornerRadius="12" Padding="16,12"
                               BorderBrush="#266C8BFF" BorderThickness="1">
@@ -292,7 +339,7 @@
                  样式上把背景/边框清空、内边距归零，让它看起来像卡片里的一块文字而不是输入框。 -->
             <TextBox x:Name="Composer"
                      Text="{Binding Draft, Mode=TwoWay}"
-                     Watermark="输入业务指令，或 @ 同事发起协作请求"
+                     Watermark="输入指令，或描述要演示的客户 / 待办场景"
                      AcceptsReturn="True" TextWrapping="Wrap"
                      MinHeight="38" MaxHeight="120"
                      Background="Transparent" BorderThickness="0"
@@ -469,7 +516,7 @@
                 <!-- 空态提示：v2 起客户数据完全来自本地缓存，一个客户都没有是完全合法的状态。
                      文案指向「新建」按钮而不是让人去改 JSON：v2.1 起界面就能建，
                      只有批量导入这种场景才需要手工编辑文件。 -->
-                <TextBlock Text="还没有客户。点右上角「＋ 新建客户」创建第一条 —— 数据会立刻写入本地缓存，下次启动自动恢复。"
+                <TextBlock Text="演示工作区还没有客户。点右上角「＋ 新建客户」创建第一位 —— 数据只写入本机缓存，不会上传到任何服务器。"
                            FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
                            Margin="18,22,18,24" IsVisible="{Binding !HasCustomers}" />
               </StackPanel>
@@ -592,15 +639,17 @@
                       <TextBlock Text="{Binding CurrentTax}" FontSize="13.5" TextWrapping="Wrap" Margin="0,6,0,0" />
                     </StackPanel>
                     <StackPanel Grid.Row="3" Margin="0,0,18,0">
-                      <TextBlock Text="当前资料版本" Classes="col" />
-                      <TextBlock Text="V2 · 2026-10-17" FontSize="13.5" Margin="0,6,0,0" />
+                      <TextBlock Text="资料状态" Classes="col" />
+                      <!-- 以前这里写死「V2 · 2026-10-17」，看起来像真有一份归档版本；
+                           演示缓存里没有版本字段，直接标明数据性质，避免误导。 -->
+                      <TextBlock Text="演示数据 · 仅存本机" FontSize="13.5" Margin="0,6,0,0" />
                     </StackPanel>
                   </Grid>
                   <Border Height="1" Background="{StaticResource Line}" Margin="0,16,0,12" />
                   <TextBlock FontSize="11.5" Foreground="{StaticResource Text3}" TextWrapping="Wrap">
                     <Run Text="来源：" />
                     <Run Text="{Binding CurrentFile}" />
-                    <Run Text=" · Agent 录入，经人工确认" />
+                    <Run Text=" · 演示数据，仅存本机" />
                   </TextBlock>
                 </StackPanel>
               </Border>
@@ -608,6 +657,10 @@
               <Border Grid.Column="1" Classes="panel" Margin="16,0,0,0" VerticalAlignment="Top">
                 <StackPanel>
                   <TextBlock Text="最近更新" FontSize="16" FontWeight="Bold" Margin="0,0,0,14" />
+                  <!-- 空态：新建客户只写了一条「新建客户档案」，缓存里也可能一条都没有。 -->
+                  <TextBlock Text="暂无更新记录。"
+                             FontSize="12.5" Foreground="{StaticResource Text2}"
+                             IsVisible="{Binding !HasActivities}" Margin="0,0,0,8" />
                   <ItemsControl ItemsSource="{Binding Activities}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate DataType="{x:Type vm:ActivityItem}">
@@ -625,15 +678,16 @@
 
             <!-- 页签 2：人员记录 -->
             <!-- 整块是 panel，但 Padding=0：表头和数据行各自控内边距，才能让 18px 的左缩进从上到下一致。
-                 数据来自 PeopleRows，固定 3 条匿名样例，和客户真实人数无关。 -->
+                 数据来自 PeopleRows（也就是本地缓存里该客户的 staff 数组），空数组时显示空态提示。 -->
             <Border Classes="panel" IsVisible="{Binding IsTabPeople}" Margin="0,20,0,0" Padding="0">
               <StackPanel>
                 <StackPanel Margin="20,18,20,14">
                   <TextBlock Text="人员记录" FontSize="16" FontWeight="Bold" />
-                  <TextBlock Text="设计稿仅展示 3 条匿名样例，人员增减由 workflow 完成"
-                             FontSize="12" Foreground="{StaticResource Text2}" Margin="0,7,0,0" />
+                  <TextBlock Text="人员记录来自本机演示缓存，可在缓存文件的 staff 数组里补充。"
+                             FontSize="12" Foreground="{StaticResource Text2}" Margin="0,7,0,0" TextWrapping="Wrap" />
                 </StackPanel>
-                <Border Background="#0BFFFFFF" Padding="18,11" BorderBrush="#0AFFFFFF" BorderThickness="0,1,0,1">
+                <Border Background="#0BFFFFFF" Padding="18,11" BorderBrush="#0AFFFFFF" BorderThickness="0,1,0,1"
+                        IsVisible="{Binding HasPeopleRows}">
                   <Grid ColumnDefinitions="1*,1.2*,1.2*,1.4*,1*,1.4*">
                     <TextBlock Text="人员编号" Classes="col" />
                     <TextBlock Grid.Column="1" Text="姓名" Classes="col" />
@@ -666,6 +720,10 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <!-- 空态：人员数组为空是合法状态（新建客户默认没有人员），不能留一块白板。 -->
+                <TextBlock Text="暂无人员记录。这是演示数据，可在本机缓存文件对应客户的 staff 数组里补充。"
+                           FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
+                           Margin="20,18" IsVisible="{Binding !HasPeopleRows}" />
               </StackPanel>
             </Border>
 
@@ -697,7 +755,9 @@
                       <Border Classes="trow">
                         <Grid ColumnDefinitions="1.6*,1*,0.8*,1.1*,1*,1.1*,0.8*">
                           <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="个税交叉验证" FontSize="13" Foreground="{StaticResource Text0}" />
+                            <!-- 以前这里写死「个税交叉验证」，每条记录看起来都像同一类真实业务；
+                                 缓存里没有「任务类型」字段，统一显示中性名称。 -->
+                            <TextBlock Text="核对任务" FontSize="13" Foreground="{StaticResource Text0}" />
                             <TextBlock Text="{Binding Batch}" FontSize="11.5"
                                        Foreground="{StaticResource Text2}" Margin="0,3,0,0" />
                           </StackPanel>
@@ -713,35 +773,36 @@
                           <TextBlock Grid.Column="5" Text="{Binding Date}" FontSize="12"
                                      Foreground="{StaticResource Text2}" VerticalAlignment="Center" />
                           <!-- 跨模板取命令：这一行的 DataContext 是 RunRow，它身上没有 GoWorkflowCommand，
-                               所以沿视觉树往上找最近的 ItemsControl，取它的 DataContext（AdminViewModel）
-                               再强转成 vm:AdminViewModel 取命令。$parent[ItemsControl] 只找祖先、不含自身；
-                               没有这层写法就只能给每个 RunRow 也注入一份命令。 -->
+                               所以沿视觉树往上找最近的 ItemsControl，取它的 DataContext（AdminViewModel）。
+                               $parent[ItemsControl] 只找祖先、不含自身；路径不要加 ((vm:…)DataContext) 类型转换,
+                               反射绑定在运行期解析不了 XAML 的 vm: 前缀。 -->
                           <Button Grid.Column="6" Classes="link" Content="查看结果 →" FontSize="12"
                                   HorizontalAlignment="Right" VerticalAlignment="Center" Padding="0"
-                                  Command="{Binding $parent[ItemsControl].((vm:AdminViewModel)DataContext).GoWorkflowCommand}" />
+                                  Command="{Binding $parent[ItemsControl].DataContext.GoWorkflowCommand}" />
                         </Grid>
                       </Border>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="暂无核对记录。通过上方「发起核对」开始，结果会归档到这里。"
+                <TextBlock Text="暂无核对记录。这是演示数据，可通过上方 Workflow 走一遍样例核对。"
                            FontSize="13" Foreground="{StaticResource Text2}" Margin="20,18"
-                           IsVisible="{Binding !HasRunRows}" />
+                           TextWrapping="Wrap" IsVisible="{Binding !HasRunRows}" />
               </StackPanel>
             </Border>
 
             <!-- 页签 4：文件与产出 -->
-            <!-- FileRows 至少一条（原始材料），跑过核对才多一条 Excel 产出。
+            <!-- 数据来自 FileRows（本地缓存里该客户的 files 数组），空数组时显示空态。
                  用途标签的底色/字色来自 PurposeBackground / PurposeBrush，Tone=ok 时借
                  StatusPalette 的「已完成」配色转绿，否则走灰色兜底。 -->
             <Border Classes="panel" IsVisible="{Binding IsTabFiles}" Margin="0,20,0,0" Padding="0">
               <StackPanel>
                 <StackPanel Margin="20,18,20,14">
                   <TextBlock Text="文件与产出" FontSize="16" FontWeight="Bold" />
-                  <TextBlock Text="原始材料与核对结果分开保存"
-                             FontSize="12" Foreground="{StaticResource Text2}" Margin="0,7,0,0" />
+                  <TextBlock Text="演示数据：记录仅用于展示，不会读取或上传真实文件。"
+                             FontSize="12" Foreground="{StaticResource Text2}" Margin="0,7,0,0" TextWrapping="Wrap" />
                 </StackPanel>
-                <Border Background="#0BFFFFFF" Padding="18,11" BorderBrush="#0AFFFFFF" BorderThickness="0,1,0,1">
+                <Border Background="#0BFFFFFF" Padding="18,11" BorderBrush="#0AFFFFFF" BorderThickness="0,1,0,1"
+                        IsVisible="{Binding HasFileRows}">
                   <Grid ColumnDefinitions="2.4*,1.1*,1.2*,1.2*">
                     <TextBlock Text="文件名称" Classes="col" />
                     <TextBlock Grid.Column="1" Text="用途" Classes="col" />
@@ -768,6 +829,9 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <TextBlock Text="暂无文件与产出记录。演示数据可在本机缓存文件对应客户的 files 数组里补充。"
+                           FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
+                           Margin="20,18" IsVisible="{Binding !HasFileRows}" />
               </StackPanel>
             </Border>
           </StackPanel>
@@ -798,7 +862,7 @@
             <Border Classes="note" Margin="0,20,0,0">
               <!-- 这句承诺「退回会追加一条补材料待办」，但 Decide 只写了 Note，
                    并没有真的新增 TaskItem，文案与实现不一致。 -->
-              <TextBlock Text="审批动作不触发真实业务写入；退回会追加一条补材料待办。"
+              <TextBlock Text="演示环境：审批只更新本机状态与备注，不会产生真实业务单据，也不会自动新增补材料待办。"
                          FontSize="12.5" Foreground="#A9BAFF" TextWrapping="Wrap" />
             </Border>
 
@@ -866,7 +930,7 @@
 
             <!-- 空态提示：任务同样只来自本地缓存（workspace.tasks），审批完最后一条后这里会露出来。
                  注意判断的是「当前筛选下有没有任务」，所以切到「全部记录」看到旧记录时它是隐藏的。 -->
-            <TextBlock Text="当前筛选下没有待办。点右上角「＋ 新建待办」添加一条，审批结果同样只写本地缓存。"
+            <TextBlock Text="演示环境下当前筛选没有待办。点右上角「＋ 新建待办」添加一条，审批结果只更新本机缓存。"
                        FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
                        Margin="0,14,0,0" IsVisible="{Binding !HasTasks}" />
           </StackPanel>
@@ -925,6 +989,10 @@
                         BorderThickness="1" CornerRadius="8" Padding="12,10">
                   <TextBlock Text="{Binding WfCustomerName}" FontSize="13.5" Foreground="{StaticResource Text0}" />
                 </Border>
+                <!-- 空工作区里没有可关联的客户：明确提示去建客户，而不是拿一个假客户名继续演示。 -->
+                <TextBlock Text="当前没有客户。请先在「客户工作空间」新建一位客户，再发起核对。"
+                           FontSize="12" Foreground="{StaticResource Text3}" TextWrapping="Wrap"
+                           Margin="0,8,0,0" IsVisible="{Binding !HasWfCustomer}" />
 
                 <Grid ColumnDefinitions="*,*" Margin="0,16,0,0">
                   <StackPanel Margin="0,0,8,0">
@@ -952,8 +1020,10 @@
                 <TextBlock Text="{Binding WfError}" FontSize="12" Foreground="{StaticResource Red}"
                            Margin="0,8,0,0" IsVisible="{Binding HasWfError}" />
 
+                <!-- 没有客户时按钮禁用：StartRun 里还有一道守卫，这里只是让状态在界面上可见。 -->
                 <Button Classes="pri" Content="开始样例核对" Height="38" HorizontalAlignment="Left"
-                        Padding="22,0" Margin="0,16,0,0" Command="{Binding WfStartCommand}" />
+                        Padding="22,0" Margin="0,16,0,0" Command="{Binding WfStartCommand}"
+                        IsEnabled="{Binding HasWfCustomer}" />
               </StackPanel>
             </Border>
 
@@ -1076,7 +1146,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
               <!-- 空态：指标同样只来自本地缓存，一条都没有时给一句引导，而不是留一块空白面板 -->
-              <TextBlock Text="还没有指标。填下面一行的名称就能加第一条，数值与说明都可以留空。"
+              <TextBlock Text="演示环境还没有指标。填下面一行的名称就能加第一条，数值与说明都可以留空。"
                          FontSize="12.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap"
                          Margin="20,18,20,18" IsVisible="{Binding !HasMetrics}" />
               </StackPanel>
@@ -1136,7 +1206,7 @@
               <StackPanel Grid.Row="0" Grid.Column="0">
                 <TextBlock Text="客户名称 *" Classes="col" Margin="0,0,0,6" />
                 <TextBox Text="{Binding FormName, Mode=TwoWay}" Height="38"
-                         Watermark="如：青禾新能源有限公司" />
+                         Watermark="如：演示客户有限公司" />
               </StackPanel>
               <StackPanel Grid.Row="0" Grid.Column="1">
                 <TextBlock Text="客户编号" Classes="col" Margin="0,0,0,6" />
@@ -1158,7 +1228,7 @@
 
               <StackPanel Grid.Row="2" Grid.Column="0">
                 <TextBlock Text="负责人" Classes="col" Margin="0,0,0,6" />
-                <TextBox Text="{Binding FormOwner, Mode=TwoWay}" Height="38" Watermark="张客服" />
+                <TextBox Text="{Binding FormOwner, Mode=TwoWay}" Height="38" Watermark="如：演示负责人" />
               </StackPanel>
               <StackPanel Grid.Row="2" Grid.Column="1">
                 <TextBlock Text="所在城市" Classes="col" Margin="0,0,0,6" />

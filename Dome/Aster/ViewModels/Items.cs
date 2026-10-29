@@ -210,7 +210,7 @@ public abstract class SubNavEntry : ObservableObject
     }
 }
 
-/// <summary>二级导航里的分组标题（如「项目」「最近」），只负责视觉分节，不可点击。</summary>
+/// <summary>二级导航里的分组标题（如「客户」「最近会话」），只负责视觉分节，不可点击。</summary>
 public sealed class SubNavGroupEntry : SubNavEntry
 {
     // 表达式体构造函数：只有一个只读属性，连方法体都不需要。
@@ -218,6 +218,21 @@ public sealed class SubNavGroupEntry : SubNavEntry
     public SubNavGroupEntry(string title) => Title = title;
     // 渲染成 14px Bold + Text3（最弱一级灰）的一行文字，Template 里不自带任何交互。
     public string Title { get; }
+}
+
+/// <summary>
+/// 二级导航里的空态提示：本地缓存没有数据时占一行，说明「这里为什么是空的、下一步做什么」。
+/// </summary>
+// 单独建类型而不是塞一个空标题的 SubNavLinkEntry：
+//   · SubNavLinkEntry 自带 Command 与选中态，空态不该被点、也不该参与高亮；
+//   · SelectSubNav 的 OfType<SubNavLinkEntry>() 会天然过滤掉它，不需要额外判空分支；
+//   · ShellView 用一个纯 TextBlock 模板渲染，不存在「看起来能点但点了没反应」。
+public sealed class SubNavEmptyEntry : SubNavEntry
+{
+    public SubNavEmptyEntry(string text) => Text = text;
+
+    // 12px / Text3 / 允许换行：比可点击条目更弱一级，读到的是说明而不是导航。
+    public string Text { get; }
 }
 
 /// <summary>

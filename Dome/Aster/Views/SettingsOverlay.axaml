@@ -586,7 +586,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
-              <!-- 左栏底部文案来自 VM 的 Footer 属性（Aster v1.4.2 · 设置已同步至本地），
+              <!-- 左栏底部文案来自 VM 的 Footer 属性（Aster Demo · 设置仅本次运行有效），
                    不写死在 XAML，方便以后版本号或同步状态变化时只改一处；LineHeight 17 让长文案换行后仍紧凑 -->
               <TextBlock Grid.Row="1" Text="{Binding Settings.Footer}"
                          FontSize="10.5" Foreground="{StaticResource Text2}"

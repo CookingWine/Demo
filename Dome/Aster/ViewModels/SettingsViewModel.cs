@@ -383,21 +383,25 @@ public sealed class LinkItem
 }
 
 /// <summary>账号资料卡：位于「账号」分区顶部，展示头像首字、昵称、角色、邮箱与加入时间。</summary>
+// 全部是演示占位：本应用没有账号体系，也没有「管理员 / 加入时间」这些真实资料。
+// 以前写死「陈墨 / chenmo@aster.io / 2024 年 3 月加入」，会被当成真实的用户档案。
 public sealed class AccountCard
 {
-    public string Initial { get; init; } = "陈";
-    public string Name { get; init; } = "陈墨";
-    public string Role { get; init; } = "管理员";
-    public string Email { get; init; } = "chenmo@aster.io";
-    public string Joined { get; init; } = "2024 年 3 月加入 · 最近登录 2 分钟前";
+    public string Initial { get; init; } = "演";
+    public string Name { get; init; } = "演示账号";
+    public string Role { get; init; } = "Demo";
+    public string Email { get; init; } = "demo@example.com";
+    public string Joined { get; init; } = "本地演示环境 · 未接后端";
 }
 
 /// <summary>关于卡片：应用名、版本与「已是最新」提示，位于「关于」分区顶部。</summary>
 public sealed class AboutCard
 {
     public string Name { get; } = "Aster";
-    public string Version { get; } = "v1.4.2";
-    public string Meta { get; } = "已是最新 · 2026-10-12 发布";
+    // 与 csproj 的 1.0.0.0 对齐并显式标注 Demo：以前写「v1.4.2 / 已是最新 · 2026-10-12 发布」
+    // 会让人以为这是一个有正式发版节奏的产品。
+    public string Version { get; } = "v1.0.0 · Demo";
+    public string Meta { get; } = "本地演示构建 · 无后端 · 数据仅存本机";
 }
 
 /// <summary>
@@ -555,7 +559,7 @@ public sealed class SettingsViewModel : ObservableObject
     // 注意这里的 v1.4.2 与 BuildAbout 里 AboutCard.Version 的 "v1.4.2"、以及
     // Avalonia 版本兜底值 "11.3.22" 是三处各自独立的字符串，改版本号时必须同步（见文末说明）。
     // 文案里的「设置已同步至本地」是承诺不是事实：本类没有任何持久化代码，见类注释里的生命周期说明。
-    public string Footer => $"Aster v1.4.2 · 设置已同步至本地";
+    public string Footer => "Aster Demo · 设置仅本次运行有效";
 
     // 全量色块索引：色板只在「通用」分区创建，但单选逻辑写在构造函数里，
     // 用一个列表把它们收集起来，避免命令里再去遍历界面树。
@@ -711,17 +715,17 @@ public sealed class SettingsViewModel : ObservableObject
         // 步骤 2：「基本信息」卡片。4 行里有 3 个 TextValue 和 1 个 SelectValue，
         //         这正是数据驱动表单的好处：同一张卡片里可以混装不同类型，行模板不必区分。
         s.Groups.Add(Group("基本信息",
-            Row("显示名称", "在其他成员可见的位置展示的名字", new TextValue { Text = "陈墨" }),
-            Row("邮箱", "用于登录与接收通知 · 已验证", new TextValue { Text = "chenmo@aster.io" }),
+            Row("显示名称", "演示占位资料，不会上传到任何服务器", new TextValue { Text = "演示账号" }),
+            Row("邮箱", "仅作展示，本应用不会发送邮件", new TextValue { Text = "demo@example.com" }),
             // 手机号未绑定：Text 留空、只给 Placeholder，输入框的水印就充当了「未绑定」提示
-            Row("手机号", "用于二次验证与安全提醒 · 未绑定", new TextValue { Placeholder = "未绑定" }),
-            Row("所属部门", "决定可查看的数据范围", Select("产品部", "技术部", "运营部"))));
+            Row("手机号", "演示环境未接入短信服务", new TextValue { Placeholder = "未绑定" }),
+            Row("所属部门", "演示用选项，不影响任何权限", Select("演示部门", "产品部", "运营部"))));
         // 步骤 3：「安全」卡片。注意「登录密码」这一行的右侧是一个按钮而不是输入框——
         //         密码不回显、也不能就地改，只能跳到另一个流程，所以这里只放一个动作入口。
         s.Groups.Add(Group("安全",
-            Row("登录密码", "上次修改：2026-08-14", new ButtonValue { Text = "修改密码" }),
-            Row("两步验证", "登录时需要输入额外的动态验证码", new ToggleValue { IsOn = true }),
-            Row("登录设备", "当前有 3 台设备保持登录状态", new ButtonValue { Text = "管理设备" })));
+            Row("登录密码", "演示登录：任意非空账号密码即可进入，没有后端校验", new ButtonValue { Text = "修改密码" }),
+            Row("两步验证", "演示开关，不会真的发送验证码", new ToggleValue { IsOn = true }),
+            Row("登录设备", "演示环境 · 未接后端", new ButtonValue { Text = "管理设备" })));
         // 步骤 4：「会话」卡片，两个危险操作放在最后一张卡片里，与上方的常规设置隔开。
         //         两行都是 danger 语气，但只有第一行真的接了命令，第二行是设计稿占位——
         //         这种「同样长相、一个能点一个不能」的差异在界面上看不出来，属于已知的演示取舍。
@@ -946,6 +950,14 @@ public sealed class SettingsViewModel : ObservableObject
         // 要看到变化得重开设置浮层；动作本身是即时生效的。
         location.Rows.Add(Row("缓存占用", LocalCache.Describe(),
             new ButtonValue { Text = "清理", Command = new RelayCommand(LocalCache.Reset) }));
+        // Agent 审计是独立文件（audit.ndjson），清理它不会动业务缓存。
+        // 与「缓存占用」同样的已知瑕疵：清理后 desc 不会即时刷新，重开浮层才能看到新大小。
+        var auditSize = AgentAudit.SizeBytes;
+        location.Rows.Add(Row("Agent 审计日志",
+            AgentAudit.Exists
+                ? $"{auditSize / 1024.0:0.0} KB · 记录模型请求、工具调用与确认结果，仅存本机"
+                : "尚未生成 · 首次使用 Agent 后自动创建",
+            new ButtonValue { Text = "清理", Command = new RelayCommand(AgentAudit.Clear) }));
         s.Groups.Add(location);
 
         s.Groups.Add(Group("备份",
@@ -1064,6 +1076,11 @@ public sealed class SettingsViewModel : ObservableObject
             TopCard = new AboutCard()
         };
 
+        // 项目定位单独一行放在最前：演示时打开设置就能确认「这不是生产系统」。
+        s.Groups.Add(Group("项目定位",
+            Row("应用性质", "单机 Demo 演示应用，不含真实业务数据与后端服务",
+                new InfoValue { Text = "Demo · 仅本机" })));
+
         // 这几行 desc 传 null：运行环境本身没有解释性文案，行高会更紧凑
         s.Groups.Add(Group("运行环境",
             Row("界面框架", null, new InfoValue { Text = $"Avalonia {avalonia}" }),
@@ -1087,7 +1104,7 @@ public sealed class SettingsViewModel : ObservableObject
         // 4 条链接都没传 Command（LinkItem.Command 可为 null），所以 XAML 里那一行是纯展示、
         // 整行不可点击；Sub 是标题右侧的小号灰字，用来放域名/版本号这类次要信息。
         s.Links.Add(new LinkItem { Icon = Controls.Icons.Globe, Title = "官方网站", Sub = "aster.studio" });
-        s.Links.Add(new LinkItem { Icon = Controls.Icons.Book, Title = "更新日志", Sub = "v1.4.2" });
+        s.Links.Add(new LinkItem { Icon = Controls.Icons.Book, Title = "更新日志", Sub = "v1.0.0" });
         s.Links.Add(new LinkItem { Icon = Controls.Icons.Message, Title = "问题反馈", Sub = "GitHub Issues" });
         s.Links.Add(new LinkItem { Icon = Controls.Icons.Doc, Title = "开源许可", Sub = "MIT / 第三方组件" });
         return s;

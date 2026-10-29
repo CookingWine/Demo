@@ -1,9 +1,14 @@
 # Aster · Avalonia 桌面端
 
 按 `aster-design.html` 设计稿 1:1 还原的跨平台桌面应用：深色玻璃质感、`#6C8BFF` 强调色、无边框圆角窗口，
-包含工作台、Markdown 编辑器、音乐播放器、管理工作区与完整设置面板。
+包含工作台、客户工作空间、审批、Workflow 与完整设置面板。
 
 `Avalonia 11.3` · `.NET 8` · macOS / Windows / Linux
+
+> **项目定位：单机 Demo 演示应用。** 没有后端、没有账号体系、没有真实业务数据：
+> 登录不做校验，客户 / 待办 / 指标 / 对话全部来自本机 `local-cache.json`，
+> 删掉缓存就是空工作区。界面上的空态提示、示例文案与按钮行为都按「演示」场景设计，
+> 不会产生真实单据、不会上传任何数据；唯一的网络请求是用户主动配置的 AI 对话。
 
 <p align="center">
   <img src="docs/screenshots/workspace.png" width="100%" alt="Aster 工作台">
@@ -120,9 +125,10 @@ RID=osx-x64 ./Dome/make-app.sh        # Intel 机器
         ├── App.axaml(.cs)       Fluent 深色主题、资源与样式装配
         ├── Assets/              应用图标：aster.ico / aster.icns / aster-*.png
         ├── Services/
-        │   ├── LocalCache.cs    本地缓存读写（local-cache.json，唯一的本地数据存储）
-        │   └── AiChatService.cs OpenAI 兼容流式客户端（SSE + Function Calling，零第三方依赖）
-        ├── AppData/             运行时生成，不入库：local-cache.json（已被 .gitignore 忽略）
+        │   ├── LocalCache.cs    本地缓存读写（local-cache.json，唯一的业务数据存储）
+        │   ├── AiChatService.cs OpenAI 兼容流式客户端（SSE + Function Calling，零第三方依赖）
+        │   └── AgentAudit.cs    Agent 审计日志（audit.ndjson 追加写 / 轮转 / 清理）
+        ├── AppData/             运行时生成，不入库：local-cache.json、audit.ndjson（已被 .gitignore 忽略）
         ├── Styles/
         │   ├── Theme.axaml      设计令牌 + 6 个自定义 ControlTheme
         │   └── Controls.axaml   按钮 / 输入框 / 导航 / 分段 / 开关 / 标签 / 滚动条样式
@@ -244,6 +250,14 @@ python3 tools/make_icon.py --preview   # --preview 额外输出一张多尺寸�
   在「设置 → AI 模型」里配 API Key / Base URL / 模型名即可接入 DeepSeek、Kimi、通义兼容模式、Ollama 等；
   输入框右下角还能切换**会话级模型**（预设清单 + 设置自定义合并，仅当前会话生效，重启回落默认）；
   未配置 Key 时对话只给引导提示，**不发任何网络请求**。
+- **写操作需二次确认**：`create_customer` / `create_task` / `decide_task` 不会直接执行，
+  先在对话里生成一张确认卡片（列出将执行的操作与参数），点「确认执行」才写入并继续生成回复；
+  点「取消」、3 分钟未确认、或直接发送新指令，均不会写入任何数据。
+- **Agent 审计**：`Services/AgentAudit.cs` 把每次模型请求、工具调用与确认结果按行追加到
+  `AppData/audit.ndjson`（与业务缓存分开，超过 1 MB 轮转为 `audit.ndjson.1`）；
+  记录不含 API Key 与完整正文，设置页「存储与备份」可查看大小并清理。
+- **操作者来源**：Agent 的系统提示、新建客户的默认负责人、新建表单的负责人预填都取登录账号
+  （空账号回落「演示账号」），代码中不再写死人名。
 - **MVVM**：手写 `ObservableObject` / `RelayCommand`，列表项自带命令与选中态，
   视图通过 `DataTemplate` 按 ViewModel 类型自动匹配。
 - **无边框窗口**：`SystemDecorations=None` + 透明窗口，自绘标题栏负责拖拽、双击最大化与窗口按钮；
@@ -257,7 +271,15 @@ python3 tools/make_icon.py --preview   # --preview 额外输出一张多尺寸�
 - 音乐模块为**交互演示**：进度随计时器推进、唱片旋转、柱状图跳动，未接入音频解码与真实播放。
 - Agent 对话已接真实大模型（OpenAI 兼容协议 + Function Calling）：流式逐字输出、连续多轮上下文
   （最多 20 条）、工具调用上限 8 轮、单次请求超时 120 秒；未配置 Key 时只给引导提示，不发请求。
-- 文档数据、成员、订单等均为内置演示数据，未接后端。
+- Agent 只能执行 5 个白名单工具；**没有删除能力**（删除仍需在客户详情页手工确认），
+  也不能修改设置、读取附件、发送邮件或调用第三方系统。
+- 写操作确认卡片是**瞬时界面消息**，不写入 `local-cache.json`；重启后不会残留点不动的按钮。
+- 审计日志按行追加、只在写入前判断 1 MB 阈值；清理后设置页那一行文案需重开浮层才会刷新。
+- 文档、音乐模块未启用（rail 中无入口，VM/View 代码保留）；其内部内容为内置演示数据，未接数据层。
+- 设置页的外观 / 通知 / 备份 / 导出等控件只做界面演示，不持久化；账号卡与「关于」均为 Demo 占位信息。
+- 左侧「客户」区块最多列 5 位客户（超出显示「查看全部客户」）；「最近会话」没有独立会话模型，
+  有对话时显示一条「当前工作会话」，没有就显示空态。
+- Workflow 使用虚构样例数据；没有客户时不会显示假客户名，按钮直接禁用并提示先建客户。
 - 工作区数据全部来自本地缓存文件（客户 / 详情四页签 / 待办 / KPI / 对话），**没有内置演示数据**；
   文件为空时界面就是空的。界面上可以**新建、编辑、删除**客户，新建待办与 KPI 指标，也能改审批状态与对话；
   但待办条目本身还不能编辑/删除，客户详情四页签（人员 / 核对 / 文件）仍需编辑文件补齐。

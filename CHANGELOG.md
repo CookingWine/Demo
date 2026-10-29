@@ -23,7 +23,114 @@
 
 ---
 
+## 2026-10-29
+
+### 19. 修复 DataTemplate 内类型转换导致的运行时崩溃 —（与第 17/18 条同批提交）
+
+- **现象**：进入工作台抛 `System.ArgumentException: Unable to resolve type vm:AdminViewModel`，
+  来源 `AdminView.axaml` 第 299 行（确认卡片「确认执行」按钮）。
+- **原因**：绑定路径写成
+  `$parent[ItemsControl].((vm:AdminViewModel)DataContext).ConfirmPendingCommand`。
+  其中 `((vm:…)DataContext)` 是 XAML 类型转换语法，需要运行期解析 `vm:` 命名空间前缀；
+  Avalonia 11.3 的反射绑定在 `$parent[...]` 之后拿不到该映射，于是整个模板 Measure 失败。
+  同文件核对记录行的 `GoWorkflowCommand` 用了同样写法，属同类潜在崩溃（此前核对页无数据未暴露）。
+- **修复**：去掉类型转换，改为逐段反射取值
+  `$parent[ItemsControl].DataContext.ConfirmPendingCommand`。`DataContext` 虽是 `object`，
+  反射绑定仍能继续按属性名解析。共 3 处：确认 / 取消 / 查看结果。
+- **文件**：`Dome/Aster/Views/AdminView.axaml`、本文件。
+- **注意**：以后在 XAML 绑定路径里不要再写 `((vm:Xxx)DataContext)`；需要跨模板取 VM 属性时，
+  直接用 `$parent[ItemsControl].DataContext.Property`，或给列表项注入命令。
+- **验证**：`dotnet build` 0 warning 0 error；含两条消息的缓存启动 8 秒，窗口标题正常（Aster）、
+  进程未退出。工作台消息模板的实际渲染需登录后人工确认。
+
+### 18. Agent 审计日志 + 写操作二次确认 + 操作者去写死 — （提交后回填 hash）
+
+- **改动**：按 AI Agent 规格落地三项。① Agent 不再自称「张客服」：系统提示、新建客户的默认负责人、
+  新建表单的负责人预填、「我负责的客户」筛选统一取登录账号；② 新增独立审计日志
+  `AppData/audit.ndjson`，记录模型请求、工具调用与确认结果，与业务缓存分开；③ 新建客户 / 新建待办 /
+  审批三类写操作改为**对话内二次确认**：先出确认卡片列出操作与参数，点「确认执行」才落盘，
+  取消 / 3 分钟超时 / 直接发新指令均不写入。
+- **文件**：
+  - 新增 `Dome/Aster/Services/AgentAudit.cs`（NDJSON 追加写、1 MB 轮转、脱敏摘要、清理门面）
+  - `Dome/Aster/ViewModels/AdminViewModel.cs`（`OperatorName` 注入与 4 处替换；`ChatMessage` 增加
+    `IsConfirmCard` / `ConfirmDetail` / `IsConfirmExpired` / `ConfirmState` / `ShowAgentBubble`；
+    `RunAgentLoopAsync` 读写分离与轮次续跑；`PendingWrite` 状态机、`ConfirmPending` / `CancelPending` /
+    `ExpirePending` / `AbandonPendingIfAny`；`StartAgentRun`；request/tool/confirm 审计接入；
+    `SaveWorkspace` 跳过确认卡片；`ToolDecideTask` 缺省说明去承诺）
+  - `Dome/Aster/Views/AdminView.axaml`（确认卡片模板块 + 两个按钮；普通 Agent 气泡改绑 `ShowAgentBubble`）
+  - `Dome/Aster/ViewModels/MainWindowViewModel.cs`（构造与登录成功后注入操作者）
+  - `Dome/Aster/ViewModels/SettingsViewModel.cs`（存储与备份新增「Agent 审计日志」行与清理）
+  - `README.md`、`Dome/Aster/README.md`、本文件
+- **实现要点**
+  - **读写分离**：`list_*` 立即执行；`create_*` / `decide_task` 只暂存，不执行。
+    assistant 的 `tool_calls` 仍整体回放（协议要求一次声明的所有调用都要有对应回执），
+    只读工具回执先补齐，写工具回执等确认后补齐。
+  - **轮次续跑**：`PendingWrite.RoundsUsed` 记录已消耗轮数，确认后 `RunAgentLoopAsync(..., startRound)`
+    从原轮次继续，不会因为确认一次就重置 8 轮上限。
+  - **确认卡片不落盘、不进上下文**：`SaveWorkspace` 与 `BuildAiHistory` 都跳过 `IsConfirmCard`；
+    重启后不会留下点不动的按钮。卡片失效后由 `IsConfirmExpired` 把按钮置灰并显示原因。
+  - **审计是旁路**：`AgentAudit.Append` 内部 `lock` + `AppendAllText`，任何 IO 异常只写 `LastError`，
+    绝不影响对话；参数摘要只保留 name / title / task_id / approve 等标识，自由文本截 40 字符、总长 200。
+  - **操作者来源**：`MainWindowViewModel` 在构造（「记住我」恢复的账号）与 `Login()` 成功后各注入一次，
+    `AdminViewModel` 不直接读 `LocalCache.Data.Login`（未勾选记住我时那里是空的）。
+- **注意**
+  - 确认批次执行中若抛未预期异常，会先 `SaveWorkspace()` 保住已生效的部分，再提示「部分可能已生效」，
+    不继续请求模型。
+  - 审计文件与 `local-cache.json` 同目录，`AppData/` 已被 `.gitignore` 忽略；发布态落在 `%APPDATA%\Aster\Cache`。
+  - 设置页清理审计后，该行描述不会即时刷新（`SettingRow.Desc` 是 init-only），与「缓存占用」同样的已知瑕疵。
+  - 未做（规格里的 P1/P2）：HTTPS 强校验、Key 加密、幂等键、`list_*` 分页、工具权限分级、注入清洗、多实例写锁。
+- **验证**：`dotnet build`（独立输出目录）0 warning 0 error；空缓存启动路径未回归（代码审查）。
+  真实确认流程需在「设置 → AI 模型」填入有效 Key 后人工走查：发一条「帮我建一个客户」应只出卡片不落盘。
+
+### 17. 收敛为 Demo 演示定位：左侧导航数据驱动 + 全应用空态与文案去真实化 — （提交后回填 hash）
+
+- **改动**：本地缓存为空时，左侧「客户 / 最近会话」不再显示写死的「青禾 · 月度核对」「8 月个税交叉验证」
+  「新的工作会话」，改为从缓存数据派生并显示空态提示；工作台会话区补空态；「新建项目」统一改称「新建客户」
+  并直接打开新建表单；同时清理 Workflow 假客户名、侧栏写死用户名、设置页「陈墨 / chenmo@aster.io」、
+  详情页写死版本号、审批页与实际实现不符的承诺等误导性默认内容。
+- **文件**：
+  - `Dome/Aster/ViewModels/AdminViewModel.cs`（新增 `AllCustomers` / `HasAnyCustomer` / `HasMessages` /
+    `WorkspaceChanged` / `OpenCustomerById`；`Select` 增加 `customer:{Id}` 与 `customer-new`；
+    `WorkbenchCard` 增加 `Target` 并据此分派；Workflow 无客户守卫；作者与负责人默认值去真实化）
+  - `Dome/Aster/ViewModels/MainWindowViewModel.cs`（抽出 `BuildWorkspaceSubNav` / `RefreshSubNav`，
+    订阅 `WorkspaceChanged`；侧栏用户卡片改读登录账号；`SyncRailSelection` 支持 `customer:` 前缀）
+  - `Dome/Aster/ViewModels/Items.cs`（新增 `SubNavEmptyEntry`）
+  - `Dome/Aster/Views/ShellView.axaml`（空态条目模板；用户名截断；rail 头像首字母同源）
+  - `Dome/Aster/Views/AdminView.axaml`（工作台副标题与会话空态、卡片/列表/详情/审批文案、
+    人员与文件表头按数据显隐、最近更新空态、Workflow 无客户提示与按钮禁用、输入框水印）
+  - `Dome/Aster/ViewModels/SettingsViewModel.cs`（账号卡与基本信息去真实化、Footer 改「仅本次运行有效」、
+    关于分区新增「项目定位」、版本号与链接统一到 v1.0.0）
+  - `Dome/Aster/Views/LoginView.axaml`（Demo 标语与 DEMO 胶囊、登录副标题、管理员名片与成功提示）
+  - `Dome/Aster/Views/BootView.axaml`（启动屏版本号）、`README.md`、`Dome/Aster/README.md`、本文件
+- **实现要点**
+  - **数据出口只有四个成员**：壳层只依赖 `AllCustomers` / `HasAnyCustomer` / `HasMessages` / `WorkspaceChanged`，
+    不直接碰 `LocalCache`，也不复用 `Customers`（那是搜索/筛选后的结果）。
+  - **变化事件收口在 `SaveWorkspace`**：客户增删改、待办、指标、发消息全部走这一条落盘路径，
+    在其末尾触发一次即可覆盖；流式增量只改消息正文不落盘，不会造成高频重建。
+  - **重建导航不改当前页面**：`RefreshSubNav` 只 `Clear` + 重建 + 恢复高亮，不调用 `Admin.Select`，
+    否则用户正在详情页/审批页时会被一次保存踢回工作台。
+  - **空态是独立条目类型**：`SubNavEmptyEntry` 没有 Command、没有 Key，`OfType<SubNavLinkEntry>()`
+    天然把它排除在选中逻辑外，不存在「看起来能点却没反应」。
+  - **`Target` 替代 Title 分派**：以前改卡片文案会静默改掉点击行为，现在文案与行为解耦。
+  - **保留旧 key**：`customer-qinghe` / `thread-tax` / `detail-*` 仍可路由，避免历史调用点失效；
+    客户被删除后 `customer:{Id}` 找不到时退回客户列表，不抛异常。
+- **注意**
+  - 侧栏最多列 5 位客户，超出显示「查看全部客户（共 N 位）」，避免挤出「最近会话」。
+  - 「最近会话」仍没有独立会话模型：有对话显示一条「当前工作会话」，没有就显示空态，不新增存储字段。
+  - 设置页的外观 / 通知 / 备份等控件依旧不落盘，本次只把文案改成 Demo 口径并在关于页标注项目定位。
+  - `HomeViewModel` / `MarkdownView` / `MusicView` 未挂载，本次未清理其内部演示数据，文档中标注为「未启用」。
+- **验证**：`dotnet build`（独立输出目录，避开运行中的 exe 锁）0 warning 0 error；
+  空缓存与含 1 客户 + 1 条对话两种状态启动，左侧分别显示空态与真实条目，工作台会话区空态正常显示。
+
 ## 2026-10-28
+
+### 16.1 修正 AI 消息协议字段序列化 — `def13ef`
+
+- **改动**：`AiChatMessage` 的 `Role` / `Content` 补 `[JsonPropertyName("role")]` / `[JsonPropertyName("content")]`。
+  此前请求体里这两个字段的键名依赖序列化默认行为，OpenAI 兼容端点在部分实现下会因字段名不匹配返回 4xx。
+- **文件**：`Dome/Aster/Services/AiChatService.cs`（2 行）、本文件。
+- **注意**：只影响发往模型的请求体，不影响 `local-cache.json` 的结构与 `schemaVersion`。
+- **验证**：当时只做了编译与冒烟；真实对话仍需在「设置 → AI 模型」填入有效 Key 后复验（见第 15 条）。
 
 ### 16. 工作台输入框工具行增加会话级模型选择器 — `0dae53f`
 

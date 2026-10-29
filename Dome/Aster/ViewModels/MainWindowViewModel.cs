@@ -123,6 +123,12 @@ public sealed class MainWindowViewModel : ObservableObject
     // 由 SelectModule 写入；注意「现状」：现在虽然每次都写它，但读它的地方已经没有了 ——
     // SubNavWidth 退化成常量 260，不再按模块分宽度。留着是为了将来恢复多模块时不用改调用方。
     private string _moduleKey = "admin";
+    // 当前二级导航的 key。RefreshSubNav 重建集合后靠它恢复高亮；
+    // 与 _moduleKey 的区别：_moduleKey 是一级模块（workbench / clients / ...），
+    // 这里还可能是更细的 customer:{Id}。
+    private string _activeSubNavKey = "workbench";
+    // 侧栏最多铺几条客户：再多就把「最近会话」挤出可视区，剩下的用「查看全部客户」兜。
+    private const int MaxSubNavCustomers = 5;
     // 二级导航顶部的标题（"工作区"），绑到 ShellView 二级栏顶部的 TextBlock。
     private string _subNavTitle = "管理";
     // 内容区当前承载的 ViewModel 对象；默认 null，构造函数里 SelectModule 会把它换成 Admin。
@@ -252,9 +258,17 @@ public sealed class MainWindowViewModel : ObservableObject
         // Markdown / Music 两个 VM 甚至没在这里创建 —— 它们的 DataTemplate 目前是「备用」。
         Home = new HomeViewModel();
         Admin = new AdminViewModel();
+        // 把「记住我」恢复出来的账号先注入一次：构造阶段 BuildSystemPrompt 还不会跑，
+        // 但先设好可以保证任何早期路径（例如自动化冒烟）读到的都是正确操作者。
+        Admin.SetOperatorName(_userName);
         // 注入而不是让 SettingsViewModel 自己实现退出：退出要切 Stage，那是壳的职责，
         // 子 VM 不该反向依赖壳，所以这里把命令当参数传下去。
         Settings = new SettingsViewModel(LogoutCommand);
+
+        // 工作区数据一变，左侧「客户 / 最近会话」就要跟着重排：
+        // 事件在 AdminViewModel.SaveWorkspace 末尾触发，覆盖新建/编辑/删除客户、发消息、审批等全部写路径。
+        // Admin 是常驻实例，这里订阅一次即可，不会重复注册。
+        Admin.WorkspaceChanged += (_, _) => RefreshSubNav();
 
         // ===== 步骤 3：建一级导航集合（五项，顺序有含义）=====
         // 工作区四个一级入口 + 设置，对齐 HR Agent 原型的侧栏结构
@@ -437,12 +451,20 @@ public sealed class MainWindowViewModel : ObservableObject
     // SelectModule 里之所以还要通知它，是为了将来恢复按模块分宽度时不必再改调用方。
     public bool IsRailAvatarVisible => !IsSubNavUserVisible;
 
-    // 演示用的固定用户信息；真实项目会来自登录结果或用户接口。
-    // 三个都是常量表达式（无字段、无通知）：这一屏里用户不会变，绑定读一次就够。
-    // "张" 是姓氏首字，画在 30px 圆形头像里代替真实图片（RailAvatar 那里用的是字母 "L"，两处不一致）。
-    public string SubNavUserInitial => "张";
-    public string SubNavUserName => "张客服";
-    public string SubNavUserRole => "客服";
+    // 侧栏底部用户卡片：显示登录时填的账号，而不是写死一个人名。
+    // 以前三行都是常量（"张" / "张客服" / "客服"），登录账号却是 admin —— 演示时一眼就能看出是假数据。
+    // 现在账号为空（退出登录后清空）时回落成「演示账号」，不会出现空白头像。
+    public string SubNavUserInitial
+    {
+        get
+        {
+            var name = SubNavUserName;
+            return name[..1].ToUpperInvariant();
+        }
+    }
+    public string SubNavUserName => string.IsNullOrWhiteSpace(_userName) ? "演示账号" : _userName.Trim();
+    // 角色不编造成「客服 / 管理员」这类真实组织角色：本应用没有角色体系，直接标 Demo。
+    public string SubNavUserRole => "Demo";
 
     // 与上面的 IsSubNavUserVisible 不同：这个是「整条二级栏显不显示」，有后备字段。
     private bool _isSubNavVisible = true;
@@ -501,7 +523,13 @@ public sealed class MainWindowViewModel : ObservableObject
     public string UserName
     {
         get => _userName;
-        set => Set(ref _userName, value);
+        set
+        {
+            if (!Set(ref _userName, value)) return;
+            // 侧栏底部用户卡片读的是派生属性，账号一变必须一起刷新。
+            OnPropertyChanged(nameof(SubNavUserName));
+            OnPropertyChanged(nameof(SubNavUserInitial));
+        }
     }
 
     /// <summary>密码明文存放（演示用）。视图侧靠 PasswordChar 遮罩，不在这里加密。</summary>
@@ -793,29 +821,9 @@ public sealed class MainWindowViewModel : ObservableObject
                 AddSubNav("approval", "协作与审批", Controls.Icons.List, null);
                 AddSubNav("clients", "客户工作空间", Controls.Icons.Users, null);
                 AddSubNav("workflow", "Workflow", Controls.Icons.Trend, null);
-                // 分组标题与链接混装：模板用 DataTemplate 区分渲染，分组不可点击。
-                // 从这里开始进入「项目」区块，标题行只是视觉分节。
-                SubNavEntries.Add(new SubNavGroupEntry("项目"));
-                // emphasized 传 true，让当前项目以更大的字号字重突出显示。
-                // 这一行用的是位置参数而不是命名参数：第三个 true 是 showIcon、第四个 true 是 emphasized，
-                // 读的时候要对着 SubNavLinkEntry 的签名看，容易看错（同文件里的 thread-new 用了命名参数）。
-                SubNavEntries.Add(new SubNavLinkEntry("customer-qinghe", "青禾 · 月度核对",
-                    Controls.Icons.Folder, SubNavCommand, null, true, true));
-                // 「8 月个税交叉验证」在这里出现两次：一次属于「项目」下的运行记录（thread-tax），
-                // 一次属于「最近会话」（recent-tax）。key 不同、点击后走 AdminViewModel 的不同分支。
-                AddRecent("thread-tax", "8 月个税交叉验证");
-                // 「＋ 项目内新会话」是操作入口而不是页面，所以 showIcon:false（项目符号就是＋本身）、
-                // height:34（比常规入口矮，视觉上更像一条动作而非一条导航）。
-                SubNavEntries.Add(new SubNavLinkEntry("thread-new", "＋ 项目内新会话",
-                    Controls.Icons.Plus, SubNavCommand, null, showIcon: false, emphasized: false, height: 34));
-                // 第二个分组标题：到这里「项目」区块结束，「最近会话」区块开始。
-                SubNavEntries.Add(new SubNavGroupEntry("最近会话"));
-                // 三条同名的演示数据（"新的工作会话"）：文案相同但 key 不同，
-                // 这样列表看起来有真实感，又不会因为 key 冲突导致选中错乱。
-                AddRecent("recent-1", "新的工作会话");
-                AddRecent("recent-2", "新的工作会话");
-                AddRecent("recent-3", "新的工作会话");
-                AddRecent("recent-tax", "8 月个税交叉验证");
+                // 「客户」与「最近会话」两个区块不再写死演示条目：
+                // 内容完全由 AdminViewModel 的本地缓存数据派生，空数据时显示空态提示。
+                BuildWorkspaceSubNav();
                 // 步骤 6：填充完毕后统一设置二级选中态（下面三行是对这一步的补充说明）。
                 // 重建完成后恢复选中态：与被点击的一级导航保持一致。
                 // 传的是 item.Key（一级导航的 key），所以二级列表里「key 相同的那一项」被选中 ——
@@ -825,6 +833,65 @@ public sealed class MainWindowViewModel : ObservableObject
                 // switch 只有一个分支，break 只是语法要求（C# 不允许 case 穿透）。
                 break;
         }
+    }
+
+    /// <summary>
+    /// 构建「客户 / 最近会话」两个区块。调用前集合必须已 Clear。
+    /// </summary>
+    // 这里的每一条都来自 AdminViewModel 的内存数据（也就是本地缓存），不写任何演示客户名：
+    //   · 客户 → AllCustomers（全量，不受搜索/筛选影响），最多 5 条，超出给「查看全部」；
+    //   · 最近会话 → 只有「有对话 / 没对话」两态，没有独立会话模型，所以最多一条。
+    // 空态用 SubNavEmptyEntry：不可点击、不参与选中，和数据条目共用同一个集合与渲染管线。
+    private void BuildWorkspaceSubNav()
+    {
+        var customers = Admin.AllCustomers;
+
+        SubNavEntries.Add(new SubNavGroupEntry("客户"));
+        if (customers.Count == 0)
+        {
+            SubNavEntries.Add(new SubNavEmptyEntry("还没有客户。点下面「＋ 新建客户」创建第一位。"));
+        }
+        else
+        {
+            foreach (var c in customers.Take(MaxSubNavCustomers))
+                SubNavEntries.Add(new SubNavLinkEntry($"customer:{c.Id}", c.Name,
+                    Controls.Icons.Folder, SubNavCommand));
+            // 超出的客户不在侧栏铺开：二级栏高度有限，全列出来会把「最近会话」挤出可视区。
+            if (customers.Count > MaxSubNavCustomers)
+                SubNavEntries.Add(new SubNavLinkEntry("clients", $"查看全部客户（共 {customers.Count} 位）",
+                    Controls.Icons.Users, SubNavCommand, null, showIcon: false));
+        }
+        SubNavEntries.Add(new SubNavLinkEntry("customer-new", "＋ 新建客户",
+            Controls.Icons.Plus, SubNavCommand, null, showIcon: false, emphasized: false, height: 34));
+
+        SubNavEntries.Add(new SubNavGroupEntry("最近会话"));
+        if (Admin.HasMessages)
+            AddRecent("workbench", "当前工作会话");
+        else
+            SubNavEntries.Add(new SubNavEmptyEntry("暂无会话记录。在下方输入框开始一段演示对话。"));
+    }
+
+    /// <summary>
+    /// 工作区数据变化后原地重建二级导航，并恢复高亮。
+    /// </summary>
+    // 与 SelectModule 的区别：这里不调用 Admin.Select。
+    // 重建只是「侧栏换了几行」，不应该把正在看详情页 / 审批页的用户踢回工作台。
+    private void RefreshSubNav()
+    {
+        var selected = _activeSubNavKey;
+        // 选中的客户刚被删除：key 已失效，回落到客户列表（ConfirmDelete 此时也已切到客户页）。
+        if (selected.StartsWith("customer:", StringComparison.Ordinal)
+            && !Admin.AllCustomers.Any(c => c.Id == selected["customer:".Length..]))
+        {
+            selected = "clients";
+        }
+
+        SubNavEntries.Clear();
+        BuildWorkspaceSubNav();
+
+        foreach (var entry in SubNavEntries.OfType<SubNavLinkEntry>())
+            entry.IsSelected = entry.Key == selected;
+        SyncRailSelection(selected);
     }
 
     /// <summary>「最近」条目的快捷构造：不显示图标、行高更矮（34），视觉上弱于常规入口。</summary>
@@ -876,6 +943,9 @@ public sealed class MainWindowViewModel : ObservableObject
     // 做完之后三件事：二级栏高亮、rail 高亮、内容区页面切换。
     private void SelectSubNav(string key)
     {
+        // 记下当前二级位置：数据变化触发 RefreshSubNav 时用它恢复高亮。
+        _activeSubNavKey = key;
+
         // 步骤 1：整组重算选中态。OfType<SubNavLinkEntry>() 过滤掉分组标题 ——
         // 分组标题没有 Key 属性，若不过滤连编译都过不了（这正是它「不该被选中」的类型级保证）。
         // 用 == 比较 key：同一个 key 在集合里最多出现一次（构造时人工保证），所以不会多选。
@@ -893,25 +963,24 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>让一级 rail 的高亮跟随当前页面：点侧栏入口或「项目 / 最近会话」时也要同步。</summary>
-    // key → rail key 的映射表（左列是二级导航 / 项目 / 会话的 key，右列是 RailTop 里的 key）：
+    // key → rail key 的映射表（左列是二级导航 / 客户 / 会话的 key，右列是 RailTop 里的 key）：
     //   "approval"                                    → "approval"   （审批）
     //   "workflow"                                    → "workflow"   （Workflow）
-    //   "clients" / "customers" / "customer-qinghe"   → "clients"    （客户）
-    //   "thread-tax" / "thread-new"                   → "clients"    （都属于客户项目下的会话）
-    //   其它（含 "workbench"、"recent-*"）           → "workbench"  （兜底到工作台）
-    //   注：AdminView 内部还有 "detail"、"detail-people" 等 key，但它们只传给 AdminViewModel.Select，
-    //       不走这张表；若哪天也送进来，会同样落到 workbench 兜底分支。
+    //   "clients" / "customers" / "customer-new"      → "clients"    （客户）
+    //   "customer:{Id}"                               → "clients"    （侧栏里点某位客户）
+    //   "customer-qinghe" / "thread-tax" / "thread-new"→ "clients"   （旧入口，兼容保留）
+    //   其它（含 "workbench"）                        → "workbench"  （兜底到工作台）
     // 为什么要有这张表：二级导航里有很多「更细的 key」，它们共享同一个一级入口，
     // 若不翻译，rail 上就找不到 key 相同的那一项，高亮会全部熄灭。
-    // "recent-*" 落到 workbench 是兜底的结果而不是刻意设计 —— 从「最近会话」点进去时，
-    // rail 会跳回工作台高亮，与内容区的实际页面可能并不一致。
     private void SyncRailSelection(string key)
     {
         var railKey = key switch
         {
             "approval" => "approval",
             "workflow" => "workflow",
-            "clients" or "customers" or "customer-qinghe" or "thread-tax" or "thread-new" => "clients",
+            "clients" or "customers" or "customer-new"
+                or "customer-qinghe" or "thread-tax" or "thread-new" => "clients",
+            _ when key.StartsWith("customer:", StringComparison.Ordinal) => "clients",
             _ => "workbench"
         };
 
@@ -984,6 +1053,8 @@ public sealed class MainWindowViewModel : ObservableObject
             // 步骤 7：切到 App 阶段（三条派生 bool 由 Stage setter 连带通知）。
             // 切到 App 阶段：IsLogin 变 false、IsApp 变 true，LoginView 隐藏、ShellView 显示。
             // 赋值顺序很重要：先切阶段再重置导航，避免 ShellView 刚显示时内容区还是空的。
+            // 登录成功先把本次输入的账号交给 Admin：Agent 的系统提示与新建客户默认负责人都读它。
+            Admin.SetOperatorName(UserName);
             Stage = AppStage.App;
             // 步骤 7.5：登录成功是「值得记住」的那一刻 —— 把账号名与时间写进本地缓存。
             // 用 Save（同步落盘）而不是 SaveSoon：用户点完登录很可能马上就去点窗口关闭按钮，
