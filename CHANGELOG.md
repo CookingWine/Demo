@@ -25,7 +25,7 @@
 
 ## 2026-10-30
 
-### 20. 按实际实现重写 README — （提交后回填 hash）
+### 20. 按实际实现重写 README — `0deb60e`
 
 - **改动**：全面核对目录、模块、配置与限制后重写根 README。补充真实技术版本（Avalonia 11.3.22 / net8.0）、
   完整目录树（含 `NuGet.Config`、`app.manifest`、`AgentAudit.cs`）、本地数据与 AI 工具表、当前进度与待办；
