@@ -49,8 +49,9 @@ Aster/
 ├─ App.axaml(.cs)             Fluent 深色主题 + 资源/样式装配
 ├─ Assets/                    应用图标：aster.ico / aster.icns / aster-*.png
 ├─ Services/
-│  ├─ LocalCache.cs           本地缓存读写（local-cache.json，唯一持久化）
-│  └─ AiChatService.cs        OpenAI 兼容流式客户端（SSE + Function Calling）
+│  ├─ LocalCache.cs           本地缓存读写（local-cache.json，唯一业务数据存储）
+│  ├─ AiChatService.cs        OpenAI 兼容流式客户端（SSE + Function Calling）
+│  └─ AgentAudit.cs           Agent 审计日志（audit.ndjson 追加写 / 轮转 / 清理）
 ├─ Styles/
 │  ├─ Theme.axaml             设计令牌 + 自定义 ControlTheme
 │  └─ Controls.axaml          按钮 / 输入框 / 导航 / 分段 / 开关 / 标签 / 滚动条

@@ -1,77 +1,106 @@
 # Aster · Avalonia 桌面端
 
-按 `aster-design.html` 设计稿 1:1 还原的跨平台桌面应用：深色玻璃质感、`#6C8BFF` 强调色、无边框圆角窗口，
-包含工作台、客户工作空间、审批、Workflow 与完整设置面板。
+跨平台桌面 Demo：深色玻璃质感、无边框圆角窗口，用一套「客户交付工作区」演示客户档案、审批待办、三步核对与 AI 助手。
 
-`Avalonia 11.3` · `.NET 8` · macOS / Windows / Linux
+`Avalonia 11.3.22` · `.NET 8` · `macOS / Windows / Linux` · `零第三方 UI 组件`
 
-> **项目定位：单机 Demo 演示应用。** 没有后端、没有账号体系、没有真实业务数据：
-> 登录不做校验，客户 / 待办 / 指标 / 对话全部来自本机 `local-cache.json`，
-> 删掉缓存就是空工作区。界面上的空态提示、示例文案与按钮行为都按「演示」场景设计，
-> 不会产生真实单据、不会上传任何数据；唯一的网络请求是用户主动配置的 AI 对话。
+> **项目定位：单机演示应用。** 没有后端、没有账号体系、没有真实业务数据。
+> 登录不做校验，客户 / 待办 / 指标 / 对话全部读写本机 `local-cache.json`，删掉缓存就是空工作区。
+> 唯一的网络请求是用户主动配置的 AI 对话。
 
-<p align="center">
-  <img src="docs/screenshots/workspace.png" width="100%" alt="Aster 工作台">
-</p>
+## 主要功能
 
-## 功能一览
-
-| 模块 | 能力 |
+| 模块 | 当前能力 |
 | --- | --- |
-| **启动 / 登录** | 2 秒进度启动屏；账号密码登录、记住我、显示密码、忘记密码（两步弹窗）、联系管理员（两步弹窗） |
-| **工作台** | 问候区、四张指标卡、最近编辑、快捷操作、继续播放、今日节奏面积图 |
-| **文档**（暂未启用，代码保留） | 四级目录树（分组折叠 / 关键字搜索 / 按收藏·最近·未保存·回收站筛选）、多标签页、行号编辑器、Markdown 实时预览、编辑·分栏·预览三档视图 |
-| **音乐**（暂未启用，代码保留） | 歌单（全部/收藏/最近/专辑）、旋转唱片舞台、歌词、可拖动进度与音量、随机·循环、音频可视化柱状图、播放队列 |
-| **工作区** | 侧栏四个入口：**工作台**（3 张快捷卡 + Agent 对话 + 指令输入框，对话已接真实大模型，Agent 可用工具直接新建客户 / 待办、审批、查询；输入框右下角可切换会话模型，预设 + 设置自定义合并）、**协作与审批**（待办列表，可新建、逐条通过/退回）、**客户工作空间**（搜索 + 筛选 + 客户列表，可新建 / 编辑 / 删除客户；客户详情含基础资料 / 人员记录 / 核对记录 / 文件与产出四个页签）、**Workflow**（确认范围 → 复核差异 → 归档 三步交叉验证）；KPI 与考勤为独立页，可新增指标 |
-| **设置** | 全屏模态，账号 / 通用 / 数据看板 / 成员与权限 / 通知 / **AI 模型** / 存储与备份 / 关于 八个分区 |
+| **启动 / 登录** | 2 秒启动动画；账号密码登录（无校验）、记住账号、显示密码、忘记密码与联系管理员两步弹窗 |
+| **工作台** | 三张快捷卡（新建客户 / KPI 考勤 / 待办事项）、Agent 对话区、指令输入框、会话级模型切换 |
+| **客户工作空间** | 搜索 + 三种筛选、客户列表、新建 / 编辑 / 删除；详情含基础资料、人员记录、核对记录、文件与产出四个页签 |
+| **协作与审批** | 待办列表、待处理 / 全部筛选、新建待办、逐条通过或退回，结果写回本地缓存 |
+| **Workflow** | 确认范围与材料 → 复核差异 → 归档 三步向导；结果为固定样例，不读取真实附件 |
+| **KPI 与考勤** | 指标列表来自缓存，可新增指标并持久化；考勤与响应时效为固定演示文案 |
+| **设置** | 全屏浮层八个分区：账号、通用、数据看板、成员与权限、通知、存储与备份、AI 模型、关于 |
+| **AI Agent** | OpenAI 兼容协议、SSE 流式输出、Function Calling 五个工具、写操作二次确认、本机审计日志 |
+| **保留未启用** | 文档编辑器、音乐播放器、早期仪表盘（HomeView）：View / ViewModel 代码仍在，导航中无入口 |
 
-> 当前构建只开放 **工作区** 与 **设置**：登录后默认进入「工作台」，左侧一级导航不再列出文档与音乐（视图与 ViewModel 仍在仓库中，去掉入口屏蔽即可恢复）。
->
-> **工作区的数据全部来自本地缓存文件**（见「本地数据存储」）：新环境首次运行时工作区是空的，
-> 登录后按页面提示点「＋ 新建客户 / ＋ 新建待办 / 新增指标」就能建出第一条数据，
-> 保存即写入 `Dome/Aster/AppData/local-cache.json`，全程不需要联网、也不需要手工改文件。
+当前构建的一级入口为 **工作台 / 审批 / 客户 / Workflow / 设置**，其中「设置」打开浮层而不是切换页面。
 
-## 界面预览
+> `docs/screenshots/` 中的截图来自早期版本，仍包含已下线的文档 / 音乐入口和写死的示例客户，
+> 与当前界面不一致；重新截图已列入「待办事项」。
 
-<table>
-  <tr>
-    <td align="center" width="50%"><img src="docs/screenshots/login.png" width="430" alt="登录"><br><sub>登录 · 忘记密码 / 联系管理员两步弹窗</sub></td>
-    <td align="center" width="50%"><img src="docs/screenshots/editor.png" width="430" alt="文档编辑器"><br><sub>文档 · 目录树 + 行号编辑器 + 实时预览</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="50%"><img src="docs/screenshots/music.png" width="430" alt="音乐播放器"><br><sub>音乐 · 唱片舞台 + 可视化 + 队列</sub></td>
-    <td align="center" width="50%"><img src="docs/screenshots/admin.png" width="430" alt="管理工作台"><br><sub>管理 · 今日工作台 + 对话交办</sub></td>
-  </tr>
-</table>
+## 目录结构
 
-<p align="center">
-  <img src="docs/screenshots/settings.png" width="900" alt="设置面板">
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/flow.png" width="900" alt="管理流程页：对话 + 上下文抽屉">
-</p>
-
-## 快速开始
-
-### 环境
-
-- .NET 8 SDK（`dotnet --list-sdks` 能看到 `8.0.x`）
-- 无需额外的运行时或原生库
-
-如果 SDK 装在用户目录（如 `~/.dotnet`），先让终端能找到它：
-
-```bash
-export DOTNET_ROOT="$HOME/.dotnet"
-export PATH="$DOTNET_ROOT:$PATH"      # 可写入 ~/.zshrc / ~/.bashrc 永久生效
+```text
+.
+├─ README.md                    本文件
+├─ CHANGELOG.md                 变更记录（每次改动的内容、涉及文件与注意事项）
+├─ .gitignore                   忽略构建产物、本地缓存与示例数据
+├─ docs/screenshots/            早期版本界面截图（与当前界面有差异）
+├─ tools/
+│  └─ make_icon.py              应用图标生成（PNG / ICO / ICNS 一次出全套）
+└─ Dome/
+   ├─ Dome.sln
+   ├─ run.sh                    macOS / Linux 一键启动
+   ├─ make-app.sh               macOS .app 打包（Dock / Finder 图标靠它）
+   └─ Aster/
+      ├─ Aster.csproj           net8.0 + Avalonia 11.3.22
+      ├─ NuGet.Config           NuGet 源（默认国内镜像）
+      ├─ app.manifest           Windows 应用清单
+      ├─ Program.cs             入口（AppBuilder + Inter 字体）
+      ├─ App.axaml / .cs        Fluent 深色主题、资源与样式装配
+      ├─ Assets/                图标：aster.ico / aster.icns / aster-*.png
+      ├─ Services/
+      │  ├─ LocalCache.cs       本地 JSON 缓存（唯一业务数据存储）
+      │  ├─ AiChatService.cs    OpenAI 兼容流式客户端（SSE + Function Calling）
+      │  └─ AgentAudit.cs       Agent 审计日志（NDJSON 追加写 / 轮转 / 清理）
+      ├─ Styles/
+      │  ├─ Theme.axaml         设计令牌 + 自定义 ControlTheme
+      │  └─ Controls.axaml      按钮 / 输入框 / 导航 / 分段 / 开关 / 标签 / 滚动条
+      ├─ Controls/
+      │  ├─ Icon.cs             24×24 线性图标，颜色继承 Foreground
+      │  ├─ Icons.cs            图标 path 数据
+      │  ├─ Charts.cs           迷你折线、趋势图、环形图（DrawingContext 绘制）
+      │  ├─ Visuals.cs          五瓣 Logo、音频柱、唱片、进度条、跳动指示器
+      │  └─ MarkdownPreview.cs  Markdown → 控件树渲染
+      ├─ ViewModels/            手写 MVVM（核心为 AdminViewModel）
+      └─ Views/                 窗口 / 启动 / 登录 / 工作区 / 设置
 ```
 
-### 运行
+更细的模块说明见 [`Dome/Aster/README.md`](Dome/Aster/README.md)。
+
+## 环境依赖
+
+| 项 | 要求 |
+| --- | --- |
+| SDK | .NET 8 SDK（`dotnet --list-sdks` 能看到 `8.0.x`） |
+| 系统 | macOS 11+ / Windows 10+ / 常见 Linux 桌面 |
+| 数据库 / 原生库 | 无，业务数据只用一个 JSON 文件 |
+| 图标脚本（可选） | Python 3 + `numpy` + `Pillow` |
+
+> 工程目标框架是 `net8.0`。更高版本 SDK（例如 10.x）可以编译，但直接运行仍需要 .NET 8 运行时；
+> 或者使用自包含发布，把运行时一起打进去。
+
+### 安装
 
 ```bash
 git clone git@github.com:CookingWine/Demo.git
 cd Demo
 
+# 若 SDK 装在用户目录（如 ~/.dotnet），先让终端能找到它
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$DOTNET_ROOT:$PATH"
+
+cd Dome/Aster
+dotnet restore
+```
+
+> **NuGet 源**：`Dome/Aster/NuGet.Config` 默认指向国内镜像 `https://nuget.azure.cn/v3/index.json`。
+> 需要官方源时删除该文件，或改成 `https://api.nuget.org/v3/index.json`。
+
+## 使用与运行
+
+### 启动
+
+```bash
 # 方式一：一键脚本（macOS / Linux）
 ./Dome/run.sh
 
@@ -82,15 +111,36 @@ dotnet run
 
 只编译不运行：`dotnet build`，产物在 `Dome/Aster/bin/Debug/net8.0/`。
 
-> **演示登录**：账号与密码默认预填 `admin` / `admin`，直接点「登录」即可进入工作台；没有任何后端校验（任意非空内容都能登录）。
+**演示登录**：账号与密码默认预填 `admin` / `admin`，直接点「登录」即可；任意非空内容都能进入，没有后端校验。
 
-> **关于 NuGet 源**：`Dome/Aster/NuGet.Config` 默认指向国内镜像 `https://nuget.azure.cn/v3/index.json`，
-> 首次 `restore` 更快。需要官方源时删除该文件，或改成 `https://api.nuget.org/v3/index.json`。
+### 首次使用
 
-### 发布
+新环境首次运行时工作区是空的，界面会给出空态提示：
+
+1. 在工作台点「新建客户」，或在客户工作空间点「＋ 新建客户」；
+2. 在协作与审批页点「＋ 新建待办」；
+3. 在 KPI 与考勤页填写指标名称并点「新增」。
+
+保存即写入 `Dome/Aster/AppData/local-cache.json`，全程不需要联网，也不需要手工改文件。
+
+### 配置 AI 对话
+
+1. 打开「设置 → AI 模型」；
+2. 填写 API Key、Base URL、模型名，点「保存配置」；
+3. 回到工作台，在底部输入框发送指令。
+
+支持 DeepSeek、Kimi、通义兼容模式、Ollama 等 OpenAI 兼容端点。输入框右下角可切换**会话级模型**
+（预设清单与设置自定义合并，仅当前会话生效，重启回落默认）。未配置 Key 时对话只给引导提示，不发请求。
+
+### 编译与发布
 
 ```bash
 cd Dome/Aster
+
+# 编译
+dotnet build
+
+# 发布（按目标平台替换 RID）
 dotnet publish -c Release -r osx-arm64 --self-contained false
 # Windows: -r win-x64 ；Linux: -r linux-x64
 ```
@@ -98,63 +148,26 @@ dotnet publish -c Release -r osx-arm64 --self-contained false
 ### 打包成 macOS 应用（带 Dock 图标）
 
 ```bash
-./Dome/make-app.sh                    # 自带运行时，产物 Dome/dist/Aster.app，双击即开
-SELF_CONTAINED=0 ./Dome/make-app.sh   # 框架依赖，体积小，要求本机装了 .NET 8 运行时
+./Dome/make-app.sh                    # 框架依赖（默认），要求本机装了 .NET 8 运行时
+SELF_CONTAINED=1 ./Dome/make-app.sh   # 自带运行时，体积更大，拷给别人也能跑
 RID=osx-x64 ./Dome/make-app.sh        # Intel 机器
 ```
 
-> `dotnet run` 的宿主进程是 dotnet，Dock 里显示的是宿主的图标，`Window.Icon` 管不到它。
-> 只有装进标准的 `.app` 结构（`Contents/MacOS` + `Info.plist` + `Contents/Resources/Aster.icns`），
-> 系统才认这个包自己的图标和名字。脚本已包含 ad-hoc 签名，Apple Silicon 上可直接打开。
+产物为 `Dome/dist/Aster.app`，脚本已包含 ad-hoc 签名。
 
-## 目录结构
+> `dotnet run` 的宿主进程是 dotnet，Dock 里显示的是宿主图标；只有装进标准 `.app` 结构，
+> 系统才会使用 `Info.plist` 与 `Contents/Resources/Aster.icns`。
 
-```
-.
-├── README.md                    本文件
-├── CHANGELOG.md                 变更记录（每次改动的内容与涉及文件）
-├── docs/screenshots/            界面截图（由程序真实渲染导出）
-├── tools/
-│   └── make_icon.py             应用图标生成脚本（PNG / ICO / ICNS 一次出全套）
-└── Dome/
-    ├── Dome.sln
-    ├── run.sh                   一键启动脚本
-    ├── make-app.sh              macOS .app 打包（Dock / Finder 图标靠它）
-    └── Aster/
-        ├── Program.cs           入口（AppBuilder + Inter 字体）
-        ├── App.axaml(.cs)       Fluent 深色主题、资源与样式装配
-        ├── Assets/              应用图标：aster.ico / aster.icns / aster-*.png
-        ├── Services/
-        │   ├── LocalCache.cs    本地缓存读写（local-cache.json，唯一的业务数据存储）
-        │   ├── AiChatService.cs OpenAI 兼容流式客户端（SSE + Function Calling，零第三方依赖）
-        │   └── AgentAudit.cs    Agent 审计日志（audit.ndjson 追加写 / 轮转 / 清理）
-        ├── AppData/             运行时生成，不入库：local-cache.json、audit.ndjson（已被 .gitignore 忽略）
-        ├── Styles/
-        │   ├── Theme.axaml      设计令牌 + 6 个自定义 ControlTheme
-        │   └── Controls.axaml   按钮 / 输入框 / 导航 / 分段 / 开关 / 标签 / 滚动条样式
-        ├── Controls/
-        │   ├── Icon.cs          24×24 线性图标，颜色继承 Foreground
-        │   ├── Icons.cs         图标 path 数据
-        │   ├── Charts.cs        迷你折线、趋势图、环形图（DrawingContext 绘制）
-        │   ├── Visuals.cs       五瓣 Logo、音频柱、旋转唱片、进度条、跳动指示器
-        │   └── MarkdownPreview.cs  Markdown → 控件树渲染
-        ├── ViewModels/          纯手写 MVVM（ObservableObject + RelayCommand）
-        └── Views/               Shell / 工作台 / 文档 / 音乐 / 管理 / 设置 / 登录 / 启动屏
-```
+## 本地数据
 
-更细的模块说明见 [`Dome/Aster/README.md`](Dome/Aster/README.md)。
+工作区界面上画出来的所有内容都来自一个 JSON 文件，代码里没有硬编码演示数据。
 
-## 本地数据存储
+| 文件 | 位置 | 内容 | 写入方式 |
+| --- | --- | --- | --- |
+| `local-cache.json` | 开发态：`Dome/Aster/AppData/`；发布态：用户 ApplicationData 目录（Windows 为 `%APPDATA%\Aster\Cache`） | 登录记忆、窗口尺寸、AI 配置、客户 / 待办 / 指标 / 对话 | 原子写 + 700ms 合并写 |
+| `audit.ndjson` | 与 `local-cache.json` 同目录 | Agent 请求、工具调用、确认结果 | 逐行追加，超过 1 MB 轮转为 `audit.ndjson.1` |
 
-**工作区界面上画出来的所有内容都来自一个 JSON 文件**，代码里没有任何硬编码演示数据。
-由 `Dome/Aster/Services/LocalCache.cs` 统一负责读写，**零第三方依赖**（`System.Text.Json` 在共享框架内）。
-
-| 项 | 说明 |
-| --- | --- |
-| 文件名 | `local-cache.json` |
-| 位置（开发态） | `Dome/Aster/AppData/` —— 已在 `.gitignore` 中忽略，不会推到 GitHub |
-| 位置（发布态） | 用户漫游目录，如 Windows `%APPDATA%\Aster\Cache` |
-| 自定义位置 | 设环境变量 `ASTER_DATA_DIR` 指向任意目录 |
+自定义位置：设置环境变量 `ASTER_DATA_DIR` 指向任意目录。
 
 文件结构（字段名 camelCase，中文不转义，可直接打开编辑）：
 
@@ -162,130 +175,106 @@ RID=osx-x64 ./Dome/make-app.sh        # Intel 机器
 {
   "schemaVersion": 2,
   "appVersion": "1.0.0.0",
-  "updatedAt": "2026-10-25T19:15:16+08:00",
-  "login":  { "remember": true, "userName": "张客服", "lastLoginAt": "..." },   // 不存密码
-  "window": { "width": 1320, "height": 850 },                                   // 只记尺寸
-  "ai":     { "apiKey": "sk-…", "baseUrl": "https://api.deepseek.com", "model": "deepseek-chat" },  // OpenAI 兼容接入配置
+  "updatedAt": "2026-10-30T09:00:00+08:00",
+  "login":  { "remember": true, "userName": "演示账号", "lastLoginAt": "..." },
+  "window": { "width": 1320, "height": 850 },
+  "ai":     { "apiKey": "sk-…", "baseUrl": "https://api.deepseek.com", "model": "deepseek-chat" },
   "workspace": {
-    "customers": [{
-      "id": "c1", "name": "青禾新能源有限公司", "short": "青禾新能源", "code": "KH-001",
-      "type": "劳务派遣", "owner": "张客服", "city": "郑州", "contact": "客户联系人 A",
-      "service": "工资代发、社保服务", "tax": "已登记", "file": "客户交接资料_v2.xlsx",
-      "date": "10-17 10:32", "state": "待复核", "people": 68, "pending": 3,
-      "activities": [{ "text": "客户资料更新至 V2", "time": "10-17 10:32 · 张客服 确认" }],
-      "staff":      [{ "no": "EMP-001", "name": "张三", "idInfo": "已脱敏", "customer": "青禾新能源", "status": "在册", "source": "人员资料_v2.xlsx" }],
-      "runs":       [{ "batch": "RC-001-01", "period": "2026-08", "version": "V2", "status": "待复核", "pending": "3", "date": "10-17 10:32" }],
-      "files":      [{ "name": "客户交接资料_v2.xlsx", "purpose": "原始材料", "related": "客户档案 V2", "time": "10-17 10:32", "tone": "muted" }]
-    }],
-    "tasks":    [{ "id": "t1", "title": "核对结果归档确认", "kind": "审批", "customer": "青禾新能源有限公司", "due": "今日", "status": "待处理", "note": "" }],
-    "metrics":  [{ "title": "任务处理", "value": "0 / 12", "note": "随操作更新" }],
-    "messages": [{ "author": "张客服", "text": "...", "isUser": true }]
+    "customers": [],   // 客户及其详情：基础资料 / 最近更新 / 人员 / 核对 / 文件
+    "tasks": [],       // 待办与审批状态
+    "metrics": [],     // KPI 指标
+    "messages": []     // 工作台对话
   }
 }
 ```
 
-- `workspace` 下的四个数组分别对应 **客户工作空间 · 客户详情四页签 · 协作与审批 · KPI 与考勤 · 工作台对话**。
-- 数组为空 → 对应页面就是空的，并显示「数据来自哪里、怎么补」的提示，不会退化成演示数据。
-- 想加一个客户 / 一条待办 / 一条指标：直接在界面里点「＋ 新建」；已有客户可以在详情页「编辑」「删除」。
-  保存即写入缓存文件；批量导入时也可以关掉程序后编辑文件，重启即生效。
-- 程序在发消息、审批、新建之后会把整份 `workspace` 原样写回，
-  所以**手工编辑请在程序关闭时进行**（运行期改文件会被内存里的数据覆盖）。
-- `state` / `status` / `tone` 这类字段用固定取值控制标签配色：`待复核`/`待补材料`/`待处理` 琥珀、`已完成`/`已通过`/`在册` 绿、
-  `已退回`/`金额差异` 红，其余灰色；`tone` 为 `ok` 时文件用途标签走绿色。
+几个约定：
 
-几个工程上的取舍：
+- `workspace` 下的数组是**全量快照**，每次保存整体覆盖；数组为空时对应页面就是空态。
+- 想批量导入数据，请**先关闭程序**再改文件，运行期手改会被内存里的数据覆盖。
+- 文件缺失会自动创建；结构版本不符或 JSON 解析失败会备份成 `.bak` 后重建为空工作区。
+- 连续操作 700ms 内只落一次盘；登录成功、退出登录、关闭窗口三处走同步写。
+- 想清空数据：删除 `Dome/Aster/AppData/`，或使用「设置 → 存储与备份 → 缓存占用 → 清理」。
+- `ai.apiKey` 以明文保存在本机文件中，不会上传，但也不要提交到仓库或共享给别人。
 
-- **原子写**：先写 `.tmp` 再替换，避免写一半断电留下半截 JSON；写失败只记日志不抛异常，缓存坏了不该拖垮界面。
-- **损坏自愈**：文件缺失自动建、结构版本不符或 JSON 解析失败则备份成 `.bak` 后重建（重建出来的是空工作区）。
-- **延迟合并写**：连续操作 700ms 内只落一次盘；登录成功、退出登录、关窗口这三处走同步写，保证「记住」当场生效。
-- **开发态与发布态是两个文件**：调试改坏的数据不会污染用户环境，发布包也不会往只读安装目录里写。
+## AI Agent 说明
 
-想清空数据：删掉 `Dome/Aster/AppData/`（或设置页「存储与备份 → 缓存占用 → 清理」）即可，
-下次启动会自动重建一份空工作区。
+工作台的对话走 OpenAI 兼容协议（`Services/AiChatService.cs`），使用 BCL 的 `HttpClient` +
+`System.Text.Json` 手写 SSE 流式解析与工具调用聚合，不引入任何 AI SDK。
 
-## 应用图标
+模型可调用五个白名单工具：
 
-图标不是一张位图，而是脚本画出来的（`tools/make_icon.py`）：暗紫圆角方块 + 五瓣花，
-花瓣几何和界面里的 `LogoMark`（`Controls/Visuals.cs`）同源——5 片椭圆绕中心转 72°，
-每瓣再叠一层更浅的「瓣中瓣」，整体按左上打光分出明暗。
-
-| 平台 | 文件 | 生效位置 |
+| 工具 | 作用 | 执行方式 |
 | --- | --- | --- |
-| Windows | `Assets/aster.ico`（16/24/32/48/64/128/256 共 7 档） | exe 内嵌图标（csproj `ApplicationIcon`）：资源管理器、任务栏、Alt+Tab |
-| Windows / Linux | `Assets/aster-256.png` | 窗口图标（`MainWindow` 的 `Icon`），Linux 任务栏也读它 |
-| macOS | `Assets/aster.icns`（10 档） | `.app` 的 `Contents/Resources`，Dock 与 Finder |
+| `list_customers` | 查询客户 | 立即执行 |
+| `list_tasks` | 查询待办 | 立即执行 |
+| `create_customer` | 新建客户 | 二次确认后写入 |
+| `create_task` | 新建待办 | 二次确认后写入 |
+| `decide_task` | 通过 / 退回待办 | 二次确认后写入 |
 
-每档尺寸都是单独渲染再降采样的（16px 也走 4 倍画布），不是拿 1024 往下缩，所以小图标不糊。
+写操作会先在对话里生成一张确认卡片，列出将执行的操作与参数；点「确认执行」才写入并继续生成回复。
+点「取消」、3 分钟未确认、或直接发送新指令，均不会写入任何数据。确认卡片是瞬时界面消息，不写入缓存，
+重启后不会残留。
 
-改配色 / 比例只动脚本顶部的常量，然后重跑：
+其他边界：上下文最多 20 条消息、工具调用上限 8 轮、单次请求超时 120 秒；审计日志记录模型名、端点主机、
+工具名、参数摘要与结果，不含 API Key 与完整正文。
 
-```bash
-# 需要 numpy + Pillow
-python3 tools/make_icon.py --preview   # --preview 额外输出一张多尺寸对照图到 /tmp
-```
+## 技术实现
 
-## 设计系统
+- **零第三方 UI 依赖**：只引用 Avalonia 官方包（Avalonia / Desktop / Fluent / Fonts.Inter），
+  未引入 AvaloniaEdit、Markdig、LibVLCSharp、LiveCharts。编辑器用 `TextBox` + 自绘行号，
+  Markdown 预览解析成控件树，图表与可视化全部走 `DrawingContext`。
+- **手写 MVVM**：`ObservableObject` + `RelayCommand`，没有 MVVM 框架；页面切换由 `AdminPage` 枚举驱动。
+- **无边框窗口**：`SystemDecorations=None` + 透明窗口，自绘标题栏与窗口按钮；
+  四边 / 四角 8 个透明热区负责缩放，最小尺寸 1320×850，窗口尺寸记入本地缓存。
+- **主题集中**：色值、圆角、字号在 `Styles/Theme.axaml`，样式全部走 `DynamicResource`，
+  替换资源字典即可换肤。
+- **本地存储零依赖**：`System.Text.Json` 在共享框架内，原子写 + 损坏自愈 + 延迟合并写。
+- **AI 零依赖**：`HttpClient` + `System.Text.Json` 手写 SSE 与 Function Calling。
 
-| 令牌 | 值 |
-| --- | --- |
-| 窗口底 / 面板 | `#0E1015` / `#13161D` |
-| 强调色 | `#6C8BFF`（辅色 `#A78BFA`、`#3DD6E8`） |
-| 语义色 | 成功 `#3DDC97` · 警告 `#F5B942` · 危险 `#F8716E` |
-| 文字层级 | `#E9ECF4` / `#9BA3B7` / `#626A7D` / `#434A5C` |
-| 字号 | 页面标题 18 · 模块标题 15 · 正文 13 · 辅助 11.5 · 标签 10.5 |
-| 圆角 | 6 / 8 / 11 / 14 / 20 |
-| 字体 | Inter + 系统中文回退（PingFang SC / Microsoft YaHei） |
+## 当前进度
 
-所有色值、圆角、字号集中在 `Dome/Aster/Styles/Theme.axaml`，改一处即可全局换肤。
+| 模块 | 状态 | 说明 |
+| --- | --- | --- |
+| 应用壳 / 登录 | 已完成（演示） | 启动、登录、无边框窗口、尺寸记忆；无账号校验 |
+| 工作台 / Agent | 已完成（演示） | 快捷卡、对话、5 个工具、确认卡片；需自备 API Key |
+| 客户工作空间 | 已完成（基础 CRUD） | 搜索 / 筛选 / 新建 / 编辑 / 删除；详情三个页签只读 |
+| 协作与审批 | 基本完成 | 新建、筛选、通过 / 退回；待办不能编辑或删除 |
+| Workflow | 演示完成 | 三步流程可走通；结果为固定样例，归档不回写 |
+| KPI 与考勤 | 部分完成 | 指标可新增并持久化；考勤为固定文案，指标不自动计算 |
+| 设置 | 部分完成 | AI 配置、缓存 / 审计清理、退出登录真实生效；其余控件仅界面演示 |
+| 文档 / 音乐 / HomeView | 未启用 | View / ViewModel 保留，导航无入口，未接数据层 |
+| 自动化测试 | 缺失 | 无测试工程，验证依赖 `dotnet build` 与手工走查 |
 
-## 技术说明
+最近一次改动见 [`CHANGELOG.md`](CHANGELOG.md)（2026-10-30，第 20 条：本次文档重写）。
 
-- **零第三方 UI 依赖**：未引入 AvaloniaEdit / Markdig / LibVLCSharp / LiveCharts。
-  编辑器用 `TextBox` + 自绘行号（滚动偏移同步），预览把 Markdown 解析成控件树，
-  图表与可视化全部走 `DrawingContext`，因此 `restore` 只需要 Avalonia 官方包。
-- **AI 对话同样零依赖**：工作台 Agent 走 OpenAI 兼容协议（`Services/AiChatService.cs`），
-  用 BCL 的 `HttpClient` + `System.Text.Json` 手写 SSE 流式解析与 Function Calling 聚合，
-  不引入任何 AI SDK。模型可调用 5 个工具真实操作工作区（查询客户 / 待办、新建客户 / 待办、审批），
-  操作与界面按钮共用同一批数据函数并写回 `local-cache.json`。
-  在「设置 → AI 模型」里配 API Key / Base URL / 模型名即可接入 DeepSeek、Kimi、通义兼容模式、Ollama 等；
-  输入框右下角还能切换**会话级模型**（预设清单 + 设置自定义合并，仅当前会话生效，重启回落默认）；
-  未配置 Key 时对话只给引导提示，**不发任何网络请求**。
-- **写操作需二次确认**：`create_customer` / `create_task` / `decide_task` 不会直接执行，
-  先在对话里生成一张确认卡片（列出将执行的操作与参数），点「确认执行」才写入并继续生成回复；
-  点「取消」、3 分钟未确认、或直接发送新指令，均不会写入任何数据。
-- **Agent 审计**：`Services/AgentAudit.cs` 把每次模型请求、工具调用与确认结果按行追加到
-  `AppData/audit.ndjson`（与业务缓存分开，超过 1 MB 轮转为 `audit.ndjson.1`）；
-  记录不含 API Key 与完整正文，设置页「存储与备份」可查看大小并清理。
-- **操作者来源**：Agent 的系统提示、新建客户的默认负责人、新建表单的负责人预填都取登录账号
-  （空账号回落「演示账号」），代码中不再写死人名。
-- **MVVM**：手写 `ObservableObject` / `RelayCommand`，列表项自带命令与选中态，
-  视图通过 `DataTemplate` 按 ViewModel 类型自动匹配。
-- **无边框窗口**：`SystemDecorations=None` + 透明窗口，自绘标题栏负责拖拽、双击最大化与窗口按钮；
-  登录页整页可拖拽（输入框、按钮与弹窗区域除外）；四边/四角留 6–14px 透明热区做 `BeginResizeDrag`
-  缩放，最小尺寸为设计稿的 1320×850。
-  内容区圆角 14 + 阴影由 `Border` 承担。
-- **主题切换友好**：样式全部走 `DynamicResource`，替换资源字典即可做浅色主题。
+## 待办事项
+
+- [ ] **重拍界面截图**：`docs/screenshots/` 仍是含文档 / 音乐模块的旧版，且登录页版本号、设置分区都已变化。
+- [ ] **统一版本号**：`make-app.sh` 写的是 `1.4.2`，界面与 `LocalCache` 是 `1.0.0`；建议改为单一来源。
+- [ ] **决定未启用模块去留**：文档、音乐、HomeView 是恢复入口并接数据层，还是删除代码。
+- [ ] **客户详情补写入端**：人员记录、核对记录、文件与产出三个页签目前只读，不能增删改。
+- [ ] **待办与指标补编辑 / 删除**：目前只能新建，待办可通过 / 退回，指标只能新增。
+- [ ] **Workflow 归档回写**：当前「确认归档」只跳回客户列表，不写核对记录；界面文案却承诺可在详情查看。
+- [ ] **修正 KPI 页文案或实现计算**：页面写「任务完成率随演示操作更新」，实际指标是静态文本。
+- [ ] **设置项持久化**：主题、通知、备份、成员与权限等控件目前只做界面演示，不落盘。
+- [ ] **删除客户的可恢复性**：增加软删除 / 回收站，并处理关联待办（当前不级联删除）。
+- [ ] **缓存 / 审计清理后的即时刷新**：清理后设置页的描述文案要重开浮层才更新。
+- [ ] **AI 安全与健壮性**：Key 加密、HTTPS 强校验、写操作幂等键、`list_*` 分页、多实例写锁。
+- [ ] **补自动化测试与 CI**：至少覆盖缓存读写、AI SSE 解析、工具参数校验与关键 ViewModel 状态机。
 
 ## 已知限制
 
-- 音乐模块为**交互演示**：进度随计时器推进、唱片旋转、柱状图跳动，未接入音频解码与真实播放。
-- Agent 对话已接真实大模型（OpenAI 兼容协议 + Function Calling）：流式逐字输出、连续多轮上下文
-  （最多 20 条）、工具调用上限 8 轮、单次请求超时 120 秒；未配置 Key 时只给引导提示，不发请求。
-- Agent 只能执行 5 个白名单工具；**没有删除能力**（删除仍需在客户详情页手工确认），
-  也不能修改设置、读取附件、发送邮件或调用第三方系统。
-- 写操作确认卡片是**瞬时界面消息**，不写入 `local-cache.json`；重启后不会残留点不动的按钮。
-- 审计日志按行追加、只在写入前判断 1 MB 阈值；清理后设置页那一行文案需重开浮层才会刷新。
-- 文档、音乐模块未启用（rail 中无入口，VM/View 代码保留）；其内部内容为内置演示数据，未接数据层。
-- 设置页的外观 / 通知 / 备份 / 导出等控件只做界面演示，不持久化；账号卡与「关于」均为 Demo 占位信息。
-- 左侧「客户」区块最多列 5 位客户（超出显示「查看全部客户」）；「最近会话」没有独立会话模型，
-  有对话时显示一条「当前工作会话」，没有就显示空态。
-- Workflow 使用虚构样例数据；没有客户时不会显示假客户名，按钮直接禁用并提示先建客户。
-- 工作区数据全部来自本地缓存文件（客户 / 详情四页签 / 待办 / KPI / 对话），**没有内置演示数据**；
-  文件为空时界面就是空的。界面上可以**新建、编辑、删除**客户，新建待办与 KPI 指标，也能改审批状态与对话；
-  但待办条目本身还不能编辑/删除，客户详情四页签（人员 / 核对 / 文件）仍需编辑文件补齐。
-- 删除客户**不可撤销**（没有软删除与回收站），且不会连带删除关联待办。
-- 全应用唯一的网络请求是 AI 对话（`Services/AiChatService.cs` → 用户配置的 OpenAI 兼容端点），
-  无遥测上报；其余数据只写本机 JSON；
-  缓存与示例数据（`AppData/`、`samples/`）都在 `.gitignore` 里，不会随代码上传。
-- 工作区数据由程序整体写回（发消息 / 审批时）：**运行期编辑文件会被内存覆盖**，手工维护请先关闭程序。
-- Markdown 预览覆盖标题、引用、列表、表格、代码块与行内加粗/代码，暂不支持图片与嵌套列表。
+- 定位为 Demo：无后端、无权限体系、无真实业务数据；登录页任意非空账号密码都能进入。
+- 全应用唯一的网络请求是 AI 对话；无遥测上报，其余数据只写本机 JSON。
+- Agent 只能调用五个白名单工具，**没有删除能力**；不能修改设置、读取附件、发送邮件或调用第三方系统。
+- 工作区数据由程序整体写回：运行期手工编辑缓存文件会被内存覆盖，维护数据请先关闭程序。
+- 删除客户不可撤销（没有软删除与回收站），也不会连带删除关联待办。
+- 设置页除 AI 配置、存储清理与退出登录外，其余开关 / 下拉 / 按钮不持久化；账号卡与「关于」的应用信息为 Demo 占位（运行环境版本是真实读取）。
+- 文档、音乐模块未启用；音乐若恢复入口仍是交互演示，不接音频解码。Markdown 预览暂不支持图片与嵌套列表。
+- 审计日志按行追加，只在写入前判断 1 MB 阈值，只保留一份 `.1` 历史。
+
+## 相关文档
+
+- [`CHANGELOG.md`](CHANGELOG.md)：按日期倒序的变更记录，含实现要点与踩坑说明。
+- [`Dome/Aster/README.md`](Dome/Aster/README.md)：模块级速览（运行、代码结构、数据文件）。

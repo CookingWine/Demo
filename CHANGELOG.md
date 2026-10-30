@@ -23,6 +23,21 @@
 
 ---
 
+## 2026-10-30
+
+### 20. 按实际实现重写 README — （提交后回填 hash）
+
+- **改动**：全面核对目录、模块、配置与限制后重写根 README。补充真实技术版本（Avalonia 11.3.22 / net8.0）、
+  完整目录树（含 `NuGet.Config`、`app.manifest`、`AgentAudit.cs`）、本地数据与 AI 工具表、当前进度与待办；
+  删除与代码不符的「按设计稿 1:1 还原」表述，修正 `make-app.sh` 默认打包模式、设置分区顺序与工作台功能描述，
+  并标注 `docs/screenshots/` 为旧版截图。
+- **文件**：`README.md`、`Dome/Aster/README.md`（服务清单补 `AgentAudit.cs`）、本文件。
+- **注意**：截图仍是旧版（含已下线的文档 / 音乐入口与写死客户名），本次未重拍；界面版本 `1.0.0` 与
+  `make-app.sh` 的 `1.4.2` 仍不一致，均已列入 README 待办。
+- **验证**：逐项对照 `Aster.csproj`、`Program.cs`、`MainWindowViewModel` / `AdminViewModel` / `SettingsViewModel`、
+  `LocalCache.cs`、`AiChatService.cs`、`AgentAudit.cs`、`run.sh`、`make-app.sh` 与 `.gitignore`；
+  命令、路径、默认值与仓库实际结构核对一致。
+
 ## 2026-10-29
 
 ### 19. 修复 DataTemplate 内类型转换导致的运行时崩溃 —（与第 17/18 条同批提交）
